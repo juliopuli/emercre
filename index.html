@@ -1,246 +1,254 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SIGECA — Sistema de Gestión de Catástrofes</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,700;9..144,900&display=swap" rel="stylesheet">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SIGECA — Sistema de Gestión de Catástrofes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link
+    href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,700;9..144,900&display=swap"
+    rel="stylesheet">
 
-<!-- Firebase SDK -->
-<script type="module">
-import { initializeApp }           from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
-                                   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
-         onSnapshot, query, orderBy, serverTimestamp, getDoc, getDocs }
-                                   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-
-// ── FIREBASE CONFIG ────────────────────────────────────────────────
-const firebaseConfig = {
-  apiKey:            "AIzaSyAHtrxaBazArqa8znWsUIVYxTsS7zoOOmc",
-  authDomain:        "emercre.firebaseapp.com",
-  projectId:         "emercre",
-  storageBucket:     "emercre.firebasestorage.app",
-  messagingSenderId: "277256770434",
-  appId:             "1:277256770434:web:225aa9c7ff6b862d72b59b"
-};
-const fbApp = initializeApp(firebaseConfig);
-const auth  = getAuth(fbApp);
-const db    = getFirestore(fbApp);
-
-// ── ESTADO GLOBAL ──────────────────────────────────────────────────
-let currentUser    = null;
-let currentRole    = null;
-let currentUserDoc = null;
-let selOpId        = null;
-let filtro         = 'all';
-let picking        = false;
-let pickedCoords   = null;
-let pickedAddress  = '';
-let gmap           = null;
-let gmMarkers      = {};
-let autocomplete   = null;
-let autocompleteEdit = null;
-let pickListener   = null;
-let tempGmMarker   = null;
-let unsubOps       = null;
-let unsubAcciones  = null;
-let ops            = {};
-let editingUserId  = null;
-// Edit op state
-let editPickedCoords  = null;
-let editPickedAddress = '';
-let editPickListener  = null;
-let editTempGmMarker  = null;
-let editPickMode      = false;
-
-// ── TIPO / NIVEL ───────────────────────────────────────────────────
-const TIPOS = {
-  inundacion: { label:'Inundación',         emoji:'🌊', color:'#2980b9' },
-  incendio:   { label:'Incendio forestal',  emoji:'🔥', color:'#c0392b' },
-  seismo:     { label:'Seísmo',             emoji:'🌍', color:'#8e44ad' },
-  temporal:   { label:'Temporal',           emoji:'🌪', color:'#16a085' },
-  accidente:  { label:'Accidente',          emoji:'🚛', color:'#d35400' },
-  quimico:    { label:'Inc. Químico',       emoji:'☣️', color:'#c0392b' },
-  sanitaria:  { label:'Emerg. Sanitaria',   emoji:'🦠', color:'#e74c3c' },
-  otro:       { label:'Otro',               emoji:'📋', color:'#7f8c8d' }
-};
-const NIVEL_LABELS = { 1:'Emergencia Mayor', 2:'Emergencia', 3:'Alerta', 4:'Seguimiento' };
-const NIVEL_COLORS = { 1:'#c0392b', 2:'#d35400', 3:'#c08c00', 4:'#1a7a4a' };
-const ROL_LABELS   = { super_admin:'Super Admin', admin:'Administrador', usuario:'Usuario' };
-
-// ── GOOGLE MAPS INIT ──────────────────────────────────────────────
-window.initGoogleMap = function() {
-  gmap = new google.maps.Map(document.getElementById('map'), {
-    center:    { lat: 40.4, lng: -3.7 },
-    zoom:      6,
-    mapTypeId: 'roadmap',
-    mapTypeControl: true,
-    mapTypeControlOptions: {
-      style:    google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
-      position: google.maps.ControlPosition.TOP_RIGHT,
-      mapTypeIds: ['roadmap','satellite','hybrid','terrain']
-    },
-    streetViewControl:  false,
-    fullscreenControl:  false,
-    zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM }
-  });
-
-  // Autocomplete — modal nueva operación
-  const input = document.getElementById('f-lugar');
-  autocomplete = new google.maps.places.Autocomplete(input, {
-    fields: ['geometry','formatted_address','name'],
-    componentRestrictions: { country: 'es' }
-  });
-  autocomplete.addListener('place_changed', () => {
-    const place = autocomplete.getPlace();
-    if (!place.geometry) return;
-    pickedCoords  = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
-    pickedAddress = place.formatted_address || place.name || '';
-    mostrarCoordBox();
-    gmap.panTo(place.geometry.location);
-    gmap.setZoom(15);
-    if (tempGmMarker) tempGmMarker.setMap(null);
-    tempGmMarker = new google.maps.Marker({
-      position: place.geometry.location, map: gmap,
-      animation: google.maps.Animation.DROP,
-      icon: { path: google.maps.SymbolPath.CIRCLE, scale:8, fillColor:'#1a3a6e', fillOpacity:1, strokeColor:'#fff', strokeWeight:2 }
-    });
-  });
-
-  // Autocomplete — modal editar operación
-  const inputEdit = document.getElementById('fe-lugar');
-  autocompleteEdit = new google.maps.places.Autocomplete(inputEdit, {
-    fields: ['geometry','formatted_address','name'],
-    componentRestrictions: { country: 'es' }
-  });
-  autocompleteEdit.addListener('place_changed', () => {
-    const place = autocompleteEdit.getPlace();
-    if (!place.geometry) return;
-    editPickedCoords  = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
-    editPickedAddress = place.formatted_address || place.name || '';
-    mostrarEditCoordBox();
-    gmap.panTo(place.geometry.location);
-    gmap.setZoom(15);
-    if (editTempGmMarker) editTempGmMarker.setMap(null);
-    editTempGmMarker = new google.maps.Marker({
-      position: place.geometry.location, map: gmap,
-      animation: google.maps.Animation.DROP,
-      icon: { path: google.maps.SymbolPath.CIRCLE, scale:8, fillColor:'#1a3a6e', fillOpacity:1, strokeColor:'#fff', strokeWeight:2 }
-    });
-  });
-
-  if (Object.keys(ops).length) renderMapa();
-};
-
-// ── AUTH STATE ─────────────────────────────────────────────────────
-onAuthStateChanged(auth, async user => {
-  if (user) {
-    const snap = await getDoc(doc(db, 'users', user.uid));
-    if (!snap.exists() || snap.data().activo === false) {
-      await signOut(auth);
-      mostrarLoginErr('Usuario no autorizado o desactivado.');
-      return;
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+    import {
+      getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
+      onSnapshot, query, orderBy, serverTimestamp, getDoc, getDocs
     }
-    currentUser    = user;
-    currentUserDoc = snap.data();
-    currentRole    = currentUserDoc.role;
-    mostrarApp();
-    initApp();
-  } else {
-    currentUser = null; currentRole = null;
-    mostrarLogin();
-    detenerListeners();
-  }
-});
+      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-// ── LOGIN / LOGOUT ─────────────────────────────────────────────────
-window.doLogin = async () => {
-  const email = document.getElementById('l-email').value.trim();
-  const pass  = document.getElementById('l-pass').value;
-  if (!email || !pass) return;
-  const btn = document.getElementById('btn-login');
-  btn.disabled = true; btn.textContent = 'Accediendo…';
-  try {
-    await signInWithEmailAndPassword(auth, email, pass);
-  } catch(e) {
-    mostrarLoginErr('Email o contraseña incorrectos.');
-    btn.disabled = false; btn.textContent = 'Acceder';
-  }
-};
-window.doLogout = () => signOut(auth);
+    // ── CONFIGURACIÓN IA ───────────────────────────────────────────────
+    let geminiApiKey = 'AIzaSyC_7OvS8aTaKKhDKQrh8BUnmecDlN1s9L8'; // Clave por defecto proporcionada por el usuario
 
-// ── INIT APP ───────────────────────────────────────────────────────
-function initApp() {
-  document.getElementById('hdr-user').textContent  = currentUserDoc.nombre || currentUser.email;
-  document.getElementById('hdr-role').textContent  = ROL_LABELS[currentRole] || currentRole;
-  const isAdmin = currentRole === 'admin' || currentRole === 'super_admin';
-  document.getElementById('btn-nueva-op').style.display  = isAdmin ? 'flex' : 'none';
-  document.getElementById('nav-usuarios').style.display  = currentRole === 'super_admin' ? 'flex' : 'none';
-  suscribirOps();
-  showSection('operaciones');
-}
+    // ── FIREBASE CONFIG ────────────────────────────────────────────────
+    const firebaseConfig = {
+      apiKey: "AIzaSyAHtrxaBazArqa8znWsUIVYxTsS7zoOOmc",
+      authDomain: "emercre.firebaseapp.com",
+      projectId: "emercre",
+      storageBucket: "emercre.firebasestorage.app",
+      messagingSenderId: "277256770434",
+      appId: "1:277256770434:web:225aa9c7ff6b862d72b59b"
+    };
+    const fbApp = initializeApp(firebaseConfig);
+    const auth = getAuth(fbApp);
+    const db = getFirestore(fbApp);
 
-function detenerListeners() {
-  if (unsubOps)      { unsubOps();      unsubOps = null; }
-  if (unsubAcciones) { unsubAcciones(); unsubAcciones = null; }
-  ops = {};
-}
+    // ── ESTADO GLOBAL ──────────────────────────────────────────────────
+    let currentUser = null;
+    let currentRole = null;
+    let currentUserDoc = null;
+    let selOpId = null;
+    let filtro = 'all';
+    let picking = false;
+    let pickedCoords = null;
+    let pickedAddress = '';
+    let gmap = null;
+    let gmMarkers = {};
+    let autocomplete = null;
+    let autocompleteEdit = null;
+    let pickListener = null;
+    let tempGmMarker = null;
+    let unsubOps = null;
+    let unsubAcciones = null;
+    let ops = {};
+    let editingUserId = null;
+    // Edit op state
+    let editPickedCoords = null;
+    let editPickedAddress = '';
+    let editPickListener = null;
+    let editTempGmMarker = null;
+    let editPickMode = false;
 
-// ── SUSCRIPCIÓN OPERACIONES ────────────────────────────────────────
-function suscribirOps() {
-  if (unsubOps) unsubOps();
-  const q = query(collection(db, 'operaciones'), orderBy('creadoEn', 'desc'));
-  unsubOps = onSnapshot(q, snap => {
-    snap.docChanges().forEach(ch => {
-      if (ch.type === 'removed') delete ops[ch.doc.id];
-      else ops[ch.doc.id] = { id: ch.doc.id, ...ch.doc.data() };
+    // ── TIPO / NIVEL ───────────────────────────────────────────────────
+    const TIPOS = {
+      inundacion: { label: 'Inundación', emoji: '🌊', color: '#2980b9' },
+      incendio: { label: 'Incendio forestal', emoji: '🔥', color: '#c0392b' },
+      seismo: { label: 'Seísmo', emoji: '🌍', color: '#8e44ad' },
+      temporal: { label: 'Temporal', emoji: '🌪', color: '#16a085' },
+      accidente: { label: 'Accidente', emoji: '🚛', color: '#d35400' },
+      quimico: { label: 'Inc. Químico', emoji: '☣️', color: '#c0392b' },
+      sanitaria: { label: 'Emerg. Sanitaria', emoji: '🦠', color: '#e74c3c' },
+      otro: { label: 'Otro', emoji: '📋', color: '#7f8c8d' }
+    };
+    const NIVEL_LABELS = { 1: 'Emergencia Mayor', 2: 'Emergencia', 3: 'Alerta', 4: 'Seguimiento' };
+    const NIVEL_COLORS = { 1: '#c0392b', 2: '#d35400', 3: '#c08c00', 4: '#1a7a4a' };
+    const ROL_LABELS = { super_admin: 'Super Admin', admin: 'Administrador', usuario: 'Usuario' };
+
+    // ── GOOGLE MAPS INIT ──────────────────────────────────────────────
+    window.initGoogleMap = function () {
+      gmap = new google.maps.Map(document.getElementById('map'), {
+        center: { lat: 40.4, lng: -3.7 },
+        zoom: 6,
+        mapTypeId: 'roadmap',
+        mapTypeControl: true,
+        mapTypeControlOptions: {
+          style: google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
+          position: google.maps.ControlPosition.TOP_RIGHT,
+          mapTypeIds: ['roadmap', 'satellite', 'hybrid', 'terrain']
+        },
+        streetViewControl: false,
+        fullscreenControl: false,
+        zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM }
+      });
+
+      // Autocomplete — modal nueva operación
+      const input = document.getElementById('f-lugar');
+      autocomplete = new google.maps.places.Autocomplete(input, {
+        fields: ['geometry', 'formatted_address', 'name'],
+        componentRestrictions: { country: 'es' }
+      });
+      autocomplete.addListener('place_changed', () => {
+        const place = autocomplete.getPlace();
+        if (!place.geometry) return;
+        pickedCoords = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
+        pickedAddress = place.formatted_address || place.name || '';
+        mostrarCoordBox();
+        gmap.panTo(place.geometry.location);
+        gmap.setZoom(15);
+        if (tempGmMarker) tempGmMarker.setMap(null);
+        tempGmMarker = new google.maps.Marker({
+          position: place.geometry.location, map: gmap,
+          animation: google.maps.Animation.DROP,
+          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#1a3a6e', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 }
+        });
+      });
+
+      // Autocomplete — modal editar operación
+      const inputEdit = document.getElementById('fe-lugar');
+      autocompleteEdit = new google.maps.places.Autocomplete(inputEdit, {
+        fields: ['geometry', 'formatted_address', 'name'],
+        componentRestrictions: { country: 'es' }
+      });
+      autocompleteEdit.addListener('place_changed', () => {
+        const place = autocompleteEdit.getPlace();
+        if (!place.geometry) return;
+        editPickedCoords = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
+        editPickedAddress = place.formatted_address || place.name || '';
+        mostrarEditCoordBox();
+        gmap.panTo(place.geometry.location);
+        gmap.setZoom(15);
+        if (editTempGmMarker) editTempGmMarker.setMap(null);
+        editTempGmMarker = new google.maps.Marker({
+          position: place.geometry.location, map: gmap,
+          animation: google.maps.Animation.DROP,
+          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#1a3a6e', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 }
+        });
+      });
+
+      if (Object.keys(ops).length) renderMapa();
+    };
+
+    // ── AUTH STATE ─────────────────────────────────────────────────────
+    onAuthStateChanged(auth, async user => {
+      if (user) {
+        const snap = await getDoc(doc(db, 'users', user.uid));
+        if (!snap.exists() || snap.data().activo === false) {
+          await signOut(auth);
+          mostrarLoginErr('Usuario no autorizado o desactivado.');
+          return;
+        }
+        currentUser = user;
+        currentUserDoc = snap.data();
+        currentRole = currentUserDoc.role;
+        mostrarApp();
+        initApp();
+      } else {
+        currentUser = null; currentRole = null;
+        mostrarLogin();
+        detenerListeners();
+      }
     });
-    renderSidebar();
-    renderMapa();
-    actualizarContadores();
-    if (selOpId && ops[selOpId]) renderDetalle(ops[selOpId]);
-  });
-}
 
-// ── MAPA ───────────────────────────────────────────────────────────
-function nivelIcon(nivel, emoji) {
-  const color = NIVEL_COLORS[nivel] || '#888';
-  const svg = `
+    // ── LOGIN / LOGOUT ─────────────────────────────────────────────────
+    window.doLogin = async () => {
+      const email = document.getElementById('l-email').value.trim();
+      const pass = document.getElementById('l-pass').value;
+      if (!email || !pass) return;
+      const btn = document.getElementById('btn-login');
+      btn.disabled = true; btn.textContent = 'Accediendo…';
+      try {
+        await signInWithEmailAndPassword(auth, email, pass);
+      } catch (e) {
+        mostrarLoginErr('Email o contraseña incorrectos.');
+        btn.disabled = false; btn.textContent = 'Acceder';
+      }
+    };
+    window.doLogout = () => signOut(auth);
+
+    // ── INIT APP ───────────────────────────────────────────────────────
+    function initApp() {
+      document.getElementById('hdr-user').textContent = currentUserDoc.nombre || currentUser.email;
+      document.getElementById('hdr-role').textContent = ROL_LABELS[currentRole] || currentRole;
+      const isAdmin = currentRole === 'admin' || currentRole === 'super_admin';
+      document.getElementById('btn-nueva-op').style.display = isAdmin ? 'flex' : 'none';
+      document.getElementById('nav-usuarios').style.display = currentRole === 'super_admin' ? 'flex' : 'none';
+      suscribirOps();
+      showSection('operaciones');
+    }
+
+    function detenerListeners() {
+      if (unsubOps) { unsubOps(); unsubOps = null; }
+      if (unsubAcciones) { unsubAcciones(); unsubAcciones = null; }
+      ops = {};
+    }
+
+    // ── SUSCRIPCIÓN OPERACIONES ────────────────────────────────────────
+    function suscribirOps() {
+      if (unsubOps) unsubOps();
+      const q = query(collection(db, 'operaciones'), orderBy('creadoEn', 'desc'));
+      unsubOps = onSnapshot(q, snap => {
+        snap.docChanges().forEach(ch => {
+          if (ch.type === 'removed') delete ops[ch.doc.id];
+          else ops[ch.doc.id] = { id: ch.doc.id, ...ch.doc.data() };
+        });
+        renderSidebar();
+        renderMapa();
+        actualizarContadores();
+        if (selOpId && ops[selOpId]) renderDetalle(ops[selOpId]);
+      });
+    }
+
+    // ── MAPA ───────────────────────────────────────────────────────────
+    function nivelIcon(nivel, emoji) {
+      const color = NIVEL_COLORS[nivel] || '#888';
+      const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="40" height="48" viewBox="0 0 40 48">
       <path d="M20 0C9 0 0 9 0 20c0 15 20 28 20 28S40 35 40 20C40 9 31 0 20 0z"
             fill="${color}" stroke="white" stroke-width="2"/>
       <text x="20" y="26" text-anchor="middle" font-size="16">${emoji}</text>
     </svg>`;
-  return {
-    url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
-    scaledSize: new google.maps.Size(40, 48),
-    anchor:     new google.maps.Point(20, 48)
-  };
-}
+      return {
+        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+        scaledSize: new google.maps.Size(40, 48),
+        anchor: new google.maps.Point(20, 48)
+      };
+    }
 
-function renderMapa() {
-  if (!gmap) return;
-  Object.keys(gmMarkers).forEach(id => {
-    if (!ops[id]) { gmMarkers[id].setMap(null); delete gmMarkers[id]; }
-  });
-  Object.values(ops).forEach(op => {
-    if (!op.coords) return;
-    const t    = TIPOS[op.tipo] || TIPOS.otro;
-    const pos  = { lat: op.coords.lat, lng: op.coords.lng };
-    const icon = nivelIcon(op.nivel, t.emoji);
-    if (gmMarkers[op.id]) {
-      gmMarkers[op.id].setPosition(pos);
-      gmMarkers[op.id].setIcon(icon);
-    } else {
-      const marker = new google.maps.Marker({ position: pos, map: gmap, icon, title: op.nombre, animation: google.maps.Animation.DROP });
-      const iw = new google.maps.InfoWindow({ maxWidth: 260 });
-      marker.addListener('click', () => {
-        iw.setContent(`
+    function renderMapa() {
+      if (!gmap) return;
+      Object.keys(gmMarkers).forEach(id => {
+        if (!ops[id]) { gmMarkers[id].setMap(null); delete gmMarkers[id]; }
+      });
+      Object.values(ops).forEach(op => {
+        if (!op.coords) return;
+        const t = TIPOS[op.tipo] || TIPOS.otro;
+        const pos = { lat: op.coords.lat, lng: op.coords.lng };
+        const icon = nivelIcon(op.nivel, t.emoji);
+        if (gmMarkers[op.id]) {
+          gmMarkers[op.id].setPosition(pos);
+          gmMarkers[op.id].setIcon(icon);
+        } else {
+          const marker = new google.maps.Marker({ position: pos, map: gmap, icon, title: op.nombre, animation: google.maps.Animation.DROP });
+          const iw = new google.maps.InfoWindow({ maxWidth: 260 });
+          marker.addListener('click', () => {
+            iw.setContent(`
           <div style="font-family:'IBM Plex Sans',sans-serif;padding:4px 2px;min-width:200px;">
             <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;margin-bottom:4px;">${op.nombre}</div>
-            <div style="font-size:11px;color:#888;margin-bottom:2px;">${t.emoji} ${t.label} · ${op.loc||''}</div>
+            <div style="font-size:11px;color:#888;margin-bottom:2px;">${t.emoji} ${t.label} · ${op.loc || ''}</div>
             <div style="margin-bottom:10px;">
               <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:2px;
                 background:${NIVEL_COLORS[op.nivel]}20;color:${NIVEL_COLORS[op.nivel]};
@@ -255,222 +263,237 @@ function renderMapa() {
               Ver operación →
             </button>
           </div>`);
-        iw.open(gmap, marker);
+            iw.open(gmap, marker);
+          });
+          gmMarkers[op.id] = marker;
+        }
       });
-      gmMarkers[op.id] = marker;
     }
-  });
-}
 
-// ── PICK LOCATION (nueva operación) ───────────────────────────────
-window.iniciarPick = () => {
-  picking = true;
-  document.getElementById('overlay-op').classList.remove('open');
-  document.getElementById('pick-banner').classList.add('on');
-  document.getElementById('pick-banner').textContent = '📍 Haz clic en el mapa para fijar la ubicación';
-  gmap.getDiv().style.cursor = 'crosshair';
-  pickListener = gmap.addListener('click', e => {
-    pickedCoords = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-    const gc = new google.maps.Geocoder();
-    gc.geocode({ location: e.latLng }, (results, status) => {
-      if (status === 'OK' && results[0]) {
-        pickedAddress = results[0].formatted_address;
-        document.getElementById('f-lugar').value = pickedAddress;
-      }
-      mostrarCoordBox();
-      stopPick();
-      window.abrirModalOp();
-    });
-    if (tempGmMarker) tempGmMarker.setMap(null);
-    tempGmMarker = new google.maps.Marker({
-      position: e.latLng, map: gmap, animation: google.maps.Animation.DROP,
-      icon: { path: google.maps.SymbolPath.CIRCLE, scale:8, fillColor:'#1a3a6e', fillOpacity:1, strokeColor:'#fff', strokeWeight:2 }
-    });
-  });
-};
+    // ── PICK LOCATION (nueva operación) ───────────────────────────────
+    window.iniciarPick = () => {
+      picking = true;
+      document.getElementById('overlay-op').classList.remove('open');
+      document.getElementById('pick-banner').classList.add('on');
+      document.getElementById('pick-banner').textContent = '📍 Haz clic en el mapa para fijar la ubicación';
+      gmap.getDiv().style.cursor = 'crosshair';
+      pickListener = gmap.addListener('click', e => {
+        pickedCoords = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+        const gc = new google.maps.Geocoder();
+        gc.geocode({ location: e.latLng }, (results, status) => {
+          if (status === 'OK' && results[0]) {
+            pickedAddress = results[0].formatted_address;
+            document.getElementById('f-lugar').value = pickedAddress;
+          }
+          mostrarCoordBox();
+          stopPick();
+          window.abrirModalOp();
+        });
+        if (tempGmMarker) tempGmMarker.setMap(null);
+        tempGmMarker = new google.maps.Marker({
+          position: e.latLng, map: gmap, animation: google.maps.Animation.DROP,
+          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#1a3a6e', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 }
+        });
+      });
+    };
 
-function stopPick() {
-  picking = false;
-  if (pickListener) { google.maps.event.removeListener(pickListener); pickListener = null; }
-  document.getElementById('pick-banner').classList.remove('on');
-  gmap.getDiv().style.cursor = '';
-}
+    function stopPick() {
+      picking = false;
+      if (pickListener) { google.maps.event.removeListener(pickListener); pickListener = null; }
+      document.getElementById('pick-banner').classList.remove('on');
+      gmap.getDiv().style.cursor = '';
+    }
 
-function mostrarCoordBox() {
-  const box = document.getElementById('coord-box');
-  box.textContent = pickedCoords ? `📍 ${pickedCoords.lat.toFixed(5)}, ${pickedCoords.lng.toFixed(5)}` : '';
-  box.classList.toggle('show', !!pickedCoords);
-}
+    function mostrarCoordBox() {
+      const box = document.getElementById('coord-box');
+      box.textContent = pickedCoords ? `📍 ${pickedCoords.lat.toFixed(5)}, ${pickedCoords.lng.toFixed(5)}` : '';
+      box.classList.toggle('show', !!pickedCoords);
+    }
 
-// ── PICK LOCATION (editar operación) ──────────────────────────────
-window.iniciarEditPick = () => {
-  editPickMode = true;
-  document.getElementById('overlay-edit-op').classList.remove('open');
-  document.getElementById('pick-banner').classList.add('on');
-  document.getElementById('pick-banner').textContent = '📍 Haz clic en el mapa para actualizar la ubicación';
-  gmap.getDiv().style.cursor = 'crosshair';
-  editPickListener = gmap.addListener('click', e => {
-    editPickedCoords = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-    const gc = new google.maps.Geocoder();
-    gc.geocode({ location: e.latLng }, (results, status) => {
-      if (status === 'OK' && results[0]) {
-        editPickedAddress = results[0].formatted_address;
-        document.getElementById('fe-lugar').value = editPickedAddress;
-      }
-      mostrarEditCoordBox();
-      stopEditPick();
-      document.getElementById('overlay-edit-op').classList.add('open');
-    });
-    if (editTempGmMarker) editTempGmMarker.setMap(null);
-    editTempGmMarker = new google.maps.Marker({
-      position: e.latLng, map: gmap, animation: google.maps.Animation.DROP,
-      icon: { path: google.maps.SymbolPath.CIRCLE, scale:8, fillColor:'#1a3a6e', fillOpacity:1, strokeColor:'#fff', strokeWeight:2 }
-    });
-  });
-};
+    // ── PICK LOCATION (editar operación) ──────────────────────────────
+    window.iniciarEditPick = () => {
+      editPickMode = true;
+      document.getElementById('overlay-edit-op').classList.remove('open');
+      document.getElementById('pick-banner').classList.add('on');
+      document.getElementById('pick-banner').textContent = '📍 Haz clic en el mapa para actualizar la ubicación';
+      gmap.getDiv().style.cursor = 'crosshair';
+      editPickListener = gmap.addListener('click', e => {
+        editPickedCoords = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+        const gc = new google.maps.Geocoder();
+        gc.geocode({ location: e.latLng }, (results, status) => {
+          if (status === 'OK' && results[0]) {
+            editPickedAddress = results[0].formatted_address;
+            document.getElementById('fe-lugar').value = editPickedAddress;
+          }
+          mostrarEditCoordBox();
+          stopEditPick();
+          document.getElementById('overlay-edit-op').classList.add('open');
+        });
+        if (editTempGmMarker) editTempGmMarker.setMap(null);
+        editTempGmMarker = new google.maps.Marker({
+          position: e.latLng, map: gmap, animation: google.maps.Animation.DROP,
+          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#1a3a6e', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 }
+        });
+      });
+    };
 
-function stopEditPick() {
-  editPickMode = false;
-  if (editPickListener) { google.maps.event.removeListener(editPickListener); editPickListener = null; }
-  document.getElementById('pick-banner').classList.remove('on');
-  gmap.getDiv().style.cursor = '';
-}
+    function stopEditPick() {
+      editPickMode = false;
+      if (editPickListener) { google.maps.event.removeListener(editPickListener); editPickListener = null; }
+      document.getElementById('pick-banner').classList.remove('on');
+      gmap.getDiv().style.cursor = '';
+    }
 
-function mostrarEditCoordBox() {
-  const box = document.getElementById('edit-coord-box');
-  box.textContent = editPickedCoords ? `📍 ${editPickedCoords.lat.toFixed(5)}, ${editPickedCoords.lng.toFixed(5)}` : '';
-  box.classList.toggle('show', !!editPickedCoords);
-}
+    function mostrarEditCoordBox() {
+      const box = document.getElementById('edit-coord-box');
+      box.textContent = editPickedCoords ? `📍 ${editPickedCoords.lat.toFixed(5)}, ${editPickedCoords.lng.toFixed(5)}` : '';
+      box.classList.toggle('show', !!editPickedCoords);
+    }
 
-// ── CONTADORES ─────────────────────────────────────────────────────
-function actualizarContadores() {
-  [1,2,3,4].forEach(n => {
-    const el = document.getElementById('cnt'+n);
-    if (el) el.textContent = Object.values(ops).filter(o => o.nivel == n).length;
-  });
-}
+    // ── CONTADORES ─────────────────────────────────────────────────────
+    function actualizarContadores() {
+      [1, 2, 3, 4].forEach(n => {
+        const el = document.getElementById('cnt' + n);
+        if (el) el.textContent = Object.values(ops).filter(o => o.nivel == n).length;
+      });
+    }
 
-// ── SIDEBAR ────────────────────────────────────────────────────────
-function renderSidebar() {
-  const list  = document.getElementById('ops-list');
-  const empty = document.getElementById('empty-msg');
-  list.querySelectorAll('.op-card').forEach(c => c.remove());
+    // ── SIDEBAR ────────────────────────────────────────────────────────
+    function renderSidebar() {
+      const list = document.getElementById('ops-list');
+      const empty = document.getElementById('empty-msg');
+      list.querySelectorAll('.op-card').forEach(c => c.remove());
 
-  let visible = Object.values(ops);
-  if (filtro !== 'all') visible = visible.filter(o => String(o.nivel) === filtro);
-  visible.sort((a,b) => a.nivel - b.nivel);
+      let visible = Object.values(ops);
+      if (filtro !== 'all') visible = visible.filter(o => String(o.nivel) === filtro);
+      visible.sort((a, b) => a.nivel - b.nivel);
 
-  if (!visible.length) { empty.classList.add('show'); return; }
-  empty.classList.remove('show');
+      if (!visible.length) { empty.classList.add('show'); return; }
+      empty.classList.remove('show');
 
-  visible.forEach(op => {
-    const t    = TIPOS[op.tipo] || TIPOS.otro;
-    const card = document.createElement('div');
-    card.className = 'op-card' + (selOpId === op.id ? ' sel' : '');
-    card.dataset.nivel = op.nivel;
-    card.innerHTML = `
+      visible.forEach(op => {
+        const t = TIPOS[op.tipo] || TIPOS.otro;
+        const card = document.createElement('div');
+        card.className = 'op-card' + (selOpId === op.id ? ' sel' : '');
+        card.dataset.nivel = op.nivel;
+        card.innerHTML = `
       <div class="card-top">
         <div>
-          <div class="card-id">${op.id.substring(0,8).toUpperCase()}</div>
+          <div class="card-id">${op.id.substring(0, 8).toUpperCase()}</div>
           <div class="card-name">${op.nombre}</div>
         </div>
         <span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${t.label}</span>
       </div>
       <div class="card-meta">
-        <span class="card-loc">📍 ${op.loc||'Sin ubicación'}</span>
-        <span class="nivel-pill pill-${op.nivel}">N${op.nivel} ${NIVEL_LABELS[op.nivel]}</span>
+        <span class="card-loc">📍 ${op.loc || 'Sin ubicación'}</span>
+        <div style="display:flex; gap:4px; align-items:center;">
+          ${op.estado === 'finalizada' ? '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:2px;background:var(--bg-3);color:var(--text-3);border:1px solid var(--border-mid);">FINALIZADA</span>' : ''}
+          <span class="nivel-pill pill-${op.nivel}">N${op.nivel} ${NIVEL_LABELS[op.nivel]}</span>
+        </div>
       </div>`;
-    card.addEventListener('click', () => window.abrirDetalle(op.id));
-    list.appendChild(card);
-  });
-}
+        card.addEventListener('click', () => window.abrirDetalle(op.id));
+        list.appendChild(card);
+      });
+    }
 
-window.setFiltro = (f, btn) => {
-  filtro = f;
-  document.querySelectorAll('.ftab').forEach(b => b.classList.remove('on','on-n1','on-n2','on-n3','on-n4'));
-  btn.classList.add(f === 'all' ? 'on' : `on-n${f}`);
-  renderSidebar();
-};
+    window.setFiltro = (f, btn) => {
+      filtro = f;
+      document.querySelectorAll('.ftab').forEach(b => b.classList.remove('on', 'on-n1', 'on-n2', 'on-n3', 'on-n4'));
+      btn.classList.add(f === 'all' ? 'on' : `on-n${f}`);
+      renderSidebar();
+    };
 
-// ── DETALLE ────────────────────────────────────────────────────────
-window.abrirDetalle = (id) => {
-  selOpId = id;
-  const op = ops[id];
-  if (!op) return;
-  document.getElementById('detail-panel').classList.add('open');
-  renderDetalle(op);
-  renderSidebar();
-  if (op.coords && gmap) {
-    gmap.panTo({ lat: op.coords.lat, lng: op.coords.lng });
-    gmap.setZoom(13);
-  }
-  suscribirAcciones(id);
-};
+    // ── DETALLE ────────────────────────────────────────────────────────
+    window.abrirDetalle = (id) => {
+      selOpId = id;
+      const op = ops[id];
+      if (!op) return;
+      document.getElementById('detail-panel').classList.add('open');
+      renderDetalle(op);
+      renderSidebar();
+      if (op.coords && gmap) {
+        gmap.panTo({ lat: op.coords.lat, lng: op.coords.lng });
+        gmap.setZoom(13);
+      }
+      suscribirAcciones(id);
+    };
 
-window.cerrarDetalle = () => {
-  document.getElementById('detail-panel').classList.remove('open');
-  selOpId = null;
-  if (unsubAcciones) { unsubAcciones(); unsubAcciones = null; }
-  renderSidebar();
-};
+    window.cerrarDetalle = () => {
+      document.getElementById('detail-panel').classList.remove('open');
+      selOpId = null;
+      if (unsubAcciones) { unsubAcciones(); unsubAcciones = null; }
+      renderSidebar();
+    };
 
-function suscribirAcciones(opId) {
-  if (unsubAcciones) unsubAcciones();
-  const q = query(collection(db, 'operaciones', opId, 'acciones'), orderBy('timestamp', 'desc'));
-  unsubAcciones = onSnapshot(q, snap => {
-    const acciones = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    renderTimeline(acciones, ops[opId]);
-  });
-}
+    function suscribirAcciones(opId) {
+      if (unsubAcciones) unsubAcciones();
+      const q = query(collection(db, 'operaciones', opId, 'acciones'), orderBy('timestamp', 'desc'));
+      unsubAcciones = onSnapshot(q, snap => {
+        const acciones = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderTimeline(acciones, ops[opId]);
+      });
+    }
 
-function renderDetalle(op) {
-  const t       = TIPOS[op.tipo] || TIPOS.otro;
-  const isAdmin = currentRole === 'admin' || currentRole === 'super_admin';
-  const isSA    = currentRole === 'super_admin';
+    function renderDetalle(op) {
+      const t = TIPOS[op.tipo] || TIPOS.otro;
+      const isAdmin = currentRole === 'admin' || currentRole === 'super_admin';
+      const isSA = currentRole === 'super_admin';
 
-  document.getElementById('dp-id').textContent   = op.id.substring(0,8).toUpperCase();
-  document.getElementById('dp-name').textContent = op.nombre;
-  document.getElementById('dp-loc').innerHTML    = op.loc ? `📍 ${op.loc}` : (op.coords ? `📍 ${op.coords.lat.toFixed(4)}, ${op.coords.lng.toFixed(4)}` : '');
-  document.getElementById('dp-type-tag').innerHTML =
-    `<span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${t.label}</span>`;
+      document.getElementById('dp-id').textContent = op.id.substring(0, 8).toUpperCase();
+      document.getElementById('dp-name').textContent = op.nombre;
+      document.getElementById('dp-loc').innerHTML = op.loc ? `📍 ${op.loc}` : (op.coords ? `📍 ${op.coords.lat.toFixed(4)}, ${op.coords.lng.toFixed(4)}` : '');
+      document.getElementById('dp-type-tag').innerHTML =
+        `<span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${t.label}</span>`;
 
-  document.querySelectorAll('.nsel-opt').forEach(b => {
-    b.classList.toggle('on', parseInt(b.dataset.n) === op.nivel);
-    b.disabled = !isAdmin;
-  });
+      document.querySelectorAll('.nsel-opt').forEach(b => {
+        b.classList.toggle('on', parseInt(b.dataset.n) === op.nivel);
+        b.disabled = !isAdmin;
+      });
 
-  const ir  = document.getElementById('dp-info-row');
-  const ts  = op.creadoEn?.toDate
-    ? op.creadoEn.toDate().toLocaleString('es-ES',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})
-    : '—';
-  ir.innerHTML = '';
-  if (op.dir)            ir.innerHTML += `<div class="dp-info-item"><strong>${op.dir}</strong>Director Operaciones</div>`;
-  if (op.org)            ir.innerHTML += `<div class="dp-info-item"><strong>${op.org}</strong>Organismos</div>`;
-  if (op.creadoPorNombre)ir.innerHTML += `<div class="dp-info-item"><strong>${op.creadoPorNombre}</strong>Creado por</div>`;
-                         ir.innerHTML += `<div class="dp-info-item"><strong>${ts}</strong>Inicio</div>`;
+      const ir = document.getElementById('dp-info-row');
+      const ts = op.creadoEn?.toDate
+        ? op.creadoEn.toDate().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+        : '—';
+      ir.innerHTML = '';
+      if (op.dir) ir.innerHTML += `<div class="dp-info-item"><strong>${op.dir}</strong>Director Operaciones</div>`;
+      if (op.org) ir.innerHTML += `<div class="dp-info-item"><strong>${op.org}</strong>Organismos</div>`;
+      if (op.creadoPorNombre) ir.innerHTML += `<div class="dp-info-item"><strong>${op.creadoPorNombre}</strong>Creado por</div>`;
+      ir.innerHTML += `<div class="dp-info-item"><strong>${ts}</strong>Inicio</div>`;
 
-  // Botón editar (admin y super_admin)
-  document.getElementById('dp-edit-btn').style.display = isAdmin ? 'inline-flex' : 'none';
-  document.getElementById('dp-admin-btns').style.display = isSA ? 'flex' : 'none';
+      // Campo autor readonly
+      document.getElementById('a-autor').value = currentUserDoc.nombre || currentUser.email;
+      document.getElementById('a-autor').readOnly = true;
 
-  // Campo autor readonly
-  document.getElementById('a-autor').value    = currentUserDoc.nombre || currentUser.email;
-  document.getElementById('a-autor').readOnly = true;
-}
+      // Lógica de finalización e informes
+      const isFinalizada = op.estado === 'finalizada';
 
-function renderTimeline(acciones, op) {
-  const tl    = document.getElementById('dp-timeline');
-  const t     = op ? (TIPOS[op.tipo] || TIPOS.otro) : TIPOS.otro;
-  const nivel = op ? op.nivel : 1;
-  if (!acciones.length) {
-    tl.innerHTML = '<div class="tl-empty">// Sin novedades registradas //</div>';
-    return;
-  }
-  tl.innerHTML = acciones.map(a => {
-    const ts = a.timestamp?.toDate
-      ? a.timestamp.toDate().toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
-      : '—';
-    return `<div class="tl-entry">
+      document.getElementById('dp-addaction-wrapper').style.display = isFinalizada ? 'none' : 'block';
+      document.getElementById('dp-edit-btn').style.display = (isAdmin && !isFinalizada) ? 'inline-flex' : 'none';
+      document.getElementById('dp-fin-btn').style.display = (isAdmin && !isFinalizada) ? 'inline-flex' : 'none';
+      document.getElementById('dp-ai-btn').style.display = isFinalizada ? 'inline-flex' : 'none';
+
+      document.getElementById('dp-admin-btns').style.display = isSA ? 'flex' : 'none';
+      document.getElementById('dp-reabrir-btn').style.display = (isSA && isFinalizada) ? 'inline-flex' : 'none';
+
+      // Deshabilitar selector de nivel si está finalizada
+      document.querySelectorAll('.nsel-opt').forEach(b => {
+        b.disabled = isFinalizada || !isAdmin;
+      });
+    }
+
+    function renderTimeline(acciones, op) {
+      const tl = document.getElementById('dp-timeline');
+      const t = op ? (TIPOS[op.tipo] || TIPOS.otro) : TIPOS.otro;
+      const nivel = op ? op.nivel : 1;
+      if (!acciones.length) {
+        tl.innerHTML = '<div class="tl-empty">// Sin novedades registradas //</div>';
+        return;
+      }
+      tl.innerHTML = acciones.map(a => {
+        const ts = a.timestamp?.toDate
+          ? a.timestamp.toDate().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+          : '—';
+        return `<div class="tl-entry">
       <div class="tl-node tl-node-${nivel}">${t.emoji}</div>
       <div class="tl-body">
         <div class="tl-meta">
@@ -481,717 +504,2217 @@ function renderTimeline(acciones, op) {
         <div class="tl-author">— ${a.autor || '—'}</div>
       </div>
     </div>`;
-  }).join('');
-}
-
-// ── CAMBIAR NIVEL ──────────────────────────────────────────────────
-window.cambiarNivel = async n => {
-  if (!selOpId) return;
-  await updateDoc(doc(db, 'operaciones', selOpId), { nivel: n, actualizadoEn: serverTimestamp() });
-  if (gmMarkers[selOpId] && ops[selOpId]) {
-    const t = TIPOS[ops[selOpId].tipo] || TIPOS.otro;
-    gmMarkers[selOpId].setIcon(nivelIcon(n, t.emoji));
-  }
-};
-
-// ── AÑADIR ACCIÓN ──────────────────────────────────────────────────
-window.addAccion = async () => {
-  if (!selOpId) return;
-  const texto = document.getElementById('a-texto').value.trim();
-  if (!texto) { document.getElementById('a-texto').focus(); return; }
-  const btn = document.getElementById('btn-reg-accion');
-  btn.disabled = true;
-  try {
-    const autorNombre = currentUserDoc.nombre || currentUser.email;
-    await addDoc(collection(db, 'operaciones', selOpId, 'acciones'), {
-      texto,
-      prioridad:  document.getElementById('a-prio').value,
-      autor:      autorNombre,
-      uid:        currentUser.uid,
-      timestamp:  serverTimestamp()
-    });
-    await updateDoc(doc(db, 'operaciones', selOpId), { actualizadoEn: serverTimestamp() });
-    document.getElementById('a-texto').value = '';
-  } catch(e) { alert('Error: '+e.message); }
-  btn.disabled = false;
-};
-
-// ── BORRAR OPERACIÓN ───────────────────────────────────────────────
-window.borrarOp = async () => {
-  if (!selOpId) return;
-  if (!confirm('¿Borrar esta operación? No se puede deshacer.')) return;
-  if (gmMarkers[selOpId]) { gmMarkers[selOpId].setMap(null); delete gmMarkers[selOpId]; }
-  await deleteDoc(doc(db, 'operaciones', selOpId));
-  cerrarDetalle();
-};
-
-// ── MODAL NUEVA OPERACIÓN ──────────────────────────────────────────
-window.abrirModalOp = () => {
-  document.getElementById('overlay-op').classList.add('open');
-  setTimeout(() => document.getElementById('f-nombre').focus(), 100);
-  mostrarCoordBox();
-};
-
-window.cerrarModalOp = () => {
-  document.getElementById('overlay-op').classList.remove('open');
-  pickedCoords  = null;
-  pickedAddress = '';
-  if (tempGmMarker) { tempGmMarker.setMap(null); tempGmMarker = null; }
-  ['f-nombre','f-desc','f-loc','f-dir','f-org','f-lugar'].forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.value = '';
-  });
-  document.getElementById('f-tipo').value  = 'inundacion';
-  document.getElementById('f-nivel').value = '3';
-  document.getElementById('coord-box').classList.remove('show');
-};
-
-window.crearOp = async () => {
-  const nombre = document.getElementById('f-nombre').value.trim();
-  if (!nombre) { document.getElementById('f-nombre').focus(); return; }
-  const btn = document.getElementById('btn-crear-op');
-  btn.disabled = true; btn.textContent = 'Creando…';
-  try {
-    const nivel  = parseInt(document.getElementById('f-nivel').value);
-    const desc   = document.getElementById('f-desc').value.trim();
-    const locVal = document.getElementById('f-lugar').value.trim() || document.getElementById('f-loc').value.trim();
-    const autorNombre = currentUserDoc.nombre || currentUser.email;
-
-    const ref = await addDoc(collection(db, 'operaciones'), {
-      nombre,
-      tipo:            document.getElementById('f-tipo').value,
-      nivel,
-      loc:             locVal,
-      dir:             document.getElementById('f-dir').value.trim(),
-      org:             document.getElementById('f-org').value.trim(),
-      coords:          pickedCoords || null,
-      creadoPor:       currentUser.uid,
-      creadoPorNombre: autorNombre,
-      creadoEn:        serverTimestamp(),
-      actualizadoEn:   serverTimestamp()
-    });
-    if (desc) {
-      await addDoc(collection(db, 'operaciones', ref.id, 'acciones'), {
-        texto:     desc,
-        prioridad: nivel <= 2 ? 'Crítica' : nivel === 3 ? 'Alta' : 'Media',
-        autor:     autorNombre,
-        uid:       currentUser.uid,
-        timestamp: serverTimestamp()
-      });
+      }).join('');
     }
-    cerrarModalOp();
-    window.abrirDetalle(ref.id);
-  } catch(e) { alert('Error: '+e.message); }
-  btn.disabled = false; btn.textContent = 'Crear operación →';
-};
 
-// ── MODAL EDITAR OPERACIÓN ─────────────────────────────────────────
-window.abrirModalEditOp = () => {
-  if (!selOpId) return;
-  const op = ops[selOpId];
-  if (!op) return;
-
-  // Poblar campos con datos actuales
-  document.getElementById('fe-nombre').value = op.nombre || '';
-  document.getElementById('fe-tipo').value   = op.tipo   || 'inundacion';
-  document.getElementById('fe-dir').value    = op.dir    || '';
-  document.getElementById('fe-org').value    = op.org    || '';
-  document.getElementById('fe-lugar').value  = op.loc    || '';
-
-  // Restaurar coords actuales como punto de partida
-  editPickedCoords  = op.coords || null;
-  editPickedAddress = op.loc    || '';
-  mostrarEditCoordBox();
-
-  document.getElementById('overlay-edit-op').classList.add('open');
-  setTimeout(() => document.getElementById('fe-nombre').focus(), 100);
-};
-
-window.cerrarModalEditOp = () => {
-  document.getElementById('overlay-edit-op').classList.remove('open');
-  editPickedCoords  = null;
-  editPickedAddress = '';
-  if (editTempGmMarker) { editTempGmMarker.setMap(null); editTempGmMarker = null; }
-  document.getElementById('edit-coord-box').classList.remove('show');
-};
-
-window.guardarEditOp = async () => {
-  if (!selOpId) return;
-  const nombre = document.getElementById('fe-nombre').value.trim();
-  if (!nombre) { document.getElementById('fe-nombre').focus(); return; }
-  const btn = document.getElementById('btn-guardar-edit-op');
-  btn.disabled = true; btn.textContent = 'Guardando…';
-  try {
-    const locVal = document.getElementById('fe-lugar').value.trim();
-    const updates = {
-      nombre,
-      tipo:         document.getElementById('fe-tipo').value,
-      loc:          locVal,
-      dir:          document.getElementById('fe-dir').value.trim(),
-      org:          document.getElementById('fe-org').value.trim(),
-      actualizadoEn: serverTimestamp()
+    // ── CAMBIAR NIVEL ──────────────────────────────────────────────────
+    window.cambiarNivel = async n => {
+      if (!selOpId) return;
+      await updateDoc(doc(db, 'operaciones', selOpId), { nivel: n, actualizadoEn: serverTimestamp() });
+      if (gmMarkers[selOpId] && ops[selOpId]) {
+        const t = TIPOS[ops[selOpId].tipo] || TIPOS.otro;
+        gmMarkers[selOpId].setIcon(nivelIcon(n, t.emoji));
+      }
     };
-    // Solo actualizar coords si el usuario eligió una nueva ubicación
-    if (editPickedCoords) updates.coords = editPickedCoords;
 
-    await updateDoc(doc(db, 'operaciones', selOpId), updates);
+    // ── AÑADIR ACCIÓN ──────────────────────────────────────────────────
+    window.addAccion = async () => {
+      if (!selOpId) return;
+      const texto = document.getElementById('a-texto').value.trim();
+      if (!texto) { document.getElementById('a-texto').focus(); return; }
+      const btn = document.getElementById('btn-reg-accion');
+      btn.disabled = true;
+      try {
+        const autorNombre = currentUserDoc.nombre || currentUser.email;
+        await addDoc(collection(db, 'operaciones', selOpId, 'acciones'), {
+          texto,
+          prioridad: document.getElementById('a-prio').value,
+          autor: autorNombre,
+          uid: currentUser.uid,
+          timestamp: serverTimestamp()
+        });
+        await updateDoc(doc(db, 'operaciones', selOpId), { actualizadoEn: serverTimestamp() });
+        document.getElementById('a-texto').value = '';
+      } catch (e) { alert('Error: ' + e.message); }
+      btn.disabled = false;
+    };
 
-    // Actualizar marcador del mapa si cambiaron coordenadas
-    if (editPickedCoords && gmMarkers[selOpId]) {
-      const tipo = TIPOS[updates.tipo] || TIPOS.otro;
-      gmMarkers[selOpId].setPosition(editPickedCoords);
-      gmMarkers[selOpId].setIcon(nivelIcon(ops[selOpId].nivel, tipo.emoji));
-    }
+    // ── BORRAR OPERACIÓN ───────────────────────────────────────────────
+    window.borrarOp = async () => {
+      if (!selOpId) return;
+      if (!confirm('¿Borrar esta operación? No se puede deshacer.')) return;
+      if (gmMarkers[selOpId]) { gmMarkers[selOpId].setMap(null); delete gmMarkers[selOpId]; }
+      await deleteDoc(doc(db, 'operaciones', selOpId));
+      cerrarDetalle();
+    };
 
-    mostrarToast('Operación actualizada.');
-    cerrarModalEditOp();
-  } catch(e) { alert('Error: '+e.message); }
-  btn.disabled = false; btn.textContent = 'Guardar cambios →';
-};
+    // ── FINALIZAR / REABRIR OPERACIÓN ──────────────────────────────────
+    window.finalizarOp = async () => {
+      if (!selOpId) return;
+      if (!confirm('¿Finalizar esta operación? Ya no se podrán añadir novedades ni editar, y se habilitará el informe IA.')) return;
+      try {
+        const autorNombre = currentUserDoc.nombre || currentUser.email;
+        await addDoc(collection(db, 'operaciones', selOpId, 'acciones'), {
+          texto: 'Operación finalizada por el administrador.',
+          prioridad: 'Baja',
+          autor: autorNombre,
+          uid: currentUser.uid,
+          timestamp: serverTimestamp()
+        });
+        await updateDoc(doc(db, 'operaciones', selOpId), { estado: 'finalizada', actualizadoEn: serverTimestamp() });
+        mostrarToast('Operación finalizada.');
+      } catch (e) { alert('Error: ' + e.message); }
+    };
 
-// ── USUARIOS ───────────────────────────────────────────────────────
-window.showSection = sec => {
-  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
-  document.getElementById('section-operaciones').style.display = sec === 'operaciones' ? 'flex' : 'none';
-  document.getElementById('section-usuarios').style.display    = sec === 'usuarios'    ? 'flex' : 'none';
-  if (sec === 'usuarios') cargarUsuarios();
-  if (sec === 'operaciones' && gmap) setTimeout(() => google.maps.event.trigger(gmap,'resize'), 100);
-};
+    window.reabrirOp = async () => {
+      if (!selOpId) return;
+      if (!confirm('¿Reabrir esta operación? Volverá a estar activa y escribible.')) return;
+      try {
+        const autorNombre = currentUserDoc.nombre || currentUser.email;
+        await addDoc(collection(db, 'operaciones', selOpId, 'acciones'), {
+          texto: 'Operación reabierta por super_admin.',
+          prioridad: 'Media',
+          autor: autorNombre,
+          uid: currentUser.uid,
+          timestamp: serverTimestamp()
+        });
+        await updateDoc(doc(db, 'operaciones', selOpId), { estado: 'activa', actualizadoEn: serverTimestamp() });
+        mostrarToast('Operación reabierta.');
+      } catch (e) { alert('Error: ' + e.message); }
+    };
 
-async function cargarUsuarios() {
-  const snap  = await getDocs(collection(db, 'users'));
-  const tbody = document.getElementById('users-tbody');
-  tbody.innerHTML = '';
-  snap.forEach(d => {
-    const u  = d.data();
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-      <td>${u.nombre||'—'}</td>
+    // ── INFORME IA (GEMINI) ────────────────────────────────────────────
+    window.abrirModalInformeIA = async () => {
+      if (!selOpId) return;
+      const op = ops[selOpId];
+      if (!op) return;
+
+      const btn = document.getElementById('dp-ai-btn');
+      btn.disabled = true; btn.textContent = 'Generando informe...';
+
+      try {
+        // 1. Recopilamos datos básicos
+        const t = TIPOS[op.tipo] || TIPOS.otro;
+        let dataContext = `Nombre operación: ${op.nombre}\n`;
+        dataContext += `Tipo: ${t.label}\nUbicación: ${op.loc || 'N/A'}\n`;
+        dataContext += `Director: ${op.dir || 'N/A'}\nOrganismos: ${op.org || 'N/A'}\n\n`;
+        dataContext += `================ HILO CRONOLÓGICO DE ACCIONES ================\n`;
+
+        // 2. Traer todas las acciones/novedades ordenadas
+        const snap = await getDocs(query(collection(db, 'operaciones', selOpId, 'acciones'), orderBy('timestamp', 'asc')));
+        if (snap.empty) {
+          dataContext += "(Sin acciones registradas)\n";
+        } else {
+          snap.forEach(doc => {
+            const a = doc.data();
+            const dateStr = a.timestamp?.toDate ? a.timestamp.toDate().toLocaleString('es-ES') : 'Fecha desconocida';
+            dataContext += `[${dateStr}] - Prioridad: ${a.prioridad} - Autor: ${a.autor}\n`;
+            dataContext += `Novedad: ${a.texto}\n`;
+            dataContext += `----------------------------------------------------------\n`;
+          });
+        }
+
+        // 3. Prompt estricto para Gemini
+        const prompt = `
+Eres un analista experto en gestión de emergencias y catástrofes de la plataforma SIGECA.
+El usuario ha solicitado generar un informe final ejecutivo y bien estructurado que resuma esta intervención finalizada.
+
+INSTRUCCIONES:
+1. Lee todos los datos base y el hilo cronológico de acciones.
+2. Genera un resumen ejecutivo en español, profesional, claro y neutro. 
+3. Estructura el informe usando etiquetas HTML simples compatibles (<h1>, <h2>, <p>, <ul>, <li>, <strong>) para poder renderizarlo en la web directamente. No envuelvas el resultado en \`\`\`html.
+4. El informe debe contener estas secciones principales:
+   - Resumen Ejecutivo (situación general y desenlace)
+   - Recursos y Organización (organismos y directores involucrados)
+   - Cronología Destacada (los hitos más relevantes resumidos)
+   - Conclusión Final (estado actual, sin inventar datos que no estén)
+Si faltan datos, indícalo de forma elegante.
+
+DATOS DE LA INTERVENCIÓN:
+${dataContext}
+`;
+
+        // 4. Llamada a la API de Gemini
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`;
+
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.2,
+              topK: 40,
+              topP: 0.95,
+              maxOutputTokens: 8192,
+            }
+          })
+        });
+
+        if (!response.ok) {
+          const errData = await response.json();
+          throw new Error(errData.error?.message || 'Error en la petición a Gemini');
+        }
+
+        const data = await response.json();
+        let textReport = data.candidates[0].content.parts[0].text;
+
+        // Limpiamos posible formateo markdown
+        textReport = textReport.replace(/^```html\n?/, '').replace(/\n?```$/, '');
+
+        // 5. Mostrar en Modal
+        document.getElementById('ai-report-content').innerHTML = textReport;
+        document.getElementById('overlay-ai-report').classList.add('open');
+
+      } catch (e) {
+        alert('Error al generar el informe IA: ' + e.message);
+      }
+
+      btn.disabled = false; btn.textContent = '✨ Emitir informe (IA)';
+    };
+
+    window.cerrarModalInformeIA = () => {
+      document.getElementById('overlay-ai-report').classList.remove('open');
+    };
+
+    // ── MODAL NUEVA OPERACIÓN ──────────────────────────────────────────
+    window.abrirModalOp = () => {
+      document.getElementById('overlay-op').classList.add('open');
+      setTimeout(() => document.getElementById('f-nombre').focus(), 100);
+      mostrarCoordBox();
+    };
+
+    window.cerrarModalOp = () => {
+      document.getElementById('overlay-op').classList.remove('open');
+      pickedCoords = null;
+      pickedAddress = '';
+      if (tempGmMarker) { tempGmMarker.setMap(null); tempGmMarker = null; }
+      ['f-nombre', 'f-desc', 'f-loc', 'f-dir', 'f-org', 'f-lugar'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      document.getElementById('f-tipo').value = 'inundacion';
+      document.getElementById('f-nivel').value = '3';
+      document.getElementById('coord-box').classList.remove('show');
+    };
+
+    window.crearOp = async () => {
+      const nombre = document.getElementById('f-nombre').value.trim();
+      if (!nombre) { document.getElementById('f-nombre').focus(); return; }
+      const btn = document.getElementById('btn-crear-op');
+      btn.disabled = true; btn.textContent = 'Creando…';
+      try {
+        const nivel = parseInt(document.getElementById('f-nivel').value);
+        const desc = document.getElementById('f-desc').value.trim();
+        const locVal = document.getElementById('f-lugar').value.trim() || document.getElementById('f-loc').value.trim();
+        const autorNombre = currentUserDoc.nombre || currentUser.email;
+
+        const ref = await addDoc(collection(db, 'operaciones'), {
+          nombre,
+          tipo: document.getElementById('f-tipo').value,
+          nivel,
+          loc: locVal,
+          dir: document.getElementById('f-dir').value.trim(),
+          org: document.getElementById('f-org').value.trim(),
+          coords: pickedCoords || null,
+          creadoPor: currentUser.uid,
+          creadoPorNombre: autorNombre,
+          creadoEn: serverTimestamp(),
+          actualizadoEn: serverTimestamp(),
+          estado: 'activa'
+        });
+        if (desc) {
+          await addDoc(collection(db, 'operaciones', ref.id, 'acciones'), {
+            texto: desc,
+            prioridad: nivel <= 2 ? 'Crítica' : nivel === 3 ? 'Alta' : 'Media',
+            autor: autorNombre,
+            uid: currentUser.uid,
+            timestamp: serverTimestamp()
+          });
+        }
+        cerrarModalOp();
+        window.abrirDetalle(ref.id);
+      } catch (e) { alert('Error: ' + e.message); }
+      btn.disabled = false; btn.textContent = 'Crear operación →';
+    };
+
+    // ── MODAL EDITAR OPERACIÓN ─────────────────────────────────────────
+    window.abrirModalEditOp = () => {
+      if (!selOpId) return;
+      const op = ops[selOpId];
+      if (!op) return;
+
+      // Poblar campos con datos actuales
+      document.getElementById('fe-nombre').value = op.nombre || '';
+      document.getElementById('fe-tipo').value = op.tipo || 'inundacion';
+      document.getElementById('fe-dir').value = op.dir || '';
+      document.getElementById('fe-org').value = op.org || '';
+      document.getElementById('fe-lugar').value = op.loc || '';
+
+      // Restaurar coords actuales como punto de partida
+      editPickedCoords = op.coords || null;
+      editPickedAddress = op.loc || '';
+      mostrarEditCoordBox();
+
+      document.getElementById('overlay-edit-op').classList.add('open');
+      setTimeout(() => document.getElementById('fe-nombre').focus(), 100);
+    };
+
+    window.cerrarModalEditOp = () => {
+      document.getElementById('overlay-edit-op').classList.remove('open');
+      editPickedCoords = null;
+      editPickedAddress = '';
+      if (editTempGmMarker) { editTempGmMarker.setMap(null); editTempGmMarker = null; }
+      document.getElementById('edit-coord-box').classList.remove('show');
+    };
+
+    window.guardarEditOp = async () => {
+      if (!selOpId) return;
+      const nombre = document.getElementById('fe-nombre').value.trim();
+      if (!nombre) { document.getElementById('fe-nombre').focus(); return; }
+      const btn = document.getElementById('btn-guardar-edit-op');
+      btn.disabled = true; btn.textContent = 'Guardando…';
+      try {
+        const locVal = document.getElementById('fe-lugar').value.trim();
+        const updates = {
+          nombre,
+          tipo: document.getElementById('fe-tipo').value,
+          loc: locVal,
+          dir: document.getElementById('fe-dir').value.trim(),
+          org: document.getElementById('fe-org').value.trim(),
+          actualizadoEn: serverTimestamp()
+        };
+        // Solo actualizar coords si el usuario eligió una nueva ubicación
+        if (editPickedCoords) updates.coords = editPickedCoords;
+
+        await updateDoc(doc(db, 'operaciones', selOpId), updates);
+
+        // Actualizar marcador del mapa si cambiaron coordenadas
+        if (editPickedCoords && gmMarkers[selOpId]) {
+          const tipo = TIPOS[updates.tipo] || TIPOS.otro;
+          gmMarkers[selOpId].setPosition(editPickedCoords);
+          gmMarkers[selOpId].setIcon(nivelIcon(ops[selOpId].nivel, tipo.emoji));
+        }
+
+        mostrarToast('Operación actualizada.');
+        cerrarModalEditOp();
+      } catch (e) { alert('Error: ' + e.message); }
+      btn.disabled = false; btn.textContent = 'Guardar cambios →';
+    };
+
+    // ── USUARIOS ───────────────────────────────────────────────────────
+    window.showSection = sec => {
+      document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
+      document.getElementById('section-operaciones').style.display = sec === 'operaciones' ? 'flex' : 'none';
+      document.getElementById('section-usuarios').style.display = sec === 'usuarios' ? 'flex' : 'none';
+      if (sec === 'usuarios') cargarUsuarios();
+      if (sec === 'operaciones' && gmap) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
+    };
+
+    async function cargarUsuarios() {
+      const snap = await getDocs(collection(db, 'users'));
+      const tbody = document.getElementById('users-tbody');
+      tbody.innerHTML = '';
+      snap.forEach(d => {
+        const u = d.data();
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+      <td>${u.nombre || '—'}</td>
       <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${u.email}</td>
-      <td><span class="rol-badge rol-${u.role}">${ROL_LABELS[u.role]||u.role}</span></td>
-      <td><span class="activo-badge ${u.activo!==false?'activo':'inactivo'}">${u.activo!==false?'Activo':'Inactivo'}</span></td>
+      <td><span class="rol-badge rol-${u.role}">${ROL_LABELS[u.role] || u.role}</span></td>
+      <td><span class="activo-badge ${u.activo !== false ? 'activo' : 'inactivo'}">${u.activo !== false ? 'Activo' : 'Inactivo'}</span></td>
       <td>
         <button class="tbl-btn" onclick="editarUsuario('${d.id}')">Editar</button>
         ${d.id !== currentUser.uid
-          ? `<button class="tbl-btn danger" onclick="borrarUsuario('${d.id}')">Desactivar</button>`
-          : '<span style="font-size:11px;color:var(--text-4)">(tú)</span>'}
+            ? `<button class="tbl-btn danger" onclick="borrarUsuario('${d.id}')">Desactivar</button>`
+            : '<span style="font-size:11px;color:var(--text-4)">(tú)</span>'}
       </td>`;
-    tbody.appendChild(tr);
-  });
-}
-
-window.abrirModalUsuario = () => {
-  editingUserId = null;
-  document.getElementById('modal-user-title').textContent = 'Nuevo usuario';
-  ['u-nombre','u-email','u-pass'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('u-role').value   = 'usuario';
-  document.getElementById('u-activo').value = 'true';
-  document.getElementById('u-pass-row').style.display = 'flex';
-  document.getElementById('overlay-user').classList.add('open');
-  document.getElementById('u-nombre').focus();
-};
-
-window.editarUsuario = async uid => {
-  const snap = await getDoc(doc(db, 'users', uid));
-  if (!snap.exists()) return;
-  const u = snap.data();
-  editingUserId = uid;
-  document.getElementById('modal-user-title').textContent = 'Editar usuario';
-  document.getElementById('u-nombre').value  = u.nombre || '';
-  document.getElementById('u-email').value   = u.email  || '';
-  document.getElementById('u-role').value    = u.role   || 'usuario';
-  document.getElementById('u-activo').value  = u.activo === false ? 'false' : 'true';
-  document.getElementById('u-pass-row').style.display = 'none';
-  document.getElementById('overlay-user').classList.add('open');
-};
-
-window.cerrarModalUsuario = () => {
-  document.getElementById('overlay-user').classList.remove('open');
-  editingUserId = null;
-};
-
-window.guardarUsuario = async () => {
-  const nombre = document.getElementById('u-nombre').value.trim();
-  const email  = document.getElementById('u-email').value.trim();
-  const pass   = document.getElementById('u-pass').value;
-  const role   = document.getElementById('u-role').value;
-  const activo = document.getElementById('u-activo').value === 'true';
-  if (!nombre || !email) { alert('Nombre y email son obligatorios.'); return; }
-  const btn = document.getElementById('btn-guardar-user');
-  btn.disabled = true; btn.textContent = 'Guardando…';
-  try {
-    if (editingUserId) {
-      await updateDoc(doc(db, 'users', editingUserId), { nombre, role, activo });
-      mostrarToast('Usuario actualizado.');
-    } else {
-      if (!pass || pass.length < 6) { alert('La contraseña debe tener al menos 6 caracteres.'); btn.disabled=false; btn.textContent='Guardar'; return; }
-      const res = await fetch(
-        `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=AIzaSyAHtrxaBazArqa8znWsUIVYxTsS7zoOOmc`,
-        { method:'POST', headers:{'Content-Type':'application/json'},
-          body: JSON.stringify({ email, password: pass, returnSecureToken: true }) }
-      );
-      const data = await res.json();
-      if (data.error) throw new Error(data.error.message);
-      await setDoc(doc(db, 'users', data.localId), {
-        nombre, email, role, activo,
-        creadoPor: currentUser.uid,
-        creadoEn:  serverTimestamp()
+        tbody.appendChild(tr);
       });
-      mostrarToast('Usuario creado.');
     }
-    cerrarModalUsuario();
-    cargarUsuarios();
-  } catch(e) { alert('Error: '+e.message); }
-  btn.disabled = false; btn.textContent = 'Guardar';
-};
 
-window.borrarUsuario = async uid => {
-  if (!confirm('¿Desactivar este usuario?')) return;
-  await updateDoc(doc(db, 'users', uid), { activo: false });
-  mostrarToast('Usuario desactivado.');
-  cargarUsuarios();
-};
+    window.abrirModalUsuario = () => {
+      editingUserId = null;
+      document.getElementById('modal-user-title').textContent = 'Nuevo usuario';
+      ['u-nombre', 'u-email', 'u-pass'].forEach(id => document.getElementById(id).value = '');
+      document.getElementById('u-role').value = 'usuario';
+      document.getElementById('u-activo').value = 'true';
+      document.getElementById('u-pass-row').style.display = 'flex';
+      document.getElementById('overlay-user').classList.add('open');
+      document.getElementById('u-nombre').focus();
+    };
 
-// ── TOAST ──────────────────────────────────────────────────────────
-function mostrarToast(msg) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 3000);
-}
+    window.editarUsuario = async uid => {
+      const snap = await getDoc(doc(db, 'users', uid));
+      if (!snap.exists()) return;
+      const u = snap.data();
+      editingUserId = uid;
+      document.getElementById('modal-user-title').textContent = 'Editar usuario';
+      document.getElementById('u-nombre').value = u.nombre || '';
+      document.getElementById('u-email').value = u.email || '';
+      document.getElementById('u-role').value = u.role || 'usuario';
+      document.getElementById('u-activo').value = u.activo === false ? 'false' : 'true';
+      document.getElementById('u-pass-row').style.display = 'none';
+      document.getElementById('overlay-user').classList.add('open');
+    };
 
-function mostrarLogin() {
-  document.getElementById('screen-login').style.display = 'flex';
-  document.getElementById('screen-app').style.display   = 'none';
-}
-function mostrarApp() {
-  document.getElementById('screen-login').style.display = 'none';
-  document.getElementById('screen-app').style.display   = 'flex';
-}
-function mostrarLoginErr(msg) {
-  const el = document.getElementById('err-login');
-  el.textContent = msg; el.style.display = 'block';
-}
+    window.cerrarModalUsuario = () => {
+      document.getElementById('overlay-user').classList.remove('open');
+      editingUserId = null;
+    };
 
-// ── TECLADO ────────────────────────────────────────────────────────
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    window.cerrarModalOp();
-    window.cerrarModalEditOp();
-    window.cerrarDetalle();
-    window.cerrarModalUsuario();
-    if (picking) stopPick();
-    if (editPickMode) stopEditPick();
-  }
-});
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('l-pass')?.addEventListener('keydown', e => {
-    if (e.key === 'Enter') window.doLogin();
-  });
-});
-</script>
+    window.guardarUsuario = async () => {
+      const nombre = document.getElementById('u-nombre').value.trim();
+      const email = document.getElementById('u-email').value.trim();
+      const pass = document.getElementById('u-pass').value;
+      const role = document.getElementById('u-role').value;
+      const activo = document.getElementById('u-activo').value === 'true';
+      if (!nombre || !email) { alert('Nombre y email son obligatorios.'); return; }
+      const btn = document.getElementById('btn-guardar-user');
+      btn.disabled = true; btn.textContent = 'Guardando…';
+      try {
+        if (editingUserId) {
+          await updateDoc(doc(db, 'users', editingUserId), { nombre, role, activo });
+          mostrarToast('Usuario actualizado.');
+        } else {
+          if (!pass || pass.length < 6) { alert('La contraseña debe tener al menos 6 caracteres.'); btn.disabled = false; btn.textContent = 'Guardar'; return; }
+          const res = await fetch(
+            `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=AIzaSyAHtrxaBazArqa8znWsUIVYxTsS7zoOOmc`,
+            {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email, password: pass, returnSecureToken: true })
+            }
+          );
+          const data = await res.json();
+          if (data.error) throw new Error(data.error.message);
+          await setDoc(doc(db, 'users', data.localId), {
+            nombre, email, role, activo,
+            creadoPor: currentUser.uid,
+            creadoEn: serverTimestamp()
+          });
+          mostrarToast('Usuario creado.');
+        }
+        cerrarModalUsuario();
+        cargarUsuarios();
+      } catch (e) { alert('Error: ' + e.message); }
+      btn.disabled = false; btn.textContent = 'Guardar';
+    };
 
-<!-- Google Maps + Places -->
-<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD5lt7WuK1XuTDrFYut30HN1zSpMOpncOY&libraries=places&callback=initGoogleMap&language=es" async defer></script>
+    window.borrarUsuario = async uid => {
+      if (!confirm('¿Desactivar este usuario?')) return;
+      await updateDoc(doc(db, 'users', uid), { activo: false });
+      mostrarToast('Usuario desactivado.');
+      cargarUsuarios();
+    };
 
-<style>
-  :root {
-    --bg:#f4f2ee; --bg-1:#fff; --bg-2:#f9f8f5; --bg-3:#eeece7; --bg-4:#e5e2da;
-    --text-1:#1a1814; --text-2:#5c5848; --text-3:#9c9486; --text-4:#c8c0b2;
-    --border:rgba(0,0,0,0.08); --border-mid:rgba(0,0,0,0.14); --border-dark:rgba(0,0,0,0.22);
-    --crit-1:#c0392b; --crit-1-bg:#fdf1f0; --crit-1-border:#e8b4b0;
-    --crit-2:#d35400; --crit-2-bg:#fef5ee; --crit-2-border:#f0c8a0;
-    --crit-3:#c08c00; --crit-3-bg:#fefbee; --crit-3-border:#eadb94;
-    --crit-4:#1a7a4a; --crit-4-bg:#f0faf4; --crit-4-border:#a8d8bc;
-    --accent:#1a3a6e; --accent-lt:#eaf0fb;
-    --shadow-sm:0 1px 4px rgba(0,0,0,0.08);
-    --shadow-md:0 4px 16px rgba(0,0,0,0.10);
-    --shadow-lg:0 8px 32px rgba(0,0,0,0.14);
-  }
-  *{margin:0;padding:0;box-sizing:border-box;}
-  body{font-family:'IBM Plex Sans',sans-serif;background:var(--bg);color:var(--text-1);height:100vh;overflow:hidden;display:flex;flex-direction:column;font-size:14px;}
+    // ── TOAST ──────────────────────────────────────────────────────────
+    function mostrarToast(msg) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), 3000);
+    }
 
-  /* LOGIN */
-  #screen-login{display:flex;align-items:center;justify-content:center;height:100vh;background:var(--bg);}
-  .login-card{background:var(--bg-1);border:1px solid var(--border-dark);border-radius:4px;padding:40px;width:380px;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;gap:18px;}
-  .login-logo{display:flex;align-items:center;gap:12px;}
-  .login-icon{width:40px;height:40px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;border-radius:2px;}
-  .login-title{font-family:'Fraunces',serif;font-size:22px;font-weight:700;color:var(--accent);}
-  .login-sub{font-size:9px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-3);}
-  .login-field{display:flex;flex-direction:column;gap:5px;}
-  .login-lbl{font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-3);}
-  .login-input{background:var(--bg-2);border:1px solid var(--border-mid);color:var(--text-1);padding:9px 12px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;outline:none;border-radius:2px;transition:border-color 0.12s;}
-  .login-input:focus{border-color:var(--accent);}
-  .btn-login{padding:11px;background:var(--accent);border:none;color:#fff;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:600;border-radius:2px;transition:background 0.12s;}
-  .btn-login:hover{background:#253d6e;}
-  .btn-login:disabled{background:var(--text-4);cursor:not-allowed;}
-  .login-err{font-size:12px;color:var(--crit-1);background:var(--crit-1-bg);border:1px solid var(--crit-1-border);padding:8px 12px;border-radius:2px;display:none;}
+    function mostrarLogin() {
+      document.getElementById('screen-login').style.display = 'flex';
+      document.getElementById('screen-app').style.display = 'none';
+    }
+    function mostrarApp() {
+      document.getElementById('screen-login').style.display = 'none';
+      document.getElementById('screen-app').style.display = 'flex';
+    }
+    function mostrarLoginErr(msg) {
+      const el = document.getElementById('err-login');
+      el.textContent = msg; el.style.display = 'block';
+    }
 
-  /* APP */
-  #screen-app{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
+    // ── TECLADO ────────────────────────────────────────────────────────
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        window.cerrarModalOp();
+        window.cerrarModalEditOp();
+        window.cerrarDetalle();
+        window.cerrarModalUsuario();
+        if (picking) stopPick();
+        if (editPickMode) stopEditPick();
+      }
+    });
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('l-pass')?.addEventListener('keydown', e => {
+        if (e.key === 'Enter') window.doLogin();
+      });
+    });
+  </script>
 
-  /* HEADER */
-  header{height:54px;background:var(--bg-1);border-bottom:1px solid var(--border-mid);display:flex;align-items:center;padding:0 18px;gap:14px;flex-shrink:0;box-shadow:var(--shadow-sm);z-index:200;}
-  .logo-mark{display:flex;align-items:center;gap:9px;flex-shrink:0;}
-  .logo-icon{width:30px;height:30px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;border-radius:2px;}
-  .logo-text{font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--accent);}
-  .logo-sub{font-size:8px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-3);}
-  .hdr-div{width:1px;height:26px;background:var(--border-mid);flex-shrink:0;}
-  .nivel-indicators{display:flex;gap:5px;}
-  .nivel-chip{display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:2px;border:1px solid;}
-  .nivel-chip-val{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:500;}
-  .nivel-chip-lbl{font-size:8px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;}
-  .chip-n1{background:var(--crit-1-bg);border-color:var(--crit-1-border);color:var(--crit-1);}
-  .chip-n2{background:var(--crit-2-bg);border-color:var(--crit-2-border);color:var(--crit-2);}
-  .chip-n3{background:var(--crit-3-bg);border-color:var(--crit-3-border);color:var(--crit-3);}
-  .chip-n4{background:var(--crit-4-bg);border-color:var(--crit-4-border);color:var(--crit-4);}
-  .hdr-right{display:flex;align-items:center;gap:10px;margin-left:auto;flex-shrink:0;}
-  .hdr-user-info{text-align:right;}
-  .hdr-user-name{font-size:13px;font-weight:600;}
-  .hdr-user-role{font-size:10px;color:var(--text-3);}
-  .live-dot{width:7px;height:7px;border-radius:50%;background:#27ae60;box-shadow:0 0 0 2px rgba(39,174,96,0.25);animation:livepulse 2.5s infinite;}
-  @keyframes livepulse{0%,100%{box-shadow:0 0 0 2px rgba(39,174,96,0.25)}50%{box-shadow:0 0 0 5px rgba(39,174,96,0.1)}}
-  .clock{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-2);}
-  .btn-nueva{display:flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border:none;cursor:pointer;padding:7px 14px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;border-radius:2px;white-space:nowrap;transition:background 0.12s;}
-  .btn-nueva:hover{background:#253d6e;}
-  .btn-logout{padding:6px 12px;background:transparent;border:1px solid var(--border-mid);color:var(--text-3);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:11px;border-radius:2px;transition:all 0.12s;}
-  .btn-logout:hover{border-color:var(--border-dark);color:var(--text-1);}
+  <!-- Google Maps + Places -->
+  <script
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD5lt7WuK1XuTDrFYut30HN1zSpMOpncOY&libraries=places&callback=initGoogleMap&language=es"
+    async defer></script>
 
-  /* NAV */
-  .app-nav{display:flex;border-bottom:1px solid var(--border-mid);background:var(--bg-1);flex-shrink:0;padding:0 18px;}
-  .nav-item{display:flex;align-items:center;gap:6px;padding:10px 16px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text-3);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:500;transition:all 0.12s;margin-bottom:-1px;}
-  .nav-item:hover{color:var(--text-1);}
-  .nav-item.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600;}
+  <style>
+    :root {
+      --bg: #f4f2ee;
+      --bg-1: #fff;
+      --bg-2: #f9f8f5;
+      --bg-3: #eeece7;
+      --bg-4: #e5e2da;
+      --text-1: #1a1814;
+      --text-2: #5c5848;
+      --text-3: #9c9486;
+      --text-4: #c8c0b2;
+      --border: rgba(0, 0, 0, 0.08);
+      --border-mid: rgba(0, 0, 0, 0.14);
+      --border-dark: rgba(0, 0, 0, 0.22);
+      --crit-1: #c0392b;
+      --crit-1-bg: #fdf1f0;
+      --crit-1-border: #e8b4b0;
+      --crit-2: #d35400;
+      --crit-2-bg: #fef5ee;
+      --crit-2-border: #f0c8a0;
+      --crit-3: #c08c00;
+      --crit-3-bg: #fefbee;
+      --crit-3-border: #eadb94;
+      --crit-4: #1a7a4a;
+      --crit-4-bg: #f0faf4;
+      --crit-4-border: #a8d8bc;
+      --accent: #1a3a6e;
+      --accent-lt: #eaf0fb;
+      --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.08);
+      --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.10);
+      --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.14);
+    }
 
-  /* SECTIONS */
-  #section-operaciones{flex:1;overflow:hidden;display:flex;}
-  #section-usuarios{flex:1;overflow:hidden;display:none;flex-direction:column;padding:24px;gap:16px;background:var(--bg);}
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-  /* SIDEBAR */
-  .panel-left{width:320px;flex-shrink:0;display:flex;flex-direction:column;background:var(--bg-1);border-right:1px solid var(--border-mid);}
-  .panel-left-head{padding:12px 14px 10px;border-bottom:1px solid var(--border);flex-shrink:0;}
-  .section-label{font-size:9px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-3);margin-bottom:8px;}
-  .filter-tabs{display:flex;border:1px solid var(--border-mid);border-radius:2px;overflow:hidden;}
-  .ftab{flex:1;padding:5px 4px;background:var(--bg-2);border:none;border-right:1px solid var(--border);color:var(--text-3);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:11px;font-weight:600;transition:all 0.12s;}
-  .ftab:last-child{border-right:none;}
-  .ftab.on{background:var(--bg-1);color:var(--text-1);}
-  .ftab.on-n1{background:var(--crit-1-bg);color:var(--crit-1);}
-  .ftab.on-n2{background:var(--crit-2-bg);color:var(--crit-2);}
-  .ftab.on-n3{background:var(--crit-3-bg);color:var(--crit-3);}
-  .ftab.on-n4{background:var(--crit-4-bg);color:var(--crit-4);}
-  .ops-list{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:5px;}
-  .ops-list::-webkit-scrollbar{width:3px;}
-  .ops-list::-webkit-scrollbar-thumb{background:var(--bg-4);}
-  .empty-msg{display:none;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;gap:8px;color:var(--text-4);text-align:center;font-size:12px;}
-  .empty-msg.show{display:flex;}
-  .op-card{background:var(--bg-1);border:1px solid var(--border-mid);border-left:4px solid transparent;padding:10px 12px;cursor:pointer;transition:all 0.12s;border-radius:0 2px 2px 0;box-shadow:var(--shadow-sm);}
-  .op-card:hover{box-shadow:var(--shadow-md);}
-  .op-card.sel{background:var(--accent-lt);}
-  .op-card[data-nivel="1"]{border-left-color:var(--crit-1);}
-  .op-card[data-nivel="2"]{border-left-color:var(--crit-2);}
-  .op-card[data-nivel="3"]{border-left-color:var(--crit-3);}
-  .op-card[data-nivel="4"]{border-left-color:var(--crit-4);}
-  .card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:5px;}
-  .card-id{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text-3);margin-bottom:2px;}
-  .card-name{font-size:13px;font-weight:600;line-height:1.2;}
-  .card-type-tag{font-size:10px;font-weight:600;padding:2px 6px;border-radius:10px;white-space:nowrap;flex-shrink:0;border:1px solid;}
-  .card-meta{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text-3);}
-  .nivel-pill{font-size:9px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;padding:2px 6px;border-radius:2px;border:1px solid;}
-  .pill-1{background:var(--crit-1-bg);color:var(--crit-1);border-color:var(--crit-1-border);}
-  .pill-2{background:var(--crit-2-bg);color:var(--crit-2);border-color:var(--crit-2-border);}
-  .pill-3{background:var(--crit-3-bg);color:var(--crit-3);border-color:var(--crit-3-border);}
-  .pill-4{background:var(--crit-4-bg);color:var(--crit-4);border-color:var(--crit-4-border);}
+    body {
+      font-family: 'IBM Plex Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text-1);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      font-size: 14px;
+    }
 
-  /* MAP */
-  .map-zone{flex:1;position:relative;overflow:hidden;}
-  #map{width:100%;height:100%;}
-  .pick-banner{display:none;position:absolute;top:14px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:9px 20px;z-index:600;border-radius:2px;box-shadow:var(--shadow-lg);pointer-events:none;animation:blinkS 1.4s infinite;}
-  @keyframes blinkS{0%,100%{opacity:1}50%{opacity:0.7}}
-  .pick-banner.on{display:block;}
+    /* LOGIN */
+    #screen-login {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: var(--bg);
+    }
 
-  /* DETAIL PANEL */
-  .detail-panel{position:absolute;top:0;left:0;bottom:0;width:370px;background:var(--bg-1);border-right:1px solid var(--border-dark);box-shadow:var(--shadow-lg);display:flex;flex-direction:column;z-index:500;transform:translateX(-100%);transition:transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);}
-  .detail-panel.open{transform:translateX(0);}
-  .dp-header{padding:14px 16px 10px;border-bottom:1px solid var(--border);flex-shrink:0;}
-  .dp-top-row{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px;}
-  .dp-id{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text-3);margin-bottom:2px;}
-  .dp-name{font-family:'Fraunces',serif;font-size:18px;font-weight:700;line-height:1.1;}
-  .btn-close-dp{background:var(--bg-3);border:1px solid var(--border-mid);color:var(--text-3);cursor:pointer;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;border-radius:2px;}
-  .btn-close-dp:hover{background:var(--bg-4);color:var(--text-1);}
-  .dp-chips{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
-  .dp-loc{font-size:12px;color:var(--text-2);font-weight:500;}
-  .nivel-selector{display:flex;border:1px solid var(--border-mid);border-radius:2px;overflow:hidden;}
-  .nsel-opt{padding:4px 8px;font-size:9px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;cursor:pointer;background:var(--bg-2);border:none;border-right:1px solid var(--border);color:var(--text-3);font-family:'IBM Plex Sans',sans-serif;}
-  .nsel-opt:last-child{border-right:none;}
-  .nsel-opt:disabled{cursor:not-allowed;opacity:0.5;}
-  .nsel-opt[data-n="1"].on{background:var(--crit-1-bg);color:var(--crit-1);}
-  .nsel-opt[data-n="2"].on{background:var(--crit-2-bg);color:var(--crit-2);}
-  .nsel-opt[data-n="3"].on{background:var(--crit-3-bg);color:var(--crit-3);}
-  .nsel-opt[data-n="4"].on{background:var(--crit-4-bg);color:var(--crit-4);}
-  .dp-info-row{padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;gap:16px;flex-wrap:wrap;}
-  .dp-info-item{font-size:10px;color:var(--text-3);}
-  .dp-info-item strong{display:block;font-size:11px;color:var(--text-2);font-weight:500;}
-  .dp-timeline{flex:1;overflow-y:auto;padding:12px 16px;}
-  .dp-timeline::-webkit-scrollbar{width:3px;}
-  .dp-timeline::-webkit-scrollbar-thumb{background:var(--bg-4);}
-  .tl-empty{text-align:center;padding:24px 0;color:var(--text-4);font-size:11px;font-family:'IBM Plex Mono',monospace;}
-  .tl-entry{display:flex;gap:10px;position:relative;padding-bottom:14px;animation:entryIn 0.2s ease;}
-  @keyframes entryIn{from{opacity:0;transform:translateY(5px)}to{opacity:1}}
-  .tl-entry:not(:last-child)::before{content:'';position:absolute;left:11px;top:22px;bottom:0;width:1px;background:var(--border-mid);}
-  .tl-node{width:22px;height:22px;border-radius:50%;flex-shrink:0;border:2px solid;background:var(--bg-1);display:flex;align-items:center;justify-content:center;font-size:9px;z-index:1;position:relative;}
-  .tl-node-1{border-color:var(--crit-1);background:var(--crit-1-bg);}
-  .tl-node-2{border-color:var(--crit-2);background:var(--crit-2-bg);}
-  .tl-node-3{border-color:var(--crit-3);background:var(--crit-3-bg);}
-  .tl-node-4{border-color:var(--crit-4);background:var(--crit-4-bg);}
-  .tl-body{flex:1;}
-  .tl-meta{display:flex;align-items:center;gap:6px;margin-bottom:3px;}
-  .tl-ts{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text-4);}
-  .tl-prio{font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;}
-  .prio-Crítica{background:var(--crit-1-bg);color:var(--crit-1);}
-  .prio-Alta{background:var(--crit-2-bg);color:var(--crit-2);}
-  .prio-Media{background:var(--crit-3-bg);color:var(--crit-3);}
-  .prio-Baja{background:var(--crit-4-bg);color:var(--crit-4);}
-  .tl-text{font-size:12px;line-height:1.5;}
-  .tl-author{font-size:11px;color:var(--text-3);margin-top:2px;font-style:italic;}
-  .dp-addaction{padding:10px 16px 14px;border-top:1px solid var(--border-mid);flex-shrink:0;background:var(--bg-2);}
-  .dp-admin-btns{display:none;gap:6px;padding:8px 16px;border-top:1px solid var(--border);flex-shrink:0;}
-  .btn-danger{padding:6px 12px;background:var(--crit-1-bg);border:1px solid var(--crit-1-border);color:var(--crit-1);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:11px;font-weight:600;border-radius:2px;}
-  .btn-danger:hover{background:var(--crit-1);color:#fff;}
-  .btn-edit-op{display:none;align-items:center;gap:5px;padding:6px 12px;background:var(--accent-lt);border:1px solid #c0cfe8;color:var(--accent);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:11px;font-weight:600;border-radius:2px;transition:background 0.12s;}
-  .btn-edit-op:hover{background:#d0dcf2;}
+    .login-card {
+      background: var(--bg-1);
+      border: 1px solid var(--border-dark);
+      border-radius: 4px;
+      padding: 40px;
+      width: 380px;
+      box-shadow: var(--shadow-lg);
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
 
-  /* FORM */
-  .f-input{background:var(--bg-1);border:1px solid var(--border-mid);color:var(--text-1);padding:7px 10px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;outline:none;border-radius:2px;transition:border-color 0.12s;width:100%;}
-  .f-input:focus{border-color:var(--accent);}
-  .f-input::placeholder{color:var(--text-4);}
-  .f-input[readonly]{background:var(--bg-3);color:var(--text-3);cursor:default;border-color:var(--border);}
-  .f-select{background:var(--bg-1);border:1px solid var(--border-mid);color:var(--text-2);padding:7px 8px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;outline:none;cursor:pointer;border-radius:2px;flex-shrink:0;}
-  .form-row{display:flex;gap:6px;margin-bottom:6px;}
-  .btn-reg{width:100%;padding:8px;background:var(--accent);border:none;color:#fff;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;border-radius:2px;transition:background 0.12s;margin-top:4px;}
-  .btn-reg:hover{background:#253d6e;}
-  .btn-reg:disabled{background:var(--text-4);cursor:not-allowed;}
-  .coord-box{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#1a7a4a;background:var(--crit-4-bg);border:1px solid var(--crit-4-border);padding:5px 10px;border-radius:2px;display:none;margin-top:4px;}
-  .coord-box.show{display:block;}
-  .btn-mapa{padding:7px 11px;background:var(--accent-lt);border:1px solid #c0cfe8;color:var(--accent);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;border-radius:2px;white-space:nowrap;flex-shrink:0;transition:background 0.12s;}
-  .btn-mapa:hover{background:#d0dcf2;}
+    .login-logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
 
-  /* Places autocomplete */
-  .pac-container{z-index:2000!important;font-family:'IBM Plex Sans',sans-serif;font-size:13px;border-radius:2px;border:1px solid var(--border-dark);box-shadow:var(--shadow-md);}
-  .pac-item{padding:6px 10px;cursor:pointer;}
-  .pac-item:hover{background:var(--bg-2);}
-  .pac-item-query{font-size:13px;}
+    .login-icon {
+      width: 40px;
+      height: 40px;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 20px;
+      border-radius: 2px;
+    }
 
-  /* MODAL */
-  .overlay{display:none;position:fixed;inset:0;background:rgba(30,25,15,0.45);z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
-  .overlay.open{display:flex;animation:fadeO 0.15s ease;}
-  @keyframes fadeO{from{opacity:0}to{opacity:1}}
-  .modal{background:var(--bg-1);border:1px solid var(--border-dark);border-radius:3px;width:500px;max-width:96vw;box-shadow:var(--shadow-lg);animation:modalIn 0.18s ease;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;}
-  @keyframes modalIn{from{opacity:0;transform:translateY(-14px)}to{opacity:1;transform:none}}
-  .modal-head{padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
-  .modal-title{font-family:'Fraunces',serif;font-size:18px;font-weight:700;}
-  .modal-body{padding:16px 20px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;}
-  .field{display:flex;flex-direction:column;gap:4px;}
-  .field-lbl{font-size:9px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-3);}
-  .field-row{display:flex;gap:10px;}
-  .modal-foot{padding:12px 20px 16px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border);flex-shrink:0;}
-  .btn-cancel-m{padding:8px 16px;background:var(--bg-2);border:1px solid var(--border-mid);color:var(--text-2);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:500;border-radius:2px;}
-  .btn-create-m{padding:8px 20px;background:var(--accent);border:none;color:#fff;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;border-radius:2px;transition:background 0.12s;}
-  .btn-create-m:hover{background:#253d6e;}
-  .btn-create-m:disabled{background:var(--text-4);cursor:not-allowed;}
+    .login-title {
+      font-family: 'Fraunces', serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent);
+    }
 
-  /* TABLA USUARIOS */
-  .users-toolbar{display:flex;align-items:center;justify-content:space-between;}
-  .users-table-wrap{flex:1;overflow:auto;background:var(--bg-1);border:1px solid var(--border-mid);border-radius:3px;box-shadow:var(--shadow-sm);}
-  table{width:100%;border-collapse:collapse;}
-  thead tr{background:var(--bg-2);border-bottom:2px solid var(--border-mid);}
-  th{padding:10px 14px;text-align:left;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-3);}
-  td{padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;}
-  tr:last-child td{border-bottom:none;}
-  tr:hover td{background:var(--bg-2);}
-  .rol-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;}
-  .rol-super_admin{background:#e8f0fb;color:var(--accent);border:1px solid #c0cfe8;}
-  .rol-admin{background:var(--crit-3-bg);color:var(--crit-3);border:1px solid var(--crit-3-border);}
-  .rol-usuario{background:var(--bg-3);color:var(--text-2);border:1px solid var(--border-mid);}
-  .activo-badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;}
-  .activo{background:var(--crit-4-bg);color:var(--crit-4);border:1px solid var(--crit-4-border);}
-  .inactivo{background:var(--crit-1-bg);color:var(--crit-1);border:1px solid var(--crit-1-border);}
-  .tbl-btn{padding:4px 10px;background:var(--bg-2);border:1px solid var(--border-mid);color:var(--text-2);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:11px;font-weight:500;border-radius:2px;margin-right:4px;}
-  .tbl-btn:hover{background:var(--bg-3);}
-  .tbl-btn.danger{color:var(--crit-1);border-color:var(--crit-1-border);}
-  .tbl-btn.danger:hover{background:var(--crit-1);color:#fff;}
+    .login-sub {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
 
-  /* TOAST */
-  #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--accent);color:#fff;padding:10px 22px;border-radius:2px;font-size:13px;font-weight:500;box-shadow:var(--shadow-lg);opacity:0;transition:all 0.25s;pointer-events:none;z-index:2000;}
-  #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-</style>
+    .login-field {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .login-lbl {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+
+    .login-input {
+      background: var(--bg-2);
+      border: 1px solid var(--border-mid);
+      color: var(--text-1);
+      padding: 9px 12px;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 14px;
+      outline: none;
+      border-radius: 2px;
+      transition: border-color 0.12s;
+    }
+
+    .login-input:focus {
+      border-color: var(--accent);
+    }
+
+    .btn-login {
+      padding: 11px;
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      border-radius: 2px;
+      transition: background 0.12s;
+    }
+
+    .btn-login:hover {
+      background: #253d6e;
+    }
+
+    .btn-login:disabled {
+      background: var(--text-4);
+      cursor: not-allowed;
+    }
+
+    .login-err {
+      font-size: 12px;
+      color: var(--crit-1);
+      background: var(--crit-1-bg);
+      border: 1px solid var(--crit-1-border);
+      padding: 8px 12px;
+      border-radius: 2px;
+      display: none;
+    }
+
+    /* APP */
+    #screen-app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* HEADER */
+    header {
+      height: 54px;
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border-mid);
+      display: flex;
+      align-items: center;
+      padding: 0 18px;
+      gap: 14px;
+      flex-shrink: 0;
+      box-shadow: var(--shadow-sm);
+      z-index: 200;
+    }
+
+    .logo-mark {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      flex-shrink: 0;
+    }
+
+    .logo-icon {
+      width: 30px;
+      height: 30px;
+      background: var(--accent);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 15px;
+      border-radius: 2px;
+    }
+
+    .logo-text {
+      font-family: 'Fraunces', serif;
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .logo-sub {
+      font-size: 8px;
+      font-weight: 600;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+
+    .hdr-div {
+      width: 1px;
+      height: 26px;
+      background: var(--border-mid);
+      flex-shrink: 0;
+    }
+
+    .nivel-indicators {
+      display: flex;
+      gap: 5px;
+    }
+
+    .nivel-chip {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 9px;
+      border-radius: 2px;
+      border: 1px solid;
+    }
+
+    .nivel-chip-val {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    .nivel-chip-lbl {
+      font-size: 8px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .chip-n1 {
+      background: var(--crit-1-bg);
+      border-color: var(--crit-1-border);
+      color: var(--crit-1);
+    }
+
+    .chip-n2 {
+      background: var(--crit-2-bg);
+      border-color: var(--crit-2-border);
+      color: var(--crit-2);
+    }
+
+    .chip-n3 {
+      background: var(--crit-3-bg);
+      border-color: var(--crit-3-border);
+      color: var(--crit-3);
+    }
+
+    .chip-n4 {
+      background: var(--crit-4-bg);
+      border-color: var(--crit-4-border);
+      color: var(--crit-4);
+    }
+
+    .hdr-right {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+
+    .hdr-user-info {
+      text-align: right;
+    }
+
+    .hdr-user-name {
+      font-size: 13px;
+      font-weight: 600;
+    }
+
+    .hdr-user-role {
+      font-size: 10px;
+      color: var(--text-3);
+    }
+
+    .live-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #27ae60;
+      box-shadow: 0 0 0 2px rgba(39, 174, 96, 0.25);
+      animation: livepulse 2.5s infinite;
+    }
+
+    @keyframes livepulse {
+
+      0%,
+      100% {
+        box-shadow: 0 0 0 2px rgba(39, 174, 96, 0.25)
+      }
+
+      50% {
+        box-shadow: 0 0 0 5px rgba(39, 174, 96, 0.1)
+      }
+    }
+
+    .clock {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 12px;
+      color: var(--text-2);
+    }
+
+    .btn-nueva {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      cursor: pointer;
+      padding: 7px 14px;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 2px;
+      white-space: nowrap;
+      transition: background 0.12s;
+    }
+
+    .btn-nueva:hover {
+      background: #253d6e;
+    }
+
+    .btn-logout {
+      padding: 6px 12px;
+      background: transparent;
+      border: 1px solid var(--border-mid);
+      color: var(--text-3);
+      cursor: pointer;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 11px;
+      border-radius: 2px;
+      transition: all 0.12s;
+    }
+
+    .btn-logout:hover {
+      border-color: var(--border-dark);
+      color: var(--text-1);
+    }
+
+    /* NAV */
+    .app-nav {
+      display: flex;
+      border-bottom: 1px solid var(--border-mid);
+      background: var(--bg-1);
+      flex-shrink: 0;
+      padding: 0 18px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 10px 16px;
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: var(--text-3);
+      cursor: pointer;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.12s;
+      margin-bottom: -1px;
+    }
+
+    .nav-item:hover {
+      color: var(--text-1);
+    }
+
+    .nav-item.on {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* SECTIONS */
+    #section-operaciones {
+      flex: 1;
+      overflow: hidden;
+      display: flex;
+    }
+
+    #section-usuarios {
+      flex: 1;
+      overflow: hidden;
+      display: none;
+      flex-direction: column;
+      padding: 24px;
+      gap: 16px;
+      background: var(--bg);
+    }
+
+    /* SIDEBAR */
+    .panel-left {
+      width: 320px;
+      flex-shrink: 0;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-1);
+      border-right: 1px solid var(--border-mid);
+    }
+
+    .panel-left-head {
+      padding: 12px 14px 10px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .section-label {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: 8px;
+    }
+
+    .filter-tabs {
+      display: flex;
+      border: 1px solid var(--border-mid);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .ftab {
+      flex: 1;
+      padding: 5px 4px;
+      background: var(--bg-2);
+      border: none;
+      border-right: 1px solid var(--border);
+      color: var(--text-3);
+      cursor: pointer;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.12s;
+    }
+
+    .ftab:last-child {
+      border-right: none;
+    }
+
+    .ftab.on {
+      background: var(--bg-1);
+      color: var(--text-1);
+    }
+
+    .ftab.on-n1 {
+      background: var(--crit-1-bg);
+      color: var(--crit-1);
+    }
+
+    .ftab.on-n2 {
+      background: var(--crit-2-bg);
+      color: var(--crit-2);
+    }
+
+    .ftab.on-n3 {
+      background: var(--crit-3-bg);
+      color: var(--crit-3);
+    }
+
+    .ftab.on-n4 {
+      background: var(--crit-4-bg);
+      color: var(--crit-4);
+    }
+
+    .ops-list {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .ops-list::-webkit-scrollbar {
+      width: 3px;
+    }
+
+    .ops-list::-webkit-scrollbar-thumb {
+      background: var(--bg-4);
+    }
+
+    .empty-msg {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 40px 20px;
+      gap: 8px;
+      color: var(--text-4);
+      text-align: center;
+      font-size: 12px;
+    }
+
+    .empty-msg.show {
+      display: flex;
+    }
+
+    .op-card {
+      background: var(--bg-1);
+      border: 1px solid var(--border-mid);
+      border-left: 4px solid transparent;
+      padding: 10px 12px;
+      cursor: pointer;
+      transition: all 0.12s;
+      border-radius: 0 2px 2px 0;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .op-card:hover {
+      box-shadow: var(--shadow-md);
+    }
+
+    .op-card.sel {
+      background: var(--accent-lt);
+    }
+
+    .op-card[data-nivel="1"] {
+      border-left-color: var(--crit-1);
+    }
+
+    .op-card[data-nivel="2"] {
+      border-left-color: var(--crit-2);
+    }
+
+    .op-card[data-nivel="3"] {
+      border-left-color: var(--crit-3);
+    }
+
+    .op-card[data-nivel="4"] {
+      border-left-color: var(--crit-4);
+    }
+
+    .card-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 5px;
+    }
+
+    .card-id {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 9px;
+      color: var(--text-3);
+      margin-bottom: 2px;
+    }
+
+    .card-name {
+      font-size: 13px;
+      font-weight: 600;
+      line-height: 1.2;
+    }
+
+    .card-type-tag {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 6px;
+      border-radius: 10px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      border: 1px solid;
+    }
+
+    .card-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      color: var(--text-3);
+    }
+
+    .nivel-pill {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      padding: 2px 6px;
+      border-radius: 2px;
+      border: 1px solid;
+    }
+
+    .pill-1 {
+      background: var(--crit-1-bg);
+      color: var(--crit-1);
+      border-color: var(--crit-1-border);
+    }
+
+    .pill-2 {
+      background: var(--crit-2-bg);
+      color: var(--crit-2);
+      border-color: var(--crit-2-border);
+    }
+
+    .pill-3 {
+      background: var(--crit-3-bg);
+      color: var(--crit-3);
+      border-color: var(--crit-3-border);
+    }
+
+    .pill-4 {
+      background: var(--crit-4-bg);
+      color: var(--crit-4);
+      border-color: var(--crit-4-border);
+    }
+
+    /* MAP */
+    .map-zone {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    #map {
+      width: 100%;
+      height: 100%;
+    }
+
+    .pick-banner {
+      display: none;
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: var(--accent);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 9px 20px;
+      z-index: 600;
+      border-radius: 2px;
+      box-shadow: var(--shadow-lg);
+      pointer-events: none;
+      animation: blinkS 1.4s infinite;
+    }
+
+    @keyframes blinkS {
+
+      0%,
+      100% {
+        opacity: 1
+      }
+
+      50% {
+        opacity: 0.7
+      }
+    }
+
+    .pick-banner.on {
+      display: block;
+    }
+
+    /* DETAIL PANEL */
+    .detail-panel {
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      width: 370px;
+      background: var(--bg-1);
+      border-right: 1px solid var(--border-dark);
+      box-shadow: var(--shadow-lg);
+      display: flex;
+      flex-direction: column;
+      z-index: 500;
+      transform: translateX(-100%);
+      transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .detail-panel.open {
+      transform: translateX(0);
+    }
+
+    .dp-header {
+      padding: 14px 16px 10px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .dp-top-row {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .dp-id {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 9px;
+      color: var(--text-3);
+      margin-bottom: 2px;
+    }
+
+    .dp-name {
+      font-family: 'Fraunces', serif;
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.1;
+    }
+
+    .btn-close-dp {
+      background: var(--bg-3);
+      border: 1px solid var(--border-mid);
+      color: var(--text-3);
+      cursor: pointer;
+      width: 26px;
+      height: 26px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      flex-shrink: 0;
+      border-radius: 2px;
+    }
+
+    .btn-close-dp:hover {
+      background: var(--bg-4);
+      color: var(--text-1);
+    }
+
+    .dp-chips {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .dp-loc {
+      font-size: 12px;
+      color: var(--text-2);
+      font-weight: 500;
+    }
+
+    .nivel-selector {
+      display: flex;
+      border: 1px solid var(--border-mid);
+      border-radius: 2px;
+      overflow: hidden;
+    }
+
+    .nsel-opt {
+      padding: 4px 8px;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      cursor: pointer;
+      background: var(--bg-2);
+      border: none;
+      border-right: 1px solid var(--border);
+      color: var(--text-3);
+      font-family: 'IBM Plex Sans', sans-serif;
+    }
+
+    .nsel-opt:last-child {
+      border-right: none;
+    }
+
+    .nsel-opt:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+    }
+
+    .nsel-opt[data-n="1"].on {
+      background: var(--crit-1-bg);
+      color: var(--crit-1);
+    }
+
+    .nsel-opt[data-n="2"].on {
+      background: var(--crit-2-bg);
+      color: var(--crit-2);
+    }
+
+    .nsel-opt[data-n="3"].on {
+      background: var(--crit-3-bg);
+      color: var(--crit-3);
+    }
+
+    .nsel-opt[data-n="4"].on {
+      background: var(--crit-4-bg);
+      color: var(--crit-4);
+    }
+
+    .dp-info-row {
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .dp-info-item {
+      font-size: 10px;
+      color: var(--text-3);
+    }
+
+    .dp-info-item strong {
+      display: block;
+      font-size: 11px;
+      color: var(--text-2);
+      font-weight: 500;
+    }
+
+    .dp-timeline {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 16px;
+    }
+
+    .dp-timeline::-webkit-scrollbar {
+      width: 3px;
+    }
+
+    .dp-timeline::-webkit-scrollbar-thumb {
+      background: var(--bg-4);
+    }
+
+    .tl-empty {
+      text-align: center;
+      padding: 24px 0;
+      color: var(--text-4);
+      font-size: 11px;
+      font-family: 'IBM Plex Mono', monospace;
+    }
+
+    .tl-entry {
+      display: flex;
+      gap: 10px;
+      position: relative;
+      padding-bottom: 14px;
+      animation: entryIn 0.2s ease;
+    }
+
+    @keyframes entryIn {
+      from {
+        opacity: 0;
+        transform: translateY(5px)
+      }
+
+      to {
+        opacity: 1
+      }
+    }
+
+    .tl-entry:not(:last-child)::before {
+      content: '';
+      position: absolute;
+      left: 11px;
+      top: 22px;
+      bottom: 0;
+      width: 1px;
+      background: var(--border-mid);
+    }
+
+    .tl-node {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      flex-shrink: 0;
+      border: 2px solid;
+      background: var(--bg-1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 9px;
+      z-index: 1;
+      position: relative;
+    }
+
+    .tl-node-1 {
+      border-color: var(--crit-1);
+      background: var(--crit-1-bg);
+    }
+
+    .tl-node-2 {
+      border-color: var(--crit-2);
+      background: var(--crit-2-bg);
+    }
+
+    .tl-node-3 {
+      border-color: var(--crit-3);
+      background: var(--crit-3-bg);
+    }
+
+    .tl-node-4 {
+      border-color: var(--crit-4);
+      background: var(--crit-4-bg);
+    }
+
+    .tl-body {
+      flex: 1;
+    }
+
+    .tl-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-bottom: 3px;
+    }
+
+    .tl-ts {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 9px;
+      color: var(--text-4);
+    }
+
+    .tl-prio {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 5px;
+      border-radius: 10px;
+    }
+
+    .prio-Crítica {
+      background: var(--crit-1-bg);
+      color: var(--crit-1);
+    }
+
+    .prio-Alta {
+      background: var(--crit-2-bg);
+      color: var(--crit-2);
+    }
+
+    .prio-Media {
+      background: var(--crit-3-bg);
+      color: var(--crit-3);
+    }
+
+    .prio-Baja {
+      background: var(--crit-4-bg);
+      color: var(--crit-4);
+    }
+
+    .tl-text {
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .tl-author {
+      font-size: 11px;
+      color: var(--text-3);
+      margin-top: 2px;
+      font-style: italic;
+    }
+
+    .dp-addaction {
+      padding: 10px 16px 14px;
+      border-top: 1px solid var(--border-mid);
+      flex-shrink: 0;
+      background: var(--bg-2);
+    }
+
+    .dp-admin-btns {
+      display: none;
+      gap: 6px;
+      padding: 8px 16px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .btn-danger {
+      padding: 6px 12px;
+      background: var(--crit-1-bg);
+      border: 1px solid var(--crit-1-border);
+      color: var(--crit-1);
+      cursor: pointer;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 2px;
+    }
+
+    .btn-danger:hover {
+      background: var(--crit-1);
+      color: #fff;
+    }
+
+    .btn-edit-op {
+      display: none;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 12px;
+      background: var(--accent-lt);
+      border: 1px solid #c0cfe8;
+      color: var(--accent);
+      cursor: pointer;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 2px;
+      transition: background 0.12s;
+    }
+
+    .btn-edit-op:hover {
+      background: #d0dcf2;
+    }
+
+    .btn-ai {
+      display: none;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 12px;
+      background: linear-gradient(135deg, #8e2de2, #4a00e0);
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      border-radius: 2px;
+      transition: opacity 0.12s;
+    }
+
+    .btn-ai:hover {
+      opacity: 0.9;
+    }
+
+    .btn-ai:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    /* AI REPORT MODAL */
+    .ai-report-body {
+      padding: 20px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: var(--text-1);
+      max-height: 60vh;
+      overflow-y: auto;
+    }
+
+    .ai-report-body h1 {
+      font-family: 'Fraunces', serif;
+      font-size: 20px;
+      color: var(--accent);
+      margin-bottom: 12px;
+    }
+
+    .ai-report-body h2 {
+      font-size: 15px;
+      color: var(--text-2);
+      margin-top: 20px;
+      margin-bottom: 8px;
+      border-bottom: 1px solid var(--border-mid);
+      padding-bottom: 4px;
+    }
+
+    .ai-report-body ul {
+      margin-left: 20px;
+      margin-bottom: 12px;
+    }
+
+    .ai-report-body p {
+      margin-bottom: 12px;
+    }
+
+    /* FORM */
+    .f-input {
+      background: var(--bg-1);
+      border: 1px solid var(--border-mid);
+      color: var(--text-1);
+      padding: 7px 10px;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 12px;
+      outline: none;
+      border-radius: 2px;
+      transition: border-color 0.12s;
+      width: 100%;
+    }
+
+    .f-input:focus {
+      border-color: var(--accent);
+    }
+
+    .f-input::placeholder {
+      color: var(--text-4);
+    }
+
+    .f-input[readonly] {
+      background: var(--bg-3);
+      color: var(--text-3);
+      cursor: default;
+      border-color: var(--border);
+    }
+
+    .f-select {
+      background: var(--bg-1);
+      border: 1px solid var(--border-mid);
+      color: var(--text-2);
+      padding: 7px 8px;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 12px;
+      outline: none;
+      cursor: pointer;
+      border-radius: 2px;
+      flex-shrink: 0;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 6px;
+      margin-bottom: 6px;
+    }
+
+    .btn-reg {
+      width: 100%;
+      padding: 8px;
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 2px;
+      transition: background 0.12s;
+      margin-top: 4px;
+    }
+
+    .btn-reg:hover {
+      background: #253d6e;
+    }
+
+    .btn-reg:disabled {
+      background: var(--text-4);
+      cursor: not-allowed;
+    }
+
+    .coord-box {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 11px;
+      color: #1a7a4a;
+      background: var(--crit-4-bg);
+      border: 1px solid var(--crit-4-border);
+      padding: 5px 10px;
+      border-radius: 2px;
+      display: none;
+      margin-top: 4px;
+    }
+
+    .coord-box.show {
+      display: block;
+    }
+
+    .btn-mapa {
+      padding: 7px 11px;
+      background: var(--accent-lt);
+      border: 1px solid #c0cfe8;
+      color: var(--accent);
+      cursor: pointer;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 2px;
+      white-space: nowrap;
+      flex-shrink: 0;
+      transition: background 0.12s;
+    }
+
+    .btn-mapa:hover {
+      background: #d0dcf2;
+    }
+
+    /* Places autocomplete */
+    .pac-container {
+      z-index: 2000 !important;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 13px;
+      border-radius: 2px;
+      border: 1px solid var(--border-dark);
+      box-shadow: var(--shadow-md);
+    }
+
+    .pac-item {
+      padding: 6px 10px;
+      cursor: pointer;
+    }
+
+    .pac-item:hover {
+      background: var(--bg-2);
+    }
+
+    .pac-item-query {
+      font-size: 13px;
+    }
+
+    /* MODAL */
+    .overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(30, 25, 15, 0.45);
+      z-index: 1000;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(4px);
+    }
+
+    .overlay.open {
+      display: flex;
+      animation: fadeO 0.15s ease;
+    }
+
+    @keyframes fadeO {
+      from {
+        opacity: 0
+      }
+
+      to {
+        opacity: 1
+      }
+    }
+
+    .modal {
+      background: var(--bg-1);
+      border: 1px solid var(--border-dark);
+      border-radius: 3px;
+      width: 500px;
+      max-width: 96vw;
+      box-shadow: var(--shadow-lg);
+      animation: modalIn 0.18s ease;
+      max-height: 92vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    @keyframes modalIn {
+      from {
+        opacity: 0;
+        transform: translateY(-14px)
+      }
+
+      to {
+        opacity: 1;
+        transform: none
+      }
+    }
+
+    .modal-head {
+      padding: 18px 20px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+
+    .modal-title {
+      font-family: 'Fraunces', serif;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .modal-body {
+      padding: 16px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow-y: auto;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .field-lbl {
+      font-size: 9px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+
+    .field-row {
+      display: flex;
+      gap: 10px;
+    }
+
+    .modal-foot {
+      padding: 12px 20px 16px;
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .btn-cancel-m {
+      padding: 8px 16px;
+      background: var(--bg-2);
+      border: 1px solid var(--border-mid);
+      color: var(--text-2);
+      cursor: pointer;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      border-radius: 2px;
+    }
+
+    .btn-create-m {
+      padding: 8px 20px;
+      background: var(--accent);
+      border: none;
+      color: #fff;
+      cursor: pointer;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 2px;
+      transition: background 0.12s;
+    }
+
+    .btn-create-m:hover {
+      background: #253d6e;
+    }
+
+    .btn-create-m:disabled {
+      background: var(--text-4);
+      cursor: not-allowed;
+    }
+
+    /* TABLA USUARIOS */
+    .users-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .users-table-wrap {
+      flex: 1;
+      overflow: auto;
+      background: var(--bg-1);
+      border: 1px solid var(--border-mid);
+      border-radius: 3px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead tr {
+      background: var(--bg-2);
+      border-bottom: 2px solid var(--border-mid);
+    }
+
+    th {
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-3);
+    }
+
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      vertical-align: middle;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:hover td {
+      background: var(--bg-2);
+    }
+
+    .rol-badge {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 10px;
+    }
+
+    .rol-super_admin {
+      background: #e8f0fb;
+      color: var(--accent);
+      border: 1px solid #c0cfe8;
+    }
+
+    .rol-admin {
+      background: var(--crit-3-bg);
+      color: var(--crit-3);
+      border: 1px solid var(--crit-3-border);
+    }
+
+    .rol-usuario {
+      background: var(--bg-3);
+      color: var(--text-2);
+      border: 1px solid var(--border-mid);
+    }
+
+    .activo-badge {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 2px 7px;
+      border-radius: 10px;
+    }
+
+    .activo {
+      background: var(--crit-4-bg);
+      color: var(--crit-4);
+      border: 1px solid var(--crit-4-border);
+    }
+
+    .inactivo {
+      background: var(--crit-1-bg);
+      color: var(--crit-1);
+      border: 1px solid var(--crit-1-border);
+    }
+
+    .tbl-btn {
+      padding: 4px 10px;
+      background: var(--bg-2);
+      border: 1px solid var(--border-mid);
+      color: var(--text-2);
+      cursor: pointer;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+      border-radius: 2px;
+      margin-right: 4px;
+    }
+
+    .tbl-btn:hover {
+      background: var(--bg-3);
+    }
+
+    .tbl-btn.danger {
+      color: var(--crit-1);
+      border-color: var(--crit-1-border);
+    }
+
+    .tbl-btn.danger:hover {
+      background: var(--crit-1);
+      color: #fff;
+    }
+
+    /* TOAST */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: var(--accent);
+      color: #fff;
+      padding: 10px 22px;
+      border-radius: 2px;
+      font-size: 13px;
+      font-weight: 500;
+      box-shadow: var(--shadow-lg);
+      opacity: 0;
+      transition: all 0.25s;
+      pointer-events: none;
+      z-index: 2000;
+    }
+
+    #toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+  </style>
 </head>
+
 <body>
 
-<!-- LOGIN -->
-<div id="screen-login">
-  <div class="login-card">
-    <div class="login-logo">
-      <div class="login-icon">⚠</div>
-      <div>
-        <div class="login-title">SIGECA</div>
-        <div class="login-sub">Sistema de Gestión de Catástrofes</div>
+  <!-- LOGIN -->
+  <div id="screen-login">
+    <div class="login-card">
+      <div class="login-logo">
+        <div class="login-icon">⚠</div>
+        <div>
+          <div class="login-title">SIGECA</div>
+          <div class="login-sub">Sistema de Gestión de Catástrofes</div>
+        </div>
       </div>
+      <div class="login-field">
+        <div class="login-lbl">Email</div>
+        <input class="login-input" id="l-email" type="email" placeholder="usuario@organismo.es" autocomplete="username">
+      </div>
+      <div class="login-field">
+        <div class="login-lbl">Contraseña</div>
+        <input class="login-input" id="l-pass" type="password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <div class="login-err" id="err-login"></div>
+      <button class="btn-login" id="btn-login" onclick="doLogin()">Acceder</button>
     </div>
-    <div class="login-field">
-      <div class="login-lbl">Email</div>
-      <input class="login-input" id="l-email" type="email" placeholder="usuario@organismo.es" autocomplete="username">
-    </div>
-    <div class="login-field">
-      <div class="login-lbl">Contraseña</div>
-      <input class="login-input" id="l-pass" type="password" placeholder="••••••••" autocomplete="current-password">
-    </div>
-    <div class="login-err" id="err-login"></div>
-    <button class="btn-login" id="btn-login" onclick="doLogin()">Acceder</button>
   </div>
-</div>
 
-<!-- APP -->
-<div id="screen-app" style="display:none">
-  <header>
-    <div class="logo-mark">
-      <div class="logo-icon">⚠</div>
-      <div><div class="logo-text">SIGECA</div><div class="logo-sub">Gestión de Catástrofes</div></div>
-    </div>
-    <div class="hdr-div"></div>
-    <div class="nivel-indicators">
-      <div class="nivel-chip chip-n1"><span class="nivel-chip-val" id="cnt1">0</span><span class="nivel-chip-lbl">N1</span></div>
-      <div class="nivel-chip chip-n2"><span class="nivel-chip-val" id="cnt2">0</span><span class="nivel-chip-lbl">N2</span></div>
-      <div class="nivel-chip chip-n3"><span class="nivel-chip-val" id="cnt3">0</span><span class="nivel-chip-lbl">N3</span></div>
-      <div class="nivel-chip chip-n4"><span class="nivel-chip-val" id="cnt4">0</span><span class="nivel-chip-lbl">N4</span></div>
-    </div>
-    <div class="hdr-right">
-      <div class="live-dot"></div>
-      <div class="clock" id="clock">--:--:--</div>
-      <div class="hdr-user-info">
-        <div class="hdr-user-name" id="hdr-user"></div>
-        <div class="hdr-user-role" id="hdr-role"></div>
-      </div>
-      <button id="btn-nueva-op" class="btn-nueva" onclick="abrirModalOp()">+ Nueva operación</button>
-      <button class="btn-logout" onclick="doLogout()">Salir</button>
-    </div>
-  </header>
-
-  <nav class="app-nav">
-    <button class="nav-item on" data-sec="operaciones" onclick="showSection('operaciones')">🗺 Operaciones</button>
-    <button class="nav-item" id="nav-usuarios" data-sec="usuarios" onclick="showSection('usuarios')" style="display:none">👥 Usuarios</button>
-  </nav>
-
-  <!-- OPERACIONES -->
-  <div id="section-operaciones">
-    <div class="panel-left">
-      <div class="panel-left-head">
-        <div class="section-label">Operaciones registradas</div>
-        <div class="filter-tabs">
-          <button class="ftab on" onclick="setFiltro('all',this)">Todas</button>
-          <button class="ftab" onclick="setFiltro('1',this)">N1</button>
-          <button class="ftab" onclick="setFiltro('2',this)">N2</button>
-          <button class="ftab" onclick="setFiltro('3',this)">N3</button>
-          <button class="ftab" onclick="setFiltro('4',this)">N4</button>
+  <!-- APP -->
+  <div id="screen-app" style="display:none">
+    <header>
+      <div class="logo-mark">
+        <div class="logo-icon">⚠</div>
+        <div>
+          <div class="logo-text">SIGECA</div>
+          <div class="logo-sub">Gestión de Catástrofes</div>
         </div>
       </div>
-      <div class="ops-list" id="ops-list">
-        <div class="empty-msg show" id="empty-msg">
-          <div style="font-size:28px;opacity:0.4">📋</div>
-          <span>Sin operaciones registradas.</span>
+      <div class="hdr-div"></div>
+      <div class="nivel-indicators">
+        <div class="nivel-chip chip-n1"><span class="nivel-chip-val" id="cnt1">0</span><span
+            class="nivel-chip-lbl">N1</span></div>
+        <div class="nivel-chip chip-n2"><span class="nivel-chip-val" id="cnt2">0</span><span
+            class="nivel-chip-lbl">N2</span></div>
+        <div class="nivel-chip chip-n3"><span class="nivel-chip-val" id="cnt3">0</span><span
+            class="nivel-chip-lbl">N3</span></div>
+        <div class="nivel-chip chip-n4"><span class="nivel-chip-val" id="cnt4">0</span><span
+            class="nivel-chip-lbl">N4</span></div>
+      </div>
+      <div class="hdr-right">
+        <div class="live-dot"></div>
+        <div class="clock" id="clock">--:--:--</div>
+        <div class="hdr-user-info">
+          <div class="hdr-user-name" id="hdr-user"></div>
+          <div class="hdr-user-role" id="hdr-role"></div>
+        </div>
+        <button id="btn-nueva-op" class="btn-nueva" onclick="abrirModalOp()">+ Nueva operación</button>
+        <button class="btn-logout" onclick="doLogout()">Salir</button>
+      </div>
+    </header>
+
+    <nav class="app-nav">
+      <button class="nav-item on" data-sec="operaciones" onclick="showSection('operaciones')">🗺 Operaciones</button>
+      <button class="nav-item" id="nav-usuarios" data-sec="usuarios" onclick="showSection('usuarios')"
+        style="display:none">👥 Usuarios</button>
+    </nav>
+
+    <!-- OPERACIONES -->
+    <div id="section-operaciones">
+      <div class="panel-left">
+        <div class="panel-left-head">
+          <div class="section-label">Operaciones registradas</div>
+          <div class="filter-tabs">
+            <button class="ftab on" onclick="setFiltro('all',this)">Todas</button>
+            <button class="ftab" onclick="setFiltro('1',this)">N1</button>
+            <button class="ftab" onclick="setFiltro('2',this)">N2</button>
+            <button class="ftab" onclick="setFiltro('3',this)">N3</button>
+            <button class="ftab" onclick="setFiltro('4',this)">N4</button>
+          </div>
+        </div>
+        <div class="ops-list" id="ops-list">
+          <div class="empty-msg show" id="empty-msg">
+            <div style="font-size:28px;opacity:0.4">📋</div>
+            <span>Sin operaciones registradas.</span>
+          </div>
         </div>
       </div>
-    </div>
 
-    <div class="map-zone">
-      <div class="pick-banner" id="pick-banner">📍 Haz clic en el mapa para fijar la ubicación</div>
-      <div id="map"></div>
+      <div class="map-zone">
+        <div class="pick-banner" id="pick-banner">📍 Haz clic en el mapa para fijar la ubicación</div>
+        <div id="map"></div>
 
-      <!-- PANEL DETALLE -->
-      <div class="detail-panel" id="detail-panel">
-        <div class="dp-header">
-          <div class="dp-top-row">
-            <div>
-              <div class="dp-id" id="dp-id"></div>
-              <div class="dp-name" id="dp-name"></div>
+        <!-- PANEL DETALLE -->
+        <div class="detail-panel" id="detail-panel">
+          <div class="dp-header">
+            <div class="dp-top-row">
+              <div>
+                <div class="dp-id" id="dp-id"></div>
+                <div class="dp-name" id="dp-name"></div>
+              </div>
+              <button class="btn-close-dp" onclick="cerrarDetalle()">✕</button>
             </div>
-            <button class="btn-close-dp" onclick="cerrarDetalle()">✕</button>
+            <div class="dp-chips">
+              <div id="dp-type-tag"></div>
+              <div class="dp-loc" id="dp-loc"></div>
+            </div>
           </div>
-          <div class="dp-chips">
-            <div id="dp-type-tag"></div>
-            <div class="dp-loc" id="dp-loc"></div>
+          <div
+            style="padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <span
+              style="font-size:10px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;">Nivel:</span>
+            <div class="nivel-selector">
+              <button class="nsel-opt" data-n="1" onclick="cambiarNivel(1)">N1 Mayor</button>
+              <button class="nsel-opt" data-n="2" onclick="cambiarNivel(2)">N2 Emerg.</button>
+              <button class="nsel-opt" data-n="3" onclick="cambiarNivel(3)">N3 Alerta</button>
+              <button class="nsel-opt" data-n="4" onclick="cambiarNivel(4)">N4 Seg.</button>
+            </div>
+          </div>
+          <div class="dp-info-row" id="dp-info-row"></div>
+          <div class="dp-timeline" id="dp-timeline"></div>
+          <div class="dp-addaction" id="dp-addaction-wrapper">
+            <div class="section-label">Registrar novedad</div>
+            <div class="form-row">
+              <select class="f-select" id="a-prio">
+                <option value="Crítica">🔴 Crítica</option>
+                <option value="Alta">🟠 Alta</option>
+                <option value="Media" selected>🟡 Media</option>
+                <option value="Baja">🟢 Baja</option>
+              </select>
+              <!-- Campo autor: readonly, siempre muestra el usuario conectado -->
+              <input class="f-input" id="a-autor" placeholder="Usuario conectado" style="flex:1;" readonly>
+            </div>
+            <textarea class="f-input" id="a-texto" placeholder="Describe la novedad, acción o decisión…"
+              style="resize:vertical;min-height:58px;margin-bottom:4px;"></textarea>
+            <button class="btn-reg" id="btn-reg-accion" onclick="addAccion()">Registrar novedad</button>
+          </div>
+          <!-- Botones admin -->
+          <div
+            style="padding:8px 16px;border-top:1px solid var(--border);flex-shrink:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <button id="dp-edit-btn" class="btn-edit-op" onclick="abrirModalEditOp()">✏️ Editar</button>
+            <button id="dp-fin-btn" class="btn-edit-op" onclick="finalizarOp()">Finalizar operación</button>
+            <button id="dp-ai-btn" class="btn-ai" onclick="abrirModalInformeIA()">✨ Emitir informe (IA)</button>
+            <div class="dp-admin-btns" id="dp-admin-btns" style="padding:0;border:none;display:none;">
+              <button id="dp-reabrir-btn" class="btn-edit-op" onclick="reabrirOp()" style="display:none;">Abrir</button>
+              <button class="btn-danger" onclick="borrarOp()">🗑 Borrar</button>
+            </div>
           </div>
         </div>
-        <div style="padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:8px;">
-          <span style="font-size:10px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;">Nivel:</span>
-          <div class="nivel-selector">
-            <button class="nsel-opt" data-n="1" onclick="cambiarNivel(1)">N1 Mayor</button>
-            <button class="nsel-opt" data-n="2" onclick="cambiarNivel(2)">N2 Emerg.</button>
-            <button class="nsel-opt" data-n="3" onclick="cambiarNivel(3)">N3 Alerta</button>
-            <button class="nsel-opt" data-n="4" onclick="cambiarNivel(4)">N4 Seg.</button>
-          </div>
+      </div>
+    </div>
+
+    <!-- USUARIOS -->
+    <div id="section-usuarios">
+      <div class="users-toolbar">
+        <div>
+          <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;">Gestión de usuarios</div>
+          <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Solo el Super Admin puede crear, editar y
+            desactivar usuarios.</div>
         </div>
-        <div class="dp-info-row" id="dp-info-row"></div>
-        <div class="dp-timeline" id="dp-timeline"></div>
-        <div class="dp-addaction">
-          <div class="section-label">Registrar novedad</div>
-          <div class="form-row">
-            <select class="f-select" id="a-prio">
-              <option value="Crítica">🔴 Crítica</option>
-              <option value="Alta">🟠 Alta</option>
-              <option value="Media" selected>🟡 Media</option>
-              <option value="Baja">🟢 Baja</option>
+        <button class="btn-nueva" onclick="abrirModalUsuario()">+ Nuevo usuario</button>
+      </div>
+      <div class="users-table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Nombre</th>
+              <th>Email</th>
+              <th>Rol</th>
+              <th>Estado</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="users-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL NUEVA OPERACIÓN -->
+  <div class="overlay" id="overlay-op">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title">Nueva operación</div>
+        <button class="btn-close-dp" onclick="cerrarModalOp()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <div class="field-lbl">Nombre de la operación *</div>
+          <input class="f-input" id="f-nombre" placeholder="Ej: Inundaciones Cuenca del Ebro">
+        </div>
+        <div class="field-row">
+          <div class="field" style="flex:1;">
+            <div class="field-lbl">Tipo de catástrofe</div>
+            <select class="f-input f-select" id="f-tipo" style="width:100%">
+              <option value="inundacion">🌊 Inundación / DANA</option>
+              <option value="incendio">🔥 Incendio forestal</option>
+              <option value="seismo">🌍 Seísmo / Terremoto</option>
+              <option value="temporal">🌪 Temporal / Viento</option>
+              <option value="accidente">🚛 Accidente grave</option>
+              <option value="quimico">☣️ Incidente químico</option>
+              <option value="sanitaria">🦠 Emergencia sanitaria</option>
+              <option value="otro">📋 Otro</option>
             </select>
-            <!-- Campo autor: readonly, siempre muestra el usuario conectado -->
-            <input class="f-input" id="a-autor" placeholder="Usuario conectado" style="flex:1;" readonly>
           </div>
-          <textarea class="f-input" id="a-texto" placeholder="Describe la novedad, acción o decisión…" style="resize:vertical;min-height:58px;margin-bottom:4px;"></textarea>
-          <button class="btn-reg" id="btn-reg-accion" onclick="addAccion()">Registrar novedad</button>
-        </div>
-        <!-- Botones admin -->
-        <div style="padding:8px 16px;border-top:1px solid var(--border);flex-shrink:0;display:flex;gap:6px;align-items:center;">
-          <button id="dp-edit-btn" class="btn-edit-op" onclick="abrirModalEditOp()">✏️ Editar operación</button>
-          <div class="dp-admin-btns" id="dp-admin-btns" style="padding:0;border:none;display:none;">
-            <button class="btn-danger" onclick="borrarOp()">🗑 Borrar</button>
+          <div class="field" style="flex:1;">
+            <div class="field-lbl">Nivel de activación</div>
+            <select class="f-input f-select" id="f-nivel" style="width:100%">
+              <option value="1">N1 — Emergencia Mayor</option>
+              <option value="2">N2 — Emergencia</option>
+              <option value="3" selected>N3 — Alerta</option>
+              <option value="4">N4 — Seguimiento</option>
+            </select>
           </div>
         </div>
+        <div class="field">
+          <div class="field-lbl">Descripción inicial</div>
+          <textarea class="f-input" id="f-desc" placeholder="Situación inicial, recursos movilizados…"
+            style="resize:vertical;min-height:68px;"></textarea>
+        </div>
+        <div class="field-row">
+          <div class="field" style="flex:1;">
+            <div class="field-lbl">Director de Operaciones</div>
+            <input class="f-input" id="f-dir" placeholder="Nombre y cargo">
+          </div>
+          <div class="field" style="flex:1;">
+            <div class="field-lbl">Organismos coordinados</div>
+            <input class="f-input" id="f-org" placeholder="112, UME, Cruz Roja…">
+          </div>
+        </div>
+        <div class="field">
+          <div class="field-lbl">📍 Ubicación — busca una dirección o haz clic en el mapa</div>
+          <div style="display:flex;gap:6px;">
+            <input class="f-input" id="f-lugar" placeholder="Escribe una dirección, municipio o lugar…"
+              autocomplete="off">
+            <button class="btn-mapa" onclick="iniciarPick()">🗺 En mapa</button>
+          </div>
+          <div class="coord-box" id="coord-box"></div>
+          <input type="hidden" id="f-loc">
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel-m" onclick="cerrarModalOp()">Cancelar</button>
+        <button class="btn-create-m" id="btn-crear-op" onclick="crearOp()">Crear operación →</button>
       </div>
     </div>
   </div>
 
-  <!-- USUARIOS -->
-  <div id="section-usuarios">
-    <div class="users-toolbar">
-      <div>
-        <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;">Gestión de usuarios</div>
-        <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Solo el Super Admin puede crear, editar y desactivar usuarios.</div>
+  <!-- MODAL EDITAR OPERACIÓN -->
+  <div class="overlay" id="overlay-edit-op">
+    <div class="modal">
+      <div class="modal-head">
+        <div class="modal-title">Editar operación</div>
+        <button class="btn-close-dp" onclick="cerrarModalEditOp()">✕</button>
       </div>
-      <button class="btn-nueva" onclick="abrirModalUsuario()">+ Nuevo usuario</button>
-    </div>
-    <div class="users-table-wrap">
-      <table>
-        <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th>Acciones</th></tr></thead>
-        <tbody id="users-tbody"></tbody>
-      </table>
-    </div>
-  </div>
-</div>
-
-<!-- MODAL NUEVA OPERACIÓN -->
-<div class="overlay" id="overlay-op">
-  <div class="modal">
-    <div class="modal-head">
-      <div class="modal-title">Nueva operación</div>
-      <button class="btn-close-dp" onclick="cerrarModalOp()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="field">
-        <div class="field-lbl">Nombre de la operación *</div>
-        <input class="f-input" id="f-nombre" placeholder="Ej: Inundaciones Cuenca del Ebro">
-      </div>
-      <div class="field-row">
-        <div class="field" style="flex:1;">
+      <div class="modal-body">
+        <div class="field">
+          <div class="field-lbl">Nombre de la operación *</div>
+          <input class="f-input" id="fe-nombre" placeholder="Ej: Inundaciones Cuenca del Ebro">
+        </div>
+        <div class="field">
           <div class="field-lbl">Tipo de catástrofe</div>
-          <select class="f-input f-select" id="f-tipo" style="width:100%">
+          <select class="f-input f-select" id="fe-tipo" style="width:100%">
             <option value="inundacion">🌊 Inundación / DANA</option>
             <option value="incendio">🔥 Incendio forestal</option>
             <option value="seismo">🌍 Seísmo / Terremoto</option>
@@ -1202,150 +2725,102 @@ document.addEventListener('DOMContentLoaded', () => {
             <option value="otro">📋 Otro</option>
           </select>
         </div>
-        <div class="field" style="flex:1;">
-          <div class="field-lbl">Nivel de activación</div>
-          <select class="f-input f-select" id="f-nivel" style="width:100%">
-            <option value="1">N1 — Emergencia Mayor</option>
-            <option value="2">N2 — Emergencia</option>
-            <option value="3" selected>N3 — Alerta</option>
-            <option value="4">N4 — Seguimiento</option>
-          </select>
+        <div class="field-row">
+          <div class="field" style="flex:1;">
+            <div class="field-lbl">Director de Operaciones</div>
+            <input class="f-input" id="fe-dir" placeholder="Nombre y cargo">
+          </div>
+          <div class="field" style="flex:1;">
+            <div class="field-lbl">Organismos coordinados</div>
+            <input class="f-input" id="fe-org" placeholder="112, UME, Cruz Roja…">
+          </div>
+        </div>
+        <div class="field">
+          <div class="field-lbl">📍 Ubicación — busca una dirección o haz clic en el mapa</div>
+          <div style="display:flex;gap:6px;">
+            <input class="f-input" id="fe-lugar" placeholder="Escribe una dirección, municipio o lugar…"
+              autocomplete="off">
+            <button class="btn-mapa" onclick="iniciarEditPick()">🗺 En mapa</button>
+          </div>
+          <div class="coord-box" id="edit-coord-box"></div>
         </div>
       </div>
-      <div class="field">
-        <div class="field-lbl">Descripción inicial</div>
-        <textarea class="f-input" id="f-desc" placeholder="Situación inicial, recursos movilizados…" style="resize:vertical;min-height:68px;"></textarea>
+      <div class="modal-foot">
+        <button class="btn-cancel-m" onclick="cerrarModalEditOp()">Cancelar</button>
+        <button class="btn-create-m" id="btn-guardar-edit-op" onclick="guardarEditOp()">Guardar cambios →</button>
       </div>
-      <div class="field-row">
-        <div class="field" style="flex:1;">
-          <div class="field-lbl">Director de Operaciones</div>
-          <input class="f-input" id="f-dir" placeholder="Nombre y cargo">
-        </div>
-        <div class="field" style="flex:1;">
-          <div class="field-lbl">Organismos coordinados</div>
-          <input class="f-input" id="f-org" placeholder="112, UME, Cruz Roja…">
-        </div>
-      </div>
-      <div class="field">
-        <div class="field-lbl">📍 Ubicación — busca una dirección o haz clic en el mapa</div>
-        <div style="display:flex;gap:6px;">
-          <input class="f-input" id="f-lugar" placeholder="Escribe una dirección, municipio o lugar…" autocomplete="off">
-          <button class="btn-mapa" onclick="iniciarPick()">🗺 En mapa</button>
-        </div>
-        <div class="coord-box" id="coord-box"></div>
-        <input type="hidden" id="f-loc">
-      </div>
-    </div>
-    <div class="modal-foot">
-      <button class="btn-cancel-m" onclick="cerrarModalOp()">Cancelar</button>
-      <button class="btn-create-m" id="btn-crear-op" onclick="crearOp()">Crear operación →</button>
     </div>
   </div>
-</div>
 
-<!-- MODAL EDITAR OPERACIÓN -->
-<div class="overlay" id="overlay-edit-op">
-  <div class="modal">
-    <div class="modal-head">
-      <div class="modal-title">Editar operación</div>
-      <button class="btn-close-dp" onclick="cerrarModalEditOp()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="field">
-        <div class="field-lbl">Nombre de la operación *</div>
-        <input class="f-input" id="fe-nombre" placeholder="Ej: Inundaciones Cuenca del Ebro">
+  <!-- MODAL USUARIO -->
+  <div class="overlay" id="overlay-user">
+    <div class="modal" style="width:420px;">
+      <div class="modal-head">
+        <div class="modal-title" id="modal-user-title">Nuevo usuario</div>
+        <button class="btn-close-dp" onclick="cerrarModalUsuario()">✕</button>
       </div>
-      <div class="field">
-        <div class="field-lbl">Tipo de catástrofe</div>
-        <select class="f-input f-select" id="fe-tipo" style="width:100%">
-          <option value="inundacion">🌊 Inundación / DANA</option>
-          <option value="incendio">🔥 Incendio forestal</option>
-          <option value="seismo">🌍 Seísmo / Terremoto</option>
-          <option value="temporal">🌪 Temporal / Viento</option>
-          <option value="accidente">🚛 Accidente grave</option>
-          <option value="quimico">☣️ Incidente químico</option>
-          <option value="sanitaria">🦠 Emergencia sanitaria</option>
-          <option value="otro">📋 Otro</option>
-        </select>
-      </div>
-      <div class="field-row">
-        <div class="field" style="flex:1;">
-          <div class="field-lbl">Director de Operaciones</div>
-          <input class="f-input" id="fe-dir" placeholder="Nombre y cargo">
+      <div class="modal-body">
+        <div class="field">
+          <div class="field-lbl">Nombre completo *</div>
+          <input class="f-input" id="u-nombre" placeholder="Nombre y apellidos">
         </div>
-        <div class="field" style="flex:1;">
-          <div class="field-lbl">Organismos coordinados</div>
-          <input class="f-input" id="fe-org" placeholder="112, UME, Cruz Roja…">
+        <div class="field">
+          <div class="field-lbl">Email *</div>
+          <input class="f-input" id="u-email" type="email" placeholder="usuario@organismo.es">
+        </div>
+        <div class="field" id="u-pass-row">
+          <div class="field-lbl">Contraseña inicial *</div>
+          <input class="f-input" id="u-pass" type="password" placeholder="Mínimo 6 caracteres">
+        </div>
+        <div class="field-row">
+          <div class="field" style="flex:1;">
+            <div class="field-lbl">Rol</div>
+            <select class="f-input f-select" id="u-role" style="width:100%">
+              <option value="usuario">Usuario</option>
+              <option value="admin">Administrador</option>
+              <option value="super_admin">Super Admin</option>
+            </select>
+          </div>
+          <div class="field" style="flex:1;">
+            <div class="field-lbl">Estado</div>
+            <select class="f-input f-select" id="u-activo" style="width:100%">
+              <option value="true">Activo</option>
+              <option value="false">Inactivo</option>
+            </select>
+          </div>
         </div>
       </div>
-      <div class="field">
-        <div class="field-lbl">📍 Ubicación — busca una dirección o haz clic en el mapa</div>
-        <div style="display:flex;gap:6px;">
-          <input class="f-input" id="fe-lugar" placeholder="Escribe una dirección, municipio o lugar…" autocomplete="off">
-          <button class="btn-mapa" onclick="iniciarEditPick()">🗺 En mapa</button>
-        </div>
-        <div class="coord-box" id="edit-coord-box"></div>
+      <div class="modal-foot">
+        <button class="btn-cancel-m" onclick="cerrarModalUsuario()">Cancelar</button>
+        <button class="btn-create-m" id="btn-guardar-user" onclick="guardarUsuario()">Guardar</button>
       </div>
-    </div>
-    <div class="modal-foot">
-      <button class="btn-cancel-m" onclick="cerrarModalEditOp()">Cancelar</button>
-      <button class="btn-create-m" id="btn-guardar-edit-op" onclick="guardarEditOp()">Guardar cambios →</button>
     </div>
   </div>
-</div>
 
-<!-- MODAL USUARIO -->
-<div class="overlay" id="overlay-user">
-  <div class="modal" style="width:420px;">
-    <div class="modal-head">
-      <div class="modal-title" id="modal-user-title">Nuevo usuario</div>
-      <button class="btn-close-dp" onclick="cerrarModalUsuario()">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="field">
-        <div class="field-lbl">Nombre completo *</div>
-        <input class="f-input" id="u-nombre" placeholder="Nombre y apellidos">
+  <!-- MODAL INFORME IA -->
+  <div class="overlay" id="overlay-ai-report">
+    <div class="modal" style="width:700px; max-width:98vw;">
+      <div class="modal-head">
+        <div class="modal-title">✨ Informe Generado por Inteligencia Artificial</div>
+        <button class="btn-close-dp" onclick="cerrarModalInformeIA()">✕</button>
       </div>
-      <div class="field">
-        <div class="field-lbl">Email *</div>
-        <input class="f-input" id="u-email" type="email" placeholder="usuario@organismo.es">
+      <div class="modal-body ai-report-body" id="ai-report-content">
+        <!-- El texto generado se incrustará aquí -->
       </div>
-      <div class="field" id="u-pass-row">
-        <div class="field-lbl">Contraseña inicial *</div>
-        <input class="f-input" id="u-pass" type="password" placeholder="Mínimo 6 caracteres">
+      <div class="modal-foot">
+        <button class="btn-cancel-m" onclick="cerrarModalInformeIA()">Cerrar panel</button>
       </div>
-      <div class="field-row">
-        <div class="field" style="flex:1;">
-          <div class="field-lbl">Rol</div>
-          <select class="f-input f-select" id="u-role" style="width:100%">
-            <option value="usuario">Usuario</option>
-            <option value="admin">Administrador</option>
-            <option value="super_admin">Super Admin</option>
-          </select>
-        </div>
-        <div class="field" style="flex:1;">
-          <div class="field-lbl">Estado</div>
-          <select class="f-input f-select" id="u-activo" style="width:100%">
-            <option value="true">Activo</option>
-            <option value="false">Inactivo</option>
-          </select>
-        </div>
-      </div>
-    </div>
-    <div class="modal-foot">
-      <button class="btn-cancel-m" onclick="cerrarModalUsuario()">Cancelar</button>
-      <button class="btn-create-m" id="btn-guardar-user" onclick="guardarUsuario()">Guardar</button>
     </div>
   </div>
-</div>
 
-<div id="toast"></div>
+  <div id="toast"></div>
 
-<script>
-  setInterval(() => {
-    const el = document.getElementById('clock');
-    if (el) el.textContent = new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  }, 1000);
-</script>
+  <script>
+    setInterval(() => {
+      const el = document.getElementById('clock');
+      if (el) el.textContent = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }, 1000);
+  </script>
 </body>
+
 </html>
