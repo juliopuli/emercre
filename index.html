@@ -39,14 +39,21 @@ let picking        = false;
 let pickedCoords   = null;
 let pickedAddress  = '';
 let gmap           = null;
-let gmMarkers      = {};   // opId → google.maps.Marker
+let gmMarkers      = {};
 let autocomplete   = null;
+let autocompleteEdit = null;
 let pickListener   = null;
 let tempGmMarker   = null;
 let unsubOps       = null;
 let unsubAcciones  = null;
 let ops            = {};
 let editingUserId  = null;
+// Edit op state
+let editPickedCoords  = null;
+let editPickedAddress = '';
+let editPickListener  = null;
+let editTempGmMarker  = null;
+let editPickMode      = false;
 
 // ── TIPO / NIVEL ───────────────────────────────────────────────────
 const TIPOS = {
@@ -63,7 +70,7 @@ const NIVEL_LABELS = { 1:'Emergencia Mayor', 2:'Emergencia', 3:'Alerta', 4:'Segu
 const NIVEL_COLORS = { 1:'#c0392b', 2:'#d35400', 3:'#c08c00', 4:'#1a7a4a' };
 const ROL_LABELS   = { super_admin:'Super Admin', admin:'Administrador', usuario:'Usuario' };
 
-// ── GOOGLE MAPS INIT (llamado por callback de script) ──────────────
+// ── GOOGLE MAPS INIT ──────────────────────────────────────────────
 window.initGoogleMap = function() {
   gmap = new google.maps.Map(document.getElementById('map'), {
     center:    { lat: 40.4, lng: -3.7 },
@@ -80,7 +87,7 @@ window.initGoogleMap = function() {
     zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM }
   });
 
-  // Inicializar Places Autocomplete en el campo del modal
+  // Autocomplete — modal nueva operación
   const input = document.getElementById('f-lugar');
   autocomplete = new google.maps.places.Autocomplete(input, {
     fields: ['geometry','formatted_address','name'],
@@ -89,26 +96,41 @@ window.initGoogleMap = function() {
   autocomplete.addListener('place_changed', () => {
     const place = autocomplete.getPlace();
     if (!place.geometry) return;
-    pickedCoords  = {
-      lat: place.geometry.location.lat(),
-      lng: place.geometry.location.lng()
-    };
+    pickedCoords  = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
     pickedAddress = place.formatted_address || place.name || '';
     mostrarCoordBox();
-    // centrar mapa
     gmap.panTo(place.geometry.location);
     gmap.setZoom(15);
-    // marcador temporal
     if (tempGmMarker) tempGmMarker.setMap(null);
     tempGmMarker = new google.maps.Marker({
-      position: place.geometry.location,
-      map: gmap,
+      position: place.geometry.location, map: gmap,
       animation: google.maps.Animation.DROP,
-      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor:'#1a3a6e', fillOpacity:1, strokeColor:'#fff', strokeWeight:2 }
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale:8, fillColor:'#1a3a6e', fillOpacity:1, strokeColor:'#fff', strokeWeight:2 }
     });
   });
 
-  // Si ya había ops cargadas, pintarlas
+  // Autocomplete — modal editar operación
+  const inputEdit = document.getElementById('fe-lugar');
+  autocompleteEdit = new google.maps.places.Autocomplete(inputEdit, {
+    fields: ['geometry','formatted_address','name'],
+    componentRestrictions: { country: 'es' }
+  });
+  autocompleteEdit.addListener('place_changed', () => {
+    const place = autocompleteEdit.getPlace();
+    if (!place.geometry) return;
+    editPickedCoords  = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
+    editPickedAddress = place.formatted_address || place.name || '';
+    mostrarEditCoordBox();
+    gmap.panTo(place.geometry.location);
+    gmap.setZoom(15);
+    if (editTempGmMarker) editTempGmMarker.setMap(null);
+    editTempGmMarker = new google.maps.Marker({
+      position: place.geometry.location, map: gmap,
+      animation: google.maps.Animation.DROP,
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale:8, fillColor:'#1a3a6e', fillOpacity:1, strokeColor:'#fff', strokeWeight:2 }
+    });
+  });
+
   if (Object.keys(ops).length) renderMapa();
 };
 
@@ -200,29 +222,19 @@ function nivelIcon(nivel, emoji) {
 
 function renderMapa() {
   if (!gmap) return;
-
-  // Borrar marcadores que ya no existen
   Object.keys(gmMarkers).forEach(id => {
     if (!ops[id]) { gmMarkers[id].setMap(null); delete gmMarkers[id]; }
   });
-
   Object.values(ops).forEach(op => {
     if (!op.coords) return;
     const t    = TIPOS[op.tipo] || TIPOS.otro;
     const pos  = { lat: op.coords.lat, lng: op.coords.lng };
     const icon = nivelIcon(op.nivel, t.emoji);
-
     if (gmMarkers[op.id]) {
       gmMarkers[op.id].setPosition(pos);
       gmMarkers[op.id].setIcon(icon);
     } else {
-      const marker = new google.maps.Marker({
-        position:  pos,
-        map:       gmap,
-        icon,
-        title:     op.nombre,
-        animation: google.maps.Animation.DROP
-      });
+      const marker = new google.maps.Marker({ position: pos, map: gmap, icon, title: op.nombre, animation: google.maps.Animation.DROP });
       const iw = new google.maps.InfoWindow({ maxWidth: 260 });
       marker.addListener('click', () => {
         iw.setContent(`
@@ -250,15 +262,15 @@ function renderMapa() {
   });
 }
 
-// ── PICK LOCATION EN MAPA ──────────────────────────────────────────
+// ── PICK LOCATION (nueva operación) ───────────────────────────────
 window.iniciarPick = () => {
   picking = true;
   document.getElementById('overlay-op').classList.remove('open');
   document.getElementById('pick-banner').classList.add('on');
+  document.getElementById('pick-banner').textContent = '📍 Haz clic en el mapa para fijar la ubicación';
   gmap.getDiv().style.cursor = 'crosshair';
   pickListener = gmap.addListener('click', e => {
     pickedCoords = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-    // Reverse geocode
     const gc = new google.maps.Geocoder();
     gc.geocode({ location: e.latLng }, (results, status) => {
       if (status === 'OK' && results[0]) {
@@ -271,9 +283,7 @@ window.iniciarPick = () => {
     });
     if (tempGmMarker) tempGmMarker.setMap(null);
     tempGmMarker = new google.maps.Marker({
-      position:  e.latLng,
-      map:       gmap,
-      animation: google.maps.Animation.DROP,
+      position: e.latLng, map: gmap, animation: google.maps.Animation.DROP,
       icon: { path: google.maps.SymbolPath.CIRCLE, scale:8, fillColor:'#1a3a6e', fillOpacity:1, strokeColor:'#fff', strokeWeight:2 }
     });
   });
@@ -288,10 +298,48 @@ function stopPick() {
 
 function mostrarCoordBox() {
   const box = document.getElementById('coord-box');
-  box.textContent = pickedCoords
-    ? `📍 ${pickedCoords.lat.toFixed(5)}, ${pickedCoords.lng.toFixed(5)}`
-    : '';
+  box.textContent = pickedCoords ? `📍 ${pickedCoords.lat.toFixed(5)}, ${pickedCoords.lng.toFixed(5)}` : '';
   box.classList.toggle('show', !!pickedCoords);
+}
+
+// ── PICK LOCATION (editar operación) ──────────────────────────────
+window.iniciarEditPick = () => {
+  editPickMode = true;
+  document.getElementById('overlay-edit-op').classList.remove('open');
+  document.getElementById('pick-banner').classList.add('on');
+  document.getElementById('pick-banner').textContent = '📍 Haz clic en el mapa para actualizar la ubicación';
+  gmap.getDiv().style.cursor = 'crosshair';
+  editPickListener = gmap.addListener('click', e => {
+    editPickedCoords = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+    const gc = new google.maps.Geocoder();
+    gc.geocode({ location: e.latLng }, (results, status) => {
+      if (status === 'OK' && results[0]) {
+        editPickedAddress = results[0].formatted_address;
+        document.getElementById('fe-lugar').value = editPickedAddress;
+      }
+      mostrarEditCoordBox();
+      stopEditPick();
+      document.getElementById('overlay-edit-op').classList.add('open');
+    });
+    if (editTempGmMarker) editTempGmMarker.setMap(null);
+    editTempGmMarker = new google.maps.Marker({
+      position: e.latLng, map: gmap, animation: google.maps.Animation.DROP,
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale:8, fillColor:'#1a3a6e', fillOpacity:1, strokeColor:'#fff', strokeWeight:2 }
+    });
+  });
+};
+
+function stopEditPick() {
+  editPickMode = false;
+  if (editPickListener) { google.maps.event.removeListener(editPickListener); editPickListener = null; }
+  document.getElementById('pick-banner').classList.remove('on');
+  gmap.getDiv().style.cursor = '';
+}
+
+function mostrarEditCoordBox() {
+  const box = document.getElementById('edit-coord-box');
+  box.textContent = editPickedCoords ? `📍 ${editPickedCoords.lat.toFixed(5)}, ${editPickedCoords.lng.toFixed(5)}` : '';
+  box.classList.toggle('show', !!editPickedCoords);
 }
 
 // ── CONTADORES ─────────────────────────────────────────────────────
@@ -391,7 +439,6 @@ function renderDetalle(op) {
     b.disabled = !isAdmin;
   });
 
-  // Info row — incluye creado por
   const ir  = document.getElementById('dp-info-row');
   const ts  = op.creadoEn?.toDate
     ? op.creadoEn.toDate().toLocaleString('es-ES',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})
@@ -402,9 +449,13 @@ function renderDetalle(op) {
   if (op.creadoPorNombre)ir.innerHTML += `<div class="dp-info-item"><strong>${op.creadoPorNombre}</strong>Creado por</div>`;
                          ir.innerHTML += `<div class="dp-info-item"><strong>${ts}</strong>Inicio</div>`;
 
+  // Botón editar (admin y super_admin)
+  document.getElementById('dp-edit-btn').style.display = isAdmin ? 'inline-flex' : 'none';
   document.getElementById('dp-admin-btns').style.display = isSA ? 'flex' : 'none';
-  // Prerellenar autor en el campo de novedad con el usuario actual
-  document.getElementById('a-autor').value = currentUserDoc.nombre || currentUser.email;
+
+  // Campo autor readonly
+  document.getElementById('a-autor').value    = currentUserDoc.nombre || currentUser.email;
+  document.getElementById('a-autor').readOnly = true;
 }
 
 function renderTimeline(acciones, op) {
@@ -436,9 +487,7 @@ function renderTimeline(acciones, op) {
 // ── CAMBIAR NIVEL ──────────────────────────────────────────────────
 window.cambiarNivel = async n => {
   if (!selOpId) return;
-  await updateDoc(doc(db, 'operaciones', selOpId), {
-    nivel: n, actualizadoEn: serverTimestamp()
-  });
+  await updateDoc(doc(db, 'operaciones', selOpId), { nivel: n, actualizadoEn: serverTimestamp() });
   if (gmMarkers[selOpId] && ops[selOpId]) {
     const t = TIPOS[ops[selOpId].tipo] || TIPOS.otro;
     gmMarkers[selOpId].setIcon(nivelIcon(n, t.emoji));
@@ -505,22 +554,21 @@ window.crearOp = async () => {
   try {
     const nivel  = parseInt(document.getElementById('f-nivel').value);
     const desc   = document.getElementById('f-desc').value.trim();
-    const locVal = document.getElementById('f-lugar').value.trim() ||
-                   document.getElementById('f-loc').value.trim();
+    const locVal = document.getElementById('f-lugar').value.trim() || document.getElementById('f-loc').value.trim();
     const autorNombre = currentUserDoc.nombre || currentUser.email;
 
     const ref = await addDoc(collection(db, 'operaciones'), {
       nombre,
-      tipo:              document.getElementById('f-tipo').value,
+      tipo:            document.getElementById('f-tipo').value,
       nivel,
-      loc:               locVal,
-      dir:               document.getElementById('f-dir').value.trim(),
-      org:               document.getElementById('f-org').value.trim(),
-      coords:            pickedCoords || null,
-      creadoPor:         currentUser.uid,
-      creadoPorNombre:   autorNombre,
-      creadoEn:          serverTimestamp(),
-      actualizadoEn:     serverTimestamp()
+      loc:             locVal,
+      dir:             document.getElementById('f-dir').value.trim(),
+      org:             document.getElementById('f-org').value.trim(),
+      coords:          pickedCoords || null,
+      creadoPor:       currentUser.uid,
+      creadoPorNombre: autorNombre,
+      creadoEn:        serverTimestamp(),
+      actualizadoEn:   serverTimestamp()
     });
     if (desc) {
       await addDoc(collection(db, 'operaciones', ref.id, 'acciones'), {
@@ -535,6 +583,70 @@ window.crearOp = async () => {
     window.abrirDetalle(ref.id);
   } catch(e) { alert('Error: '+e.message); }
   btn.disabled = false; btn.textContent = 'Crear operación →';
+};
+
+// ── MODAL EDITAR OPERACIÓN ─────────────────────────────────────────
+window.abrirModalEditOp = () => {
+  if (!selOpId) return;
+  const op = ops[selOpId];
+  if (!op) return;
+
+  // Poblar campos con datos actuales
+  document.getElementById('fe-nombre').value = op.nombre || '';
+  document.getElementById('fe-tipo').value   = op.tipo   || 'inundacion';
+  document.getElementById('fe-dir').value    = op.dir    || '';
+  document.getElementById('fe-org').value    = op.org    || '';
+  document.getElementById('fe-lugar').value  = op.loc    || '';
+
+  // Restaurar coords actuales como punto de partida
+  editPickedCoords  = op.coords || null;
+  editPickedAddress = op.loc    || '';
+  mostrarEditCoordBox();
+
+  document.getElementById('overlay-edit-op').classList.add('open');
+  setTimeout(() => document.getElementById('fe-nombre').focus(), 100);
+};
+
+window.cerrarModalEditOp = () => {
+  document.getElementById('overlay-edit-op').classList.remove('open');
+  editPickedCoords  = null;
+  editPickedAddress = '';
+  if (editTempGmMarker) { editTempGmMarker.setMap(null); editTempGmMarker = null; }
+  document.getElementById('edit-coord-box').classList.remove('show');
+};
+
+window.guardarEditOp = async () => {
+  if (!selOpId) return;
+  const nombre = document.getElementById('fe-nombre').value.trim();
+  if (!nombre) { document.getElementById('fe-nombre').focus(); return; }
+  const btn = document.getElementById('btn-guardar-edit-op');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try {
+    const locVal = document.getElementById('fe-lugar').value.trim();
+    const updates = {
+      nombre,
+      tipo:         document.getElementById('fe-tipo').value,
+      loc:          locVal,
+      dir:          document.getElementById('fe-dir').value.trim(),
+      org:          document.getElementById('fe-org').value.trim(),
+      actualizadoEn: serverTimestamp()
+    };
+    // Solo actualizar coords si el usuario eligió una nueva ubicación
+    if (editPickedCoords) updates.coords = editPickedCoords;
+
+    await updateDoc(doc(db, 'operaciones', selOpId), updates);
+
+    // Actualizar marcador del mapa si cambiaron coordenadas
+    if (editPickedCoords && gmMarkers[selOpId]) {
+      const tipo = TIPOS[updates.tipo] || TIPOS.otro;
+      gmMarkers[selOpId].setPosition(editPickedCoords);
+      gmMarkers[selOpId].setIcon(nivelIcon(ops[selOpId].nivel, tipo.emoji));
+    }
+
+    mostrarToast('Operación actualizada.');
+    cerrarModalEditOp();
+  } catch(e) { alert('Error: '+e.message); }
+  btn.disabled = false; btn.textContent = 'Guardar cambios →';
 };
 
 // ── USUARIOS ───────────────────────────────────────────────────────
@@ -665,9 +777,11 @@ function mostrarLoginErr(msg) {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     window.cerrarModalOp();
+    window.cerrarModalEditOp();
     window.cerrarDetalle();
     window.cerrarModalUsuario();
     if (picking) stopPick();
+    if (editPickMode) stopEditPick();
   }
 });
 document.addEventListener('DOMContentLoaded', () => {
@@ -677,7 +791,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
-<!-- Google Maps + Places (callback inicia el mapa) -->
+<!-- Google Maps + Places -->
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD5lt7WuK1XuTDrFYut30HN1zSpMOpncOY&libraries=places&callback=initGoogleMap&language=es" async defer></script>
 
 <style>
@@ -844,11 +958,14 @@ document.addEventListener('DOMContentLoaded', () => {
   .dp-admin-btns{display:none;gap:6px;padding:8px 16px;border-top:1px solid var(--border);flex-shrink:0;}
   .btn-danger{padding:6px 12px;background:var(--crit-1-bg);border:1px solid var(--crit-1-border);color:var(--crit-1);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:11px;font-weight:600;border-radius:2px;}
   .btn-danger:hover{background:var(--crit-1);color:#fff;}
+  .btn-edit-op{display:none;align-items:center;gap:5px;padding:6px 12px;background:var(--accent-lt);border:1px solid #c0cfe8;color:var(--accent);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:11px;font-weight:600;border-radius:2px;transition:background 0.12s;}
+  .btn-edit-op:hover{background:#d0dcf2;}
 
   /* FORM */
   .f-input{background:var(--bg-1);border:1px solid var(--border-mid);color:var(--text-1);padding:7px 10px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;outline:none;border-radius:2px;transition:border-color 0.12s;width:100%;}
   .f-input:focus{border-color:var(--accent);}
   .f-input::placeholder{color:var(--text-4);}
+  .f-input[readonly]{background:var(--bg-3);color:var(--text-3);cursor:default;border-color:var(--border);}
   .f-select{background:var(--bg-1);border:1px solid var(--border-mid);color:var(--text-2);padding:7px 8px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;outline:none;cursor:pointer;border-radius:2px;flex-shrink:0;}
   .form-row{display:flex;gap:6px;margin-bottom:6px;}
   .btn-reg{width:100%;padding:8px;background:var(--accent);border:none;color:#fff;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;border-radius:2px;transition:background 0.12s;margin-top:4px;}
@@ -859,7 +976,7 @@ document.addEventListener('DOMContentLoaded', () => {
   .btn-mapa{padding:7px 11px;background:var(--accent-lt);border:1px solid #c0cfe8;color:var(--accent);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;border-radius:2px;white-space:nowrap;flex-shrink:0;transition:background 0.12s;}
   .btn-mapa:hover{background:#d0dcf2;}
 
-  /* Places autocomplete dropdown */
+  /* Places autocomplete */
   .pac-container{z-index:2000!important;font-family:'IBM Plex Sans',sans-serif;font-size:13px;border-radius:2px;border:1px solid var(--border-dark);box-shadow:var(--shadow-md);}
   .pac-item{padding:6px 10px;cursor:pointer;}
   .pac-item:hover{background:var(--bg-2);}
@@ -990,6 +1107,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="pick-banner" id="pick-banner">📍 Haz clic en el mapa para fijar la ubicación</div>
       <div id="map"></div>
 
+      <!-- PANEL DETALLE -->
       <div class="detail-panel" id="detail-panel">
         <div class="dp-header">
           <div class="dp-top-row">
@@ -1024,13 +1142,18 @@ document.addEventListener('DOMContentLoaded', () => {
               <option value="Media" selected>🟡 Media</option>
               <option value="Baja">🟢 Baja</option>
             </select>
-            <input class="f-input" id="a-autor" placeholder="Unidad / Cargo" style="flex:1;">
+            <!-- Campo autor: readonly, siempre muestra el usuario conectado -->
+            <input class="f-input" id="a-autor" placeholder="Usuario conectado" style="flex:1;" readonly>
           </div>
           <textarea class="f-input" id="a-texto" placeholder="Describe la novedad, acción o decisión…" style="resize:vertical;min-height:58px;margin-bottom:4px;"></textarea>
           <button class="btn-reg" id="btn-reg-accion" onclick="addAccion()">Registrar novedad</button>
         </div>
-        <div class="dp-admin-btns" id="dp-admin-btns">
-          <button class="btn-danger" onclick="borrarOp()">🗑 Borrar operación</button>
+        <!-- Botones admin -->
+        <div style="padding:8px 16px;border-top:1px solid var(--border);flex-shrink:0;display:flex;gap:6px;align-items:center;">
+          <button id="dp-edit-btn" class="btn-edit-op" onclick="abrirModalEditOp()">✏️ Editar operación</button>
+          <div class="dp-admin-btns" id="dp-admin-btns" style="padding:0;border:none;display:none;">
+            <button class="btn-danger" onclick="borrarOp()">🗑 Borrar</button>
+          </div>
         </div>
       </div>
     </div>
@@ -1117,6 +1240,57 @@ document.addEventListener('DOMContentLoaded', () => {
     <div class="modal-foot">
       <button class="btn-cancel-m" onclick="cerrarModalOp()">Cancelar</button>
       <button class="btn-create-m" id="btn-crear-op" onclick="crearOp()">Crear operación →</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EDITAR OPERACIÓN -->
+<div class="overlay" id="overlay-edit-op">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Editar operación</div>
+      <button class="btn-close-dp" onclick="cerrarModalEditOp()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <div class="field-lbl">Nombre de la operación *</div>
+        <input class="f-input" id="fe-nombre" placeholder="Ej: Inundaciones Cuenca del Ebro">
+      </div>
+      <div class="field">
+        <div class="field-lbl">Tipo de catástrofe</div>
+        <select class="f-input f-select" id="fe-tipo" style="width:100%">
+          <option value="inundacion">🌊 Inundación / DANA</option>
+          <option value="incendio">🔥 Incendio forestal</option>
+          <option value="seismo">🌍 Seísmo / Terremoto</option>
+          <option value="temporal">🌪 Temporal / Viento</option>
+          <option value="accidente">🚛 Accidente grave</option>
+          <option value="quimico">☣️ Incidente químico</option>
+          <option value="sanitaria">🦠 Emergencia sanitaria</option>
+          <option value="otro">📋 Otro</option>
+        </select>
+      </div>
+      <div class="field-row">
+        <div class="field" style="flex:1;">
+          <div class="field-lbl">Director de Operaciones</div>
+          <input class="f-input" id="fe-dir" placeholder="Nombre y cargo">
+        </div>
+        <div class="field" style="flex:1;">
+          <div class="field-lbl">Organismos coordinados</div>
+          <input class="f-input" id="fe-org" placeholder="112, UME, Cruz Roja…">
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-lbl">📍 Ubicación — busca una dirección o haz clic en el mapa</div>
+        <div style="display:flex;gap:6px;">
+          <input class="f-input" id="fe-lugar" placeholder="Escribe una dirección, municipio o lugar…" autocomplete="off">
+          <button class="btn-mapa" onclick="iniciarEditPick()">🗺 En mapa</button>
+        </div>
+        <div class="coord-box" id="edit-coord-box"></div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel-m" onclick="cerrarModalEditOp()">Cancelar</button>
+      <button class="btn-create-m" id="btn-guardar-edit-op" onclick="guardarEditOp()">Guardar cambios →</button>
     </div>
   </div>
 </div>
