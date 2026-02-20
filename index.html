@@ -62,6 +62,9 @@
     let editPickListener = null;
     let editTempGmMarker = null;
     let editPickMode = false;
+    // Edit action state
+    let currentAcciones = {};
+    let editAccionId = null;
 
     // ── TIPO / NIVEL ───────────────────────────────────────────────────
     const TIPOS = {
@@ -430,6 +433,8 @@
       const q = query(collection(db, 'operaciones', opId, 'acciones'), orderBy('timestamp', 'desc'));
       unsubAcciones = onSnapshot(q, snap => {
         const acciones = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        currentAcciones = {};
+        acciones.forEach(a => currentAcciones[a.id] = a);
         renderTimeline(acciones, ops[opId]);
       });
     }
@@ -493,12 +498,20 @@
         const ts = a.timestamp?.toDate
           ? a.timestamp.toDate().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
           : '—';
+
+        const isAdmin = currentRole === 'admin' || currentRole === 'super_admin';
+        const isFinalizada = op?.estado === 'finalizada';
+        const editBtn = (isAdmin && !isFinalizada)
+          ? `<button class="btn-cancel-m" style="padding: 2px 8px; font-size: 11px; margin-left: auto;" onclick="abrirModalEditAccion('${a.id}')">✏️ Editar</button>`
+          : '';
+
         return `<div class="tl-entry">
       <div class="tl-node tl-node-${nivel}">${t.emoji}</div>
       <div class="tl-body">
-        <div class="tl-meta">
+        <div class="tl-meta" style="display:flex; align-items:center;">
           <span class="tl-ts">${ts}</span>
           <span class="tl-prio prio-${a.prioridad}">${a.prioridad}</span>
+          ${editBtn}
         </div>
         <div class="tl-text">${a.texto}</div>
         <div class="tl-author">— ${a.autor || '—'}</div>
@@ -515,6 +528,57 @@
         const t = TIPOS[ops[selOpId].tipo] || TIPOS.otro;
         gmMarkers[selOpId].setIcon(nivelIcon(n, t.emoji));
       }
+    };
+
+    // ── EDITAR ACCIÓN ──────────────────────────────────────────────────
+    window.abrirModalEditAccion = (id) => {
+      if (!selOpId || !currentAcciones[id]) return;
+      editAccionId = id;
+      const accion = currentAcciones[id];
+      document.getElementById('ea-texto').value = accion.texto || '';
+
+      if (accion.timestamp?.toDate) {
+        const d = accion.timestamp.toDate();
+        const yy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mn = String(d.getMinutes()).padStart(2, '0');
+        document.getElementById('ea-fecha').value = `${yy}-${mm}-${dd}T${hh}:${mn}`;
+      } else {
+        document.getElementById('ea-fecha').value = '';
+      }
+
+      document.getElementById('overlay-edit-accion').classList.add('open');
+      setTimeout(() => document.getElementById('ea-texto').focus(), 100);
+    };
+
+    window.cerrarModalEditAccion = () => {
+      document.getElementById('overlay-edit-accion').classList.remove('open');
+      editAccionId = null;
+    };
+
+    window.guardarEditAccion = async () => {
+      if (!selOpId || !editAccionId) return;
+
+      const btn = document.getElementById('btn-guardar-edit-accion');
+      btn.disabled = true; btn.textContent = 'Guardando…';
+
+      try {
+        const texto = document.getElementById('ea-texto').value.trim();
+        const valFecha = document.getElementById('ea-fecha').value;
+        const ts = valFecha ? new Date(valFecha) : new Date();
+
+        await updateDoc(doc(db, 'operaciones', selOpId, 'acciones', editAccionId), {
+          texto,
+          timestamp: ts
+        });
+
+        cerrarModalEditAccion();
+      } catch (e) {
+        alert('Error: ' + e.message);
+      }
+      btn.disabled = false; btn.textContent = 'Guardar novedad →';
     };
 
     // ── AÑADIR ACCIÓN ──────────────────────────────────────────────────
@@ -2867,6 +2931,31 @@ ${dataContext}
       <div class="modal-foot">
         <button class="btn-cancel-m" onclick="cerrarModalEditOp()">Cancelar</button>
         <button class="btn-create-m" id="btn-guardar-edit-op" onclick="guardarEditOp()">Guardar cambios →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL EDITAR ACCIÓN -->
+  <div class="overlay" id="overlay-edit-accion">
+    <div class="modal" style="width:480px;max-width:90vw;">
+      <div class="modal-head">
+        <div class="modal-title">Editar Novedad</div>
+        <button class="btn-close-dp" onclick="cerrarModalEditAccion()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <div class="field-lbl">Fecha y Hora</div>
+          <input type="datetime-local" class="f-input" id="ea-fecha">
+        </div>
+        <div class="field">
+          <div class="field-lbl">Texto de la novedad</div>
+          <textarea class="f-input" id="ea-texto" style="resize:vertical;min-height:80px;"></textarea>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel-m" onclick="cerrarModalEditAccion()">Cancelar</button>
+        <button class="btn-create-m" id="btn-guardar-edit-accion" onclick="guardarEditAccion()">Guardar novedad
+          →</button>
       </div>
     </div>
   </div>
