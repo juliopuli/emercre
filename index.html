@@ -6,32 +6,28 @@
 <title>SIGECA — Sistema de Gestión de Catástrofes</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,700;9..144,900&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
 <!-- Firebase SDK -->
 <script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { initializeApp }           from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
-  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import {
-  getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
-  onSnapshot, query, orderBy, serverTimestamp, getDoc, getDocs
-} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+                                   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
+         onSnapshot, query, orderBy, serverTimestamp, getDoc, getDocs }
+                                   from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
-// ── CONFIG ─────────────────────────────────────────────────────────
+// ── FIREBASE CONFIG ────────────────────────────────────────────────
 const firebaseConfig = {
-  apiKey: "AIzaSyAHtrxaBazArqa8znWsUIVYxTsS7zoOOmc",
-  authDomain: "emercre.firebaseapp.com",
-  projectId: "emercre",
-  storageBucket: "emercre.firebasestorage.app",
+  apiKey:            "AIzaSyAHtrxaBazArqa8znWsUIVYxTsS7zoOOmc",
+  authDomain:        "emercre.firebaseapp.com",
+  projectId:         "emercre",
+  storageBucket:     "emercre.firebasestorage.app",
   messagingSenderId: "277256770434",
-  appId: "1:277256770434:web:225aa9c7ff6b862d72b59b"
+  appId:             "1:277256770434:web:225aa9c7ff6b862d72b59b"
 };
-
-const app  = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db   = getFirestore(app);
+const fbApp = initializeApp(firebaseConfig);
+const auth  = getAuth(fbApp);
+const db    = getFirestore(fbApp);
 
 // ── ESTADO GLOBAL ──────────────────────────────────────────────────
 let currentUser    = null;
@@ -40,26 +36,81 @@ let currentUserDoc = null;
 let selOpId        = null;
 let filtro         = 'all';
 let picking        = false;
-let coords         = null;
-let map, markerLayer;
+let pickedCoords   = null;
+let pickedAddress  = '';
+let gmap           = null;
+let gmMarkers      = {};   // opId → google.maps.Marker
+let autocomplete   = null;
+let pickListener   = null;
+let tempGmMarker   = null;
 let unsubOps       = null;
 let unsubAcciones  = null;
-let ops            = {};   // { id: opData }
+let ops            = {};
 let editingUserId  = null;
 
 // ── TIPO / NIVEL ───────────────────────────────────────────────────
 const TIPOS = {
-  inundacion: { label:'Inundación',        emoji:'🌊', color:'#2980b9' },
-  incendio:   { label:'Incendio forestal', emoji:'🔥', color:'#c0392b' },
-  seismo:     { label:'Seísmo',            emoji:'🌍', color:'#8e44ad' },
-  temporal:   { label:'Temporal',          emoji:'🌪', color:'#16a085' },
-  accidente:  { label:'Accidente',         emoji:'🚛', color:'#d35400' },
-  quimico:    { label:'Inc. Químico',      emoji:'☣️', color:'#c0392b' },
-  sanitaria:  { label:'Emerg. Sanitaria',  emoji:'🦠', color:'#e74c3c' },
-  otro:       { label:'Otro',              emoji:'📋', color:'#7f8c8d' }
+  inundacion: { label:'Inundación',         emoji:'🌊', color:'#2980b9' },
+  incendio:   { label:'Incendio forestal',  emoji:'🔥', color:'#c0392b' },
+  seismo:     { label:'Seísmo',             emoji:'🌍', color:'#8e44ad' },
+  temporal:   { label:'Temporal',           emoji:'🌪', color:'#16a085' },
+  accidente:  { label:'Accidente',          emoji:'🚛', color:'#d35400' },
+  quimico:    { label:'Inc. Químico',       emoji:'☣️', color:'#c0392b' },
+  sanitaria:  { label:'Emerg. Sanitaria',   emoji:'🦠', color:'#e74c3c' },
+  otro:       { label:'Otro',               emoji:'📋', color:'#7f8c8d' }
 };
 const NIVEL_LABELS = { 1:'Emergencia Mayor', 2:'Emergencia', 3:'Alerta', 4:'Seguimiento' };
+const NIVEL_COLORS = { 1:'#c0392b', 2:'#d35400', 3:'#c08c00', 4:'#1a7a4a' };
 const ROL_LABELS   = { super_admin:'Super Admin', admin:'Administrador', usuario:'Usuario' };
+
+// ── GOOGLE MAPS INIT (llamado por callback de script) ──────────────
+window.initGoogleMap = function() {
+  gmap = new google.maps.Map(document.getElementById('map'), {
+    center:    { lat: 40.4, lng: -3.7 },
+    zoom:      6,
+    mapTypeId: 'roadmap',
+    mapTypeControl: true,
+    mapTypeControlOptions: {
+      style:    google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
+      position: google.maps.ControlPosition.TOP_RIGHT,
+      mapTypeIds: ['roadmap','satellite','hybrid','terrain']
+    },
+    streetViewControl:  false,
+    fullscreenControl:  false,
+    zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM }
+  });
+
+  // Inicializar Places Autocomplete en el campo del modal
+  const input = document.getElementById('f-lugar');
+  autocomplete = new google.maps.places.Autocomplete(input, {
+    fields: ['geometry','formatted_address','name'],
+    componentRestrictions: { country: 'es' }
+  });
+  autocomplete.addListener('place_changed', () => {
+    const place = autocomplete.getPlace();
+    if (!place.geometry) return;
+    pickedCoords  = {
+      lat: place.geometry.location.lat(),
+      lng: place.geometry.location.lng()
+    };
+    pickedAddress = place.formatted_address || place.name || '';
+    mostrarCoordBox();
+    // centrar mapa
+    gmap.panTo(place.geometry.location);
+    gmap.setZoom(15);
+    // marcador temporal
+    if (tempGmMarker) tempGmMarker.setMap(null);
+    tempGmMarker = new google.maps.Marker({
+      position: place.geometry.location,
+      map: gmap,
+      animation: google.maps.Animation.DROP,
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor:'#1a3a6e', fillOpacity:1, strokeColor:'#fff', strokeWeight:2 }
+    });
+  });
+
+  // Si ya había ops cargadas, pintarlas
+  if (Object.keys(ops).length) renderMapa();
+};
 
 // ── AUTH STATE ─────────────────────────────────────────────────────
 onAuthStateChanged(auth, async user => {
@@ -67,7 +118,7 @@ onAuthStateChanged(auth, async user => {
     const snap = await getDoc(doc(db, 'users', user.uid));
     if (!snap.exists() || snap.data().activo === false) {
       await signOut(auth);
-      mostrarError('login', 'Usuario no autorizado o desactivado.');
+      mostrarLoginErr('Usuario no autorizado o desactivado.');
       return;
     }
     currentUser    = user;
@@ -76,62 +127,37 @@ onAuthStateChanged(auth, async user => {
     mostrarApp();
     initApp();
   } else {
-    currentUser = null;
-    currentRole = null;
+    currentUser = null; currentRole = null;
     mostrarLogin();
     detenerListeners();
   }
 });
 
-// ── LOGIN ──────────────────────────────────────────────────────────
+// ── LOGIN / LOGOUT ─────────────────────────────────────────────────
 window.doLogin = async () => {
   const email = document.getElementById('l-email').value.trim();
   const pass  = document.getElementById('l-pass').value;
   if (!email || !pass) return;
-  document.getElementById('btn-login').disabled = true;
-  document.getElementById('btn-login').textContent = 'Accediendo…';
+  const btn = document.getElementById('btn-login');
+  btn.disabled = true; btn.textContent = 'Accediendo…';
   try {
     await signInWithEmailAndPassword(auth, email, pass);
   } catch(e) {
-    mostrarError('login', 'Email o contraseña incorrectos.');
-    document.getElementById('btn-login').disabled = false;
-    document.getElementById('btn-login').textContent = 'Acceder';
+    mostrarLoginErr('Email o contraseña incorrectos.');
+    btn.disabled = false; btn.textContent = 'Acceder';
   }
 };
-
-window.doLogout = async () => {
-  await signOut(auth);
-};
+window.doLogout = () => signOut(auth);
 
 // ── INIT APP ───────────────────────────────────────────────────────
 function initApp() {
-  // nombre usuario en header
-  document.getElementById('hdr-user').textContent =
-    `${currentUserDoc.nombre || currentUser.email}`;
-  document.getElementById('hdr-role').textContent = ROL_LABELS[currentRole] || currentRole;
-
-  // mostrar/ocultar controles según rol
-  applyRoleUI();
-
-  // init mapa si no existe
-  if (!map) initMap();
-  else { map.invalidateSize(); renderMapa(); }
-
-  // suscribir operaciones en tiempo real
+  document.getElementById('hdr-user').textContent  = currentUserDoc.nombre || currentUser.email;
+  document.getElementById('hdr-role').textContent  = ROL_LABELS[currentRole] || currentRole;
+  const isAdmin = currentRole === 'admin' || currentRole === 'super_admin';
+  document.getElementById('btn-nueva-op').style.display  = isAdmin ? 'flex' : 'none';
+  document.getElementById('nav-usuarios').style.display  = currentRole === 'super_admin' ? 'flex' : 'none';
   suscribirOps();
-
-  // nav por defecto
   showSection('operaciones');
-}
-
-function applyRoleUI() {
-  const isSA    = currentRole === 'super_admin';
-  const isAdmin = currentRole === 'admin' || isSA;
-
-  // Menú usuarios solo super_admin
-  document.getElementById('nav-usuarios').style.display = isSA ? 'flex' : 'none';
-  // Botón nueva operación
-  document.getElementById('btn-nueva-op').style.display = isAdmin ? 'flex' : 'none';
 }
 
 function detenerListeners() {
@@ -140,17 +166,14 @@ function detenerListeners() {
   ops = {};
 }
 
-// ── SUSCRIPCIÓN OPERACIONES TIEMPO REAL ───────────────────────────
+// ── SUSCRIPCIÓN OPERACIONES ────────────────────────────────────────
 function suscribirOps() {
   if (unsubOps) unsubOps();
   const q = query(collection(db, 'operaciones'), orderBy('creadoEn', 'desc'));
   unsubOps = onSnapshot(q, snap => {
-    snap.docChanges().forEach(change => {
-      if (change.type === 'removed') {
-        delete ops[change.doc.id];
-      } else {
-        ops[change.doc.id] = { id: change.doc.id, ...change.doc.data() };
-      }
+    snap.docChanges().forEach(ch => {
+      if (ch.type === 'removed') delete ops[ch.doc.id];
+      else ops[ch.doc.id] = { id: ch.doc.id, ...ch.doc.data() };
     });
     renderSidebar();
     renderMapa();
@@ -160,42 +183,115 @@ function suscribirOps() {
 }
 
 // ── MAPA ───────────────────────────────────────────────────────────
-function initMap() {
-  map = L.map('map', { zoomControl: false }).setView([40.4, -3.7], 6);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap', maxZoom: 19
-  }).addTo(map);
-  L.control.zoom({ position: 'bottomright' }).addTo(map);
-  markerLayer = L.layerGroup().addTo(map);
-
-  map.on('click', e => {
-    if (!picking) return;
-    coords = { lat: parseFloat(e.latlng.lat.toFixed(6)), lng: parseFloat(e.latlng.lng.toFixed(6)) };
-    document.getElementById('coord-box').textContent = `📍 ${coords.lat}, ${coords.lng}`;
-    document.getElementById('coord-box').classList.add('show');
-    stopPick();
-    abrirModalOp();
-  });
+function nivelIcon(nivel, emoji) {
+  const color = NIVEL_COLORS[nivel] || '#888';
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="48" viewBox="0 0 40 48">
+      <path d="M20 0C9 0 0 9 0 20c0 15 20 28 20 28S40 35 40 20C40 9 31 0 20 0z"
+            fill="${color}" stroke="white" stroke-width="2"/>
+      <text x="20" y="26" text-anchor="middle" font-size="16">${emoji}</text>
+    </svg>`;
+  return {
+    url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+    scaledSize: new google.maps.Size(40, 48),
+    anchor:     new google.maps.Point(20, 48)
+  };
 }
 
 function renderMapa() {
-  if (!markerLayer) return;
-  markerLayer.clearLayers();
+  if (!gmap) return;
+
+  // Borrar marcadores que ya no existen
+  Object.keys(gmMarkers).forEach(id => {
+    if (!ops[id]) { gmMarkers[id].setMap(null); delete gmMarkers[id]; }
+  });
+
   Object.values(ops).forEach(op => {
     if (!op.coords) return;
     const t    = TIPOS[op.tipo] || TIPOS.otro;
-    const icon = L.divIcon({
-      html: `<div class="cmark"><div class="cmark-body cmark-n${op.nivel}"><span>${t.emoji}</span></div></div>`,
-      className: '', iconSize: [34,40], iconAnchor: [17,40], popupAnchor: [0,-42]
-    });
-    const m = L.marker([op.coords.lat, op.coords.lng], { icon }).addTo(markerLayer);
-    m.bindPopup(`<div class="pop-inner">
-      <div class="pop-name">${op.nombre}</div>
-      <div class="pop-meta">${t.emoji} ${t.label} · ${op.loc||''}</div>
-      <div style="margin-bottom:10px"><span class="nivel-pill pill-${op.nivel}">N${op.nivel} ${NIVEL_LABELS[op.nivel]}</span></div>
-      <button class="pop-btn" onclick="abrirDetalle('${op.id}');map && map.closePopup && map.closePopup()">Ver operación →</button>
-    </div>`, { maxWidth: 260 });
+    const pos  = { lat: op.coords.lat, lng: op.coords.lng };
+    const icon = nivelIcon(op.nivel, t.emoji);
+
+    if (gmMarkers[op.id]) {
+      gmMarkers[op.id].setPosition(pos);
+      gmMarkers[op.id].setIcon(icon);
+    } else {
+      const marker = new google.maps.Marker({
+        position:  pos,
+        map:       gmap,
+        icon,
+        title:     op.nombre,
+        animation: google.maps.Animation.DROP
+      });
+      const iw = new google.maps.InfoWindow({ maxWidth: 260 });
+      marker.addListener('click', () => {
+        iw.setContent(`
+          <div style="font-family:'IBM Plex Sans',sans-serif;padding:4px 2px;min-width:200px;">
+            <div style="font-family:'Fraunces',serif;font-size:15px;font-weight:700;margin-bottom:4px;">${op.nombre}</div>
+            <div style="font-size:11px;color:#888;margin-bottom:2px;">${t.emoji} ${t.label} · ${op.loc||''}</div>
+            <div style="margin-bottom:10px;">
+              <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:2px;
+                background:${NIVEL_COLORS[op.nivel]}20;color:${NIVEL_COLORS[op.nivel]};
+                border:1px solid ${NIVEL_COLORS[op.nivel]}50;">
+                N${op.nivel} ${NIVEL_LABELS[op.nivel]}
+              </span>
+            </div>
+            <button onclick="window.abrirDetalle('${op.id}')"
+              style="width:100%;padding:8px;background:#1a3a6e;border:none;color:#fff;
+                     cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:12px;
+                     font-weight:600;border-radius:2px;">
+              Ver operación →
+            </button>
+          </div>`);
+        iw.open(gmap, marker);
+      });
+      gmMarkers[op.id] = marker;
+    }
   });
+}
+
+// ── PICK LOCATION EN MAPA ──────────────────────────────────────────
+window.iniciarPick = () => {
+  picking = true;
+  document.getElementById('overlay-op').classList.remove('open');
+  document.getElementById('pick-banner').classList.add('on');
+  gmap.getDiv().style.cursor = 'crosshair';
+  pickListener = gmap.addListener('click', e => {
+    pickedCoords = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+    // Reverse geocode
+    const gc = new google.maps.Geocoder();
+    gc.geocode({ location: e.latLng }, (results, status) => {
+      if (status === 'OK' && results[0]) {
+        pickedAddress = results[0].formatted_address;
+        document.getElementById('f-lugar').value = pickedAddress;
+      }
+      mostrarCoordBox();
+      stopPick();
+      window.abrirModalOp();
+    });
+    if (tempGmMarker) tempGmMarker.setMap(null);
+    tempGmMarker = new google.maps.Marker({
+      position:  e.latLng,
+      map:       gmap,
+      animation: google.maps.Animation.DROP,
+      icon: { path: google.maps.SymbolPath.CIRCLE, scale:8, fillColor:'#1a3a6e', fillOpacity:1, strokeColor:'#fff', strokeWeight:2 }
+    });
+  });
+};
+
+function stopPick() {
+  picking = false;
+  if (pickListener) { google.maps.event.removeListener(pickListener); pickListener = null; }
+  document.getElementById('pick-banner').classList.remove('on');
+  gmap.getDiv().style.cursor = '';
+}
+
+function mostrarCoordBox() {
+  const box = document.getElementById('coord-box');
+  box.textContent = pickedCoords
+    ? `📍 ${pickedCoords.lat.toFixed(5)}, ${pickedCoords.lng.toFixed(5)}`
+    : '';
+  box.classList.toggle('show', !!pickedCoords);
 }
 
 // ── CONTADORES ─────────────────────────────────────────────────────
@@ -206,7 +302,7 @@ function actualizarContadores() {
   });
 }
 
-// ── RENDER SIDEBAR ─────────────────────────────────────────────────
+// ── SIDEBAR ────────────────────────────────────────────────────────
 function renderSidebar() {
   const list  = document.getElementById('ops-list');
   const empty = document.getElementById('empty-msg');
@@ -236,12 +332,11 @@ function renderSidebar() {
         <span class="card-loc">📍 ${op.loc||'Sin ubicación'}</span>
         <span class="nivel-pill pill-${op.nivel}">N${op.nivel} ${NIVEL_LABELS[op.nivel]}</span>
       </div>`;
-    card.addEventListener('click', () => abrirDetalle(op.id));
+    card.addEventListener('click', () => window.abrirDetalle(op.id));
     list.appendChild(card);
   });
 }
 
-// ── FILTRO ─────────────────────────────────────────────────────────
 window.setFiltro = (f, btn) => {
   filtro = f;
   document.querySelectorAll('.ftab').forEach(b => b.classList.remove('on','on-n1','on-n2','on-n3','on-n4'));
@@ -257,8 +352,10 @@ window.abrirDetalle = (id) => {
   document.getElementById('detail-panel').classList.add('open');
   renderDetalle(op);
   renderSidebar();
-  if (op.coords) map.flyTo([op.coords.lat, op.coords.lng], 13, { duration: 1 });
-  // suscribir acciones
+  if (op.coords && gmap) {
+    gmap.panTo({ lat: op.coords.lat, lng: op.coords.lng });
+    gmap.setZoom(13);
+  }
   suscribirAcciones(id);
 };
 
@@ -279,13 +376,13 @@ function suscribirAcciones(opId) {
 }
 
 function renderDetalle(op) {
-  const t          = TIPOS[op.tipo] || TIPOS.otro;
-  const isAdmin    = currentRole === 'admin' || currentRole === 'super_admin';
-  const isSA       = currentRole === 'super_admin';
+  const t       = TIPOS[op.tipo] || TIPOS.otro;
+  const isAdmin = currentRole === 'admin' || currentRole === 'super_admin';
+  const isSA    = currentRole === 'super_admin';
 
   document.getElementById('dp-id').textContent   = op.id.substring(0,8).toUpperCase();
   document.getElementById('dp-name').textContent = op.nombre;
-  document.getElementById('dp-loc').innerHTML    = op.loc ? `📍 ${op.loc}` : '';
+  document.getElementById('dp-loc').innerHTML    = op.loc ? `📍 ${op.loc}` : (op.coords ? `📍 ${op.coords.lat.toFixed(4)}, ${op.coords.lng.toFixed(4)}` : '');
   document.getElementById('dp-type-tag').innerHTML =
     `<span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${t.label}</span>`;
 
@@ -294,28 +391,34 @@ function renderDetalle(op) {
     b.disabled = !isAdmin;
   });
 
-  // info
-  const ir = document.getElementById('dp-info-row');
+  // Info row — incluye creado por
+  const ir  = document.getElementById('dp-info-row');
+  const ts  = op.creadoEn?.toDate
+    ? op.creadoEn.toDate().toLocaleString('es-ES',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})
+    : '—';
   ir.innerHTML = '';
-  if (op.dir) { ir.innerHTML += `<div class="dp-info-item"><strong>${op.dir}</strong>Director Operaciones</div>`; }
-  if (op.org) { ir.innerHTML += `<div class="dp-info-item"><strong>${op.org}</strong>Organismos</div>`; }
-  const ts = op.creadoEn?.toDate ? op.creadoEn.toDate().toLocaleString('es-ES',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
-  ir.innerHTML += `<div class="dp-info-item"><strong>${ts}</strong>Inicio</div>`;
+  if (op.dir)            ir.innerHTML += `<div class="dp-info-item"><strong>${op.dir}</strong>Director Operaciones</div>`;
+  if (op.org)            ir.innerHTML += `<div class="dp-info-item"><strong>${op.org}</strong>Organismos</div>`;
+  if (op.creadoPorNombre)ir.innerHTML += `<div class="dp-info-item"><strong>${op.creadoPorNombre}</strong>Creado por</div>`;
+                         ir.innerHTML += `<div class="dp-info-item"><strong>${ts}</strong>Inicio</div>`;
 
-  // botones admin
   document.getElementById('dp-admin-btns').style.display = isSA ? 'flex' : 'none';
+  // Prerellenar autor en el campo de novedad con el usuario actual
+  document.getElementById('a-autor').value = currentUserDoc.nombre || currentUser.email;
 }
 
 function renderTimeline(acciones, op) {
-  const tl = document.getElementById('dp-timeline');
-  const t  = op ? (TIPOS[op.tipo] || TIPOS.otro) : TIPOS.otro;
+  const tl    = document.getElementById('dp-timeline');
+  const t     = op ? (TIPOS[op.tipo] || TIPOS.otro) : TIPOS.otro;
   const nivel = op ? op.nivel : 1;
   if (!acciones.length) {
     tl.innerHTML = '<div class="tl-empty">// Sin novedades registradas //</div>';
     return;
   }
   tl.innerHTML = acciones.map(a => {
-    const ts = a.timestamp?.toDate ? a.timestamp.toDate().toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : a.ts || '—';
+    const ts = a.timestamp?.toDate
+      ? a.timestamp.toDate().toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
+      : '—';
     return `<div class="tl-entry">
       <div class="tl-node tl-node-${nivel}">${t.emoji}</div>
       <div class="tl-body">
@@ -324,16 +427,22 @@ function renderTimeline(acciones, op) {
           <span class="tl-prio prio-${a.prioridad}">${a.prioridad}</span>
         </div>
         <div class="tl-text">${a.texto}</div>
-        ${a.autor ? `<div class="tl-author">— ${a.autor}</div>` : ''}
+        <div class="tl-author">— ${a.autor || '—'}</div>
       </div>
     </div>`;
   }).join('');
 }
 
 // ── CAMBIAR NIVEL ──────────────────────────────────────────────────
-window.cambiarNivel = async (n) => {
+window.cambiarNivel = async n => {
   if (!selOpId) return;
-  await updateDoc(doc(db, 'operaciones', selOpId), { nivel: n, actualizadoEn: serverTimestamp() });
+  await updateDoc(doc(db, 'operaciones', selOpId), {
+    nivel: n, actualizadoEn: serverTimestamp()
+  });
+  if (gmMarkers[selOpId] && ops[selOpId]) {
+    const t = TIPOS[ops[selOpId].tipo] || TIPOS.otro;
+    gmMarkers[selOpId].setIcon(nivelIcon(n, t.emoji));
+  }
 };
 
 // ── AÑADIR ACCIÓN ──────────────────────────────────────────────────
@@ -344,23 +453,25 @@ window.addAccion = async () => {
   const btn = document.getElementById('btn-reg-accion');
   btn.disabled = true;
   try {
+    const autorNombre = currentUserDoc.nombre || currentUser.email;
     await addDoc(collection(db, 'operaciones', selOpId, 'acciones'), {
       texto,
-      prioridad: document.getElementById('a-prio').value,
-      autor:     document.getElementById('a-autor').value.trim() || currentUserDoc.nombre,
-      uid:       currentUser.uid,
-      timestamp: serverTimestamp()
+      prioridad:  document.getElementById('a-prio').value,
+      autor:      autorNombre,
+      uid:        currentUser.uid,
+      timestamp:  serverTimestamp()
     });
     await updateDoc(doc(db, 'operaciones', selOpId), { actualizadoEn: serverTimestamp() });
     document.getElementById('a-texto').value = '';
-  } catch(e) { alert('Error al registrar: '+e.message); }
+  } catch(e) { alert('Error: '+e.message); }
   btn.disabled = false;
 };
 
-// ── BORRAR OPERACIÓN (super_admin) ─────────────────────────────────
+// ── BORRAR OPERACIÓN ───────────────────────────────────────────────
 window.borrarOp = async () => {
   if (!selOpId) return;
-  if (!confirm('¿Borrar esta operación? Esta acción no se puede deshacer.')) return;
+  if (!confirm('¿Borrar esta operación? No se puede deshacer.')) return;
+  if (gmMarkers[selOpId]) { gmMarkers[selOpId].setMap(null); delete gmMarkers[selOpId]; }
   await deleteDoc(doc(db, 'operaciones', selOpId));
   cerrarDetalle();
 };
@@ -368,33 +479,23 @@ window.borrarOp = async () => {
 // ── MODAL NUEVA OPERACIÓN ──────────────────────────────────────────
 window.abrirModalOp = () => {
   document.getElementById('overlay-op').classList.add('open');
-  document.getElementById('f-nombre').focus();
-  if (coords) {
-    document.getElementById('coord-box').textContent = `📍 ${coords.lat}, ${coords.lng}`;
-    document.getElementById('coord-box').classList.add('show');
-  }
-};
-window.cerrarModalOp = () => {
-  document.getElementById('overlay-op').classList.remove('open');
-  coords = null;
-  document.getElementById('coord-box').classList.remove('show');
-  ['f-nombre','f-desc','f-loc','f-dir','f-org'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('f-tipo').value = 'inundacion';
-  document.getElementById('f-nivel').value = '3';
+  setTimeout(() => document.getElementById('f-nombre').focus(), 100);
+  mostrarCoordBox();
 };
 
-window.iniciarPick = () => {
-  picking = true;
+window.cerrarModalOp = () => {
   document.getElementById('overlay-op').classList.remove('open');
-  document.getElementById('pick-banner').classList.add('on');
-  map.getContainer().style.cursor = 'crosshair';
-  showSection('operaciones');
+  pickedCoords  = null;
+  pickedAddress = '';
+  if (tempGmMarker) { tempGmMarker.setMap(null); tempGmMarker = null; }
+  ['f-nombre','f-desc','f-loc','f-dir','f-org','f-lugar'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('f-tipo').value  = 'inundacion';
+  document.getElementById('f-nivel').value = '3';
+  document.getElementById('coord-box').classList.remove('show');
 };
-function stopPick() {
-  picking = false;
-  document.getElementById('pick-banner').classList.remove('on');
-  map.getContainer().style.cursor = '';
-}
 
 window.crearOp = async () => {
   const nombre = document.getElementById('f-nombre').value.trim();
@@ -402,42 +503,47 @@ window.crearOp = async () => {
   const btn = document.getElementById('btn-crear-op');
   btn.disabled = true; btn.textContent = 'Creando…';
   try {
-    const nivel = parseInt(document.getElementById('f-nivel').value);
-    const desc  = document.getElementById('f-desc').value.trim();
-    const ref   = await addDoc(collection(db, 'operaciones'), {
+    const nivel  = parseInt(document.getElementById('f-nivel').value);
+    const desc   = document.getElementById('f-desc').value.trim();
+    const locVal = document.getElementById('f-lugar').value.trim() ||
+                   document.getElementById('f-loc').value.trim();
+    const autorNombre = currentUserDoc.nombre || currentUser.email;
+
+    const ref = await addDoc(collection(db, 'operaciones'), {
       nombre,
-      tipo:         document.getElementById('f-tipo').value,
+      tipo:              document.getElementById('f-tipo').value,
       nivel,
-      loc:          document.getElementById('f-loc').value.trim(),
-      dir:          document.getElementById('f-dir').value.trim(),
-      org:          document.getElementById('f-org').value.trim(),
-      coords:       coords || null,
-      creadoPor:    currentUser.uid,
-      creadoEn:     serverTimestamp(),
-      actualizadoEn:serverTimestamp()
+      loc:               locVal,
+      dir:               document.getElementById('f-dir').value.trim(),
+      org:               document.getElementById('f-org').value.trim(),
+      coords:            pickedCoords || null,
+      creadoPor:         currentUser.uid,
+      creadoPorNombre:   autorNombre,
+      creadoEn:          serverTimestamp(),
+      actualizadoEn:     serverTimestamp()
     });
     if (desc) {
       await addDoc(collection(db, 'operaciones', ref.id, 'acciones'), {
         texto:     desc,
         prioridad: nivel <= 2 ? 'Crítica' : nivel === 3 ? 'Alta' : 'Media',
-        autor:     currentUserDoc.nombre || currentUser.email,
+        autor:     autorNombre,
         uid:       currentUser.uid,
         timestamp: serverTimestamp()
       });
     }
     cerrarModalOp();
-    abrirDetalle(ref.id);
+    window.abrirDetalle(ref.id);
   } catch(e) { alert('Error: '+e.message); }
   btn.disabled = false; btn.textContent = 'Crear operación →';
 };
 
-// ── GESTIÓN DE USUARIOS (super_admin) ─────────────────────────────
-window.showSection = (sec) => {
+// ── USUARIOS ───────────────────────────────────────────────────────
+window.showSection = sec => {
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
   document.getElementById('section-operaciones').style.display = sec === 'operaciones' ? 'flex' : 'none';
   document.getElementById('section-usuarios').style.display    = sec === 'usuarios'    ? 'flex' : 'none';
   if (sec === 'usuarios') cargarUsuarios();
-  if (sec === 'operaciones' && map) setTimeout(() => map.invalidateSize(), 100);
+  if (sec === 'operaciones' && gmap) setTimeout(() => google.maps.event.trigger(gmap,'resize'), 100);
 };
 
 async function cargarUsuarios() {
@@ -445,16 +551,18 @@ async function cargarUsuarios() {
   const tbody = document.getElementById('users-tbody');
   tbody.innerHTML = '';
   snap.forEach(d => {
-    const u   = d.data();
-    const tr  = document.createElement('tr');
+    const u  = d.data();
+    const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${u.nombre||'—'}</td>
-      <td>${u.email}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${u.email}</td>
       <td><span class="rol-badge rol-${u.role}">${ROL_LABELS[u.role]||u.role}</span></td>
       <td><span class="activo-badge ${u.activo!==false?'activo':'inactivo'}">${u.activo!==false?'Activo':'Inactivo'}</span></td>
       <td>
         <button class="tbl-btn" onclick="editarUsuario('${d.id}')">Editar</button>
-        ${d.id !== currentUser.uid ? `<button class="tbl-btn danger" onclick="borrarUsuario('${d.id}')">Borrar</button>` : '<span style="font-size:11px;color:var(--text-4)">(tú)</span>'}
+        ${d.id !== currentUser.uid
+          ? `<button class="tbl-btn danger" onclick="borrarUsuario('${d.id}')">Desactivar</button>`
+          : '<span style="font-size:11px;color:var(--text-4)">(tú)</span>'}
       </td>`;
     tbody.appendChild(tr);
   });
@@ -464,14 +572,14 @@ window.abrirModalUsuario = () => {
   editingUserId = null;
   document.getElementById('modal-user-title').textContent = 'Nuevo usuario';
   ['u-nombre','u-email','u-pass'].forEach(id => document.getElementById(id).value = '');
-  document.getElementById('u-role').value  = 'usuario';
+  document.getElementById('u-role').value   = 'usuario';
   document.getElementById('u-activo').value = 'true';
   document.getElementById('u-pass-row').style.display = 'flex';
   document.getElementById('overlay-user').classList.add('open');
   document.getElementById('u-nombre').focus();
 };
 
-window.editarUsuario = async (uid) => {
+window.editarUsuario = async uid => {
   const snap = await getDoc(doc(db, 'users', uid));
   if (!snap.exists()) return;
   const u = snap.data();
@@ -481,7 +589,7 @@ window.editarUsuario = async (uid) => {
   document.getElementById('u-email').value   = u.email  || '';
   document.getElementById('u-role').value    = u.role   || 'usuario';
   document.getElementById('u-activo').value  = u.activo === false ? 'false' : 'true';
-  document.getElementById('u-pass-row').style.display = 'none'; // no cambiar pass aquí
+  document.getElementById('u-pass-row').style.display = 'none';
   document.getElementById('overlay-user').classList.add('open');
 };
 
@@ -496,18 +604,15 @@ window.guardarUsuario = async () => {
   const pass   = document.getElementById('u-pass').value;
   const role   = document.getElementById('u-role').value;
   const activo = document.getElementById('u-activo').value === 'true';
-
   if (!nombre || !email) { alert('Nombre y email son obligatorios.'); return; }
   const btn = document.getElementById('btn-guardar-user');
   btn.disabled = true; btn.textContent = 'Guardando…';
-
   try {
     if (editingUserId) {
-      // Solo actualiza datos en Firestore (no cambia contraseña aquí — requeriría Admin SDK)
       await updateDoc(doc(db, 'users', editingUserId), { nombre, role, activo });
-      mostrarToast('Usuario actualizado correctamente.');
+      mostrarToast('Usuario actualizado.');
     } else {
-      // Crear usuario nuevo via Auth REST API
+      if (!pass || pass.length < 6) { alert('La contraseña debe tener al menos 6 caracteres.'); btn.disabled=false; btn.textContent='Guardar'; return; }
       const res = await fetch(
         `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=AIzaSyAHtrxaBazArqa8znWsUIVYxTsS7zoOOmc`,
         { method:'POST', headers:{'Content-Type':'application/json'},
@@ -517,10 +622,10 @@ window.guardarUsuario = async () => {
       if (data.error) throw new Error(data.error.message);
       await setDoc(doc(db, 'users', data.localId), {
         nombre, email, role, activo,
-        creadoPor:  currentUser.uid,
-        creadoEn:   serverTimestamp()
+        creadoPor: currentUser.uid,
+        creadoEn:  serverTimestamp()
       });
-      mostrarToast('Usuario creado correctamente.');
+      mostrarToast('Usuario creado.');
     }
     cerrarModalUsuario();
     cargarUsuarios();
@@ -528,9 +633,8 @@ window.guardarUsuario = async () => {
   btn.disabled = false; btn.textContent = 'Guardar';
 };
 
-window.borrarUsuario = async (uid) => {
-  if (!confirm('¿Eliminar este usuario de Firestore? No podrá acceder.')) return;
-  // Desactivar en lugar de borrar Auth (requiere Admin SDK para borrar Auth)
+window.borrarUsuario = async uid => {
+  if (!confirm('¿Desactivar este usuario?')) return;
   await updateDoc(doc(db, 'users', uid), { activo: false });
   mostrarToast('Usuario desactivado.');
   cargarUsuarios();
@@ -544,7 +648,6 @@ function mostrarToast(msg) {
   setTimeout(() => t.classList.remove('show'), 3000);
 }
 
-// ── HELPERS UI ─────────────────────────────────────────────────────
 function mostrarLogin() {
   document.getElementById('screen-login').style.display = 'flex';
   document.getElementById('screen-app').style.display   = 'none';
@@ -553,35 +656,33 @@ function mostrarApp() {
   document.getElementById('screen-login').style.display = 'none';
   document.getElementById('screen-app').style.display   = 'flex';
 }
-function mostrarError(ctx, msg) {
-  const el = document.getElementById(`err-${ctx}`);
-  if (el) { el.textContent = msg; el.style.display = 'block'; }
+function mostrarLoginErr(msg) {
+  const el = document.getElementById('err-login');
+  el.textContent = msg; el.style.display = 'block';
 }
 
-// Enter en login
+// ── TECLADO ────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    window.cerrarModalOp();
+    window.cerrarDetalle();
+    window.cerrarModalUsuario();
+    if (picking) stopPick();
+  }
+});
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('l-pass')?.addEventListener('keydown', e => {
     if (e.key === 'Enter') window.doLogin();
   });
-  document.getElementById('l-email')?.addEventListener('keydown', e => {
-    if (e.key === 'Enter') document.getElementById('l-pass').focus();
-  });
 });
-
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') {
-    window.cerrarModalOp && cerrarModalOp();
-    window.cerrarDetalle && cerrarDetalle();
-    window.cerrarModalUsuario && cerrarModalUsuario();
-    if (picking) stopPick();
-  }
-});
-
 </script>
+
+<!-- Google Maps + Places (callback inicia el mapa) -->
+<script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD5lt7WuK1XuTDrFYut30HN1zSpMOpncOY&libraries=places&callback=initGoogleMap&language=es" async defer></script>
 
 <style>
   :root {
-    --bg:#f4f2ee; --bg-1:#ffffff; --bg-2:#f9f8f5; --bg-3:#eeece7; --bg-4:#e5e2da;
+    --bg:#f4f2ee; --bg-1:#fff; --bg-2:#f9f8f5; --bg-3:#eeece7; --bg-4:#e5e2da;
     --text-1:#1a1814; --text-2:#5c5848; --text-3:#9c9486; --text-4:#c8c0b2;
     --border:rgba(0,0,0,0.08); --border-mid:rgba(0,0,0,0.14); --border-dark:rgba(0,0,0,0.22);
     --crit-1:#c0392b; --crit-1-bg:#fdf1f0; --crit-1-border:#e8b4b0;
@@ -596,21 +697,13 @@ document.addEventListener('keydown', e => {
   *{margin:0;padding:0;box-sizing:border-box;}
   body{font-family:'IBM Plex Sans',sans-serif;background:var(--bg);color:var(--text-1);height:100vh;overflow:hidden;display:flex;flex-direction:column;font-size:14px;}
 
-  /* ── LOGIN ── */
-  #screen-login{
-    display:flex; align-items:center; justify-content:center;
-    height:100vh; background:var(--bg);
-  }
-  .login-card{
-    background:var(--bg-1); border:1px solid var(--border-dark);
-    border-radius:4px; padding:40px 40px 36px;
-    width:380px; box-shadow:var(--shadow-lg);
-    display:flex; flex-direction:column; gap:20px;
-  }
-  .login-logo{display:flex;align-items:center;gap:12px;margin-bottom:4px;}
+  /* LOGIN */
+  #screen-login{display:flex;align-items:center;justify-content:center;height:100vh;background:var(--bg);}
+  .login-card{background:var(--bg-1);border:1px solid var(--border-dark);border-radius:4px;padding:40px;width:380px;box-shadow:var(--shadow-lg);display:flex;flex-direction:column;gap:18px;}
+  .login-logo{display:flex;align-items:center;gap:12px;}
   .login-icon{width:40px;height:40px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;border-radius:2px;}
   .login-title{font-family:'Fraunces',serif;font-size:22px;font-weight:700;color:var(--accent);}
-  .login-sub{font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-3);}
+  .login-sub{font-size:9px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-3);}
   .login-field{display:flex;flex-direction:column;gap:5px;}
   .login-lbl{font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-3);}
   .login-input{background:var(--bg-2);border:1px solid var(--border-mid);color:var(--text-1);padding:9px 12px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;outline:none;border-radius:2px;transition:border-color 0.12s;}
@@ -620,11 +713,11 @@ document.addEventListener('keydown', e => {
   .btn-login:disabled{background:var(--text-4);cursor:not-allowed;}
   .login-err{font-size:12px;color:var(--crit-1);background:var(--crit-1-bg);border:1px solid var(--crit-1-border);padding:8px 12px;border-radius:2px;display:none;}
 
-  /* ── APP ── */
+  /* APP */
   #screen-app{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
 
-  /* ── HEADER ── */
-  header{height:54px;background:var(--bg-1);border-bottom:1px solid var(--border-mid);display:flex;align-items:center;padding:0 18px;gap:16px;flex-shrink:0;box-shadow:var(--shadow-sm);z-index:200;}
+  /* HEADER */
+  header{height:54px;background:var(--bg-1);border-bottom:1px solid var(--border-mid);display:flex;align-items:center;padding:0 18px;gap:14px;flex-shrink:0;box-shadow:var(--shadow-sm);z-index:200;}
   .logo-mark{display:flex;align-items:center;gap:9px;flex-shrink:0;}
   .logo-icon{width:30px;height:30px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;border-radius:2px;}
   .logo-text{font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--accent);}
@@ -640,27 +733,27 @@ document.addEventListener('keydown', e => {
   .chip-n4{background:var(--crit-4-bg);border-color:var(--crit-4-border);color:var(--crit-4);}
   .hdr-right{display:flex;align-items:center;gap:10px;margin-left:auto;flex-shrink:0;}
   .hdr-user-info{text-align:right;}
-  .hdr-user-name{font-size:13px;font-weight:600;color:var(--text-1);}
-  .hdr-user-role{font-size:10px;color:var(--text-3);letter-spacing:0.04em;}
+  .hdr-user-name{font-size:13px;font-weight:600;}
+  .hdr-user-role{font-size:10px;color:var(--text-3);}
   .live-dot{width:7px;height:7px;border-radius:50%;background:#27ae60;box-shadow:0 0 0 2px rgba(39,174,96,0.25);animation:livepulse 2.5s infinite;}
   @keyframes livepulse{0%,100%{box-shadow:0 0 0 2px rgba(39,174,96,0.25)}50%{box-shadow:0 0 0 5px rgba(39,174,96,0.1)}}
   .clock{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-2);}
-  .btn-nueva{display:flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border:none;cursor:pointer;padding:7px 14px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;border-radius:2px;transition:background 0.12s;white-space:nowrap;}
+  .btn-nueva{display:flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border:none;cursor:pointer;padding:7px 14px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;border-radius:2px;white-space:nowrap;transition:background 0.12s;}
   .btn-nueva:hover{background:#253d6e;}
   .btn-logout{padding:6px 12px;background:transparent;border:1px solid var(--border-mid);color:var(--text-3);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:11px;border-radius:2px;transition:all 0.12s;}
   .btn-logout:hover{border-color:var(--border-dark);color:var(--text-1);}
 
-  /* ── NAV ── */
-  .app-nav{display:flex;gap:0;border-bottom:1px solid var(--border-mid);background:var(--bg-1);flex-shrink:0;padding:0 18px;}
+  /* NAV */
+  .app-nav{display:flex;border-bottom:1px solid var(--border-mid);background:var(--bg-1);flex-shrink:0;padding:0 18px;}
   .nav-item{display:flex;align-items:center;gap:6px;padding:10px 16px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text-3);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:500;transition:all 0.12s;margin-bottom:-1px;}
   .nav-item:hover{color:var(--text-1);}
   .nav-item.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600;}
 
-  /* ── SECTIONS ── */
+  /* SECTIONS */
   #section-operaciones{flex:1;overflow:hidden;display:flex;}
   #section-usuarios{flex:1;overflow:hidden;display:none;flex-direction:column;padding:24px;gap:16px;background:var(--bg);}
 
-  /* ── PANEL IZQUIERDO ── */
+  /* SIDEBAR */
   .panel-left{width:320px;flex-shrink:0;display:flex;flex-direction:column;background:var(--bg-1);border-right:1px solid var(--border-mid);}
   .panel-left-head{padding:12px 14px 10px;border-bottom:1px solid var(--border);flex-shrink:0;}
   .section-label{font-size:9px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-3);margin-bottom:8px;}
@@ -677,7 +770,6 @@ document.addEventListener('keydown', e => {
   .ops-list::-webkit-scrollbar-thumb{background:var(--bg-4);}
   .empty-msg{display:none;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;gap:8px;color:var(--text-4);text-align:center;font-size:12px;}
   .empty-msg.show{display:flex;}
-
   .op-card{background:var(--bg-1);border:1px solid var(--border-mid);border-left:4px solid transparent;padding:10px 12px;cursor:pointer;transition:all 0.12s;border-radius:0 2px 2px 0;box-shadow:var(--shadow-sm);}
   .op-card:hover{box-shadow:var(--shadow-md);}
   .op-card.sel{background:var(--accent-lt);}
@@ -696,14 +788,14 @@ document.addEventListener('keydown', e => {
   .pill-3{background:var(--crit-3-bg);color:var(--crit-3);border-color:var(--crit-3-border);}
   .pill-4{background:var(--crit-4-bg);color:var(--crit-4);border-color:var(--crit-4-border);}
 
-  /* ── MAP ── */
+  /* MAP */
   .map-zone{flex:1;position:relative;overflow:hidden;}
   #map{width:100%;height:100%;}
   .pick-banner{display:none;position:absolute;top:14px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:9px 20px;z-index:600;border-radius:2px;box-shadow:var(--shadow-lg);pointer-events:none;animation:blinkS 1.4s infinite;}
   @keyframes blinkS{0%,100%{opacity:1}50%{opacity:0.7}}
   .pick-banner.on{display:block;}
 
-  /* ── DETAIL PANEL ── */
+  /* DETAIL PANEL */
   .detail-panel{position:absolute;top:12px;right:12px;width:370px;max-height:calc(100vh - 130px);background:var(--bg-1);border:1px solid var(--border-dark);border-radius:2px;box-shadow:var(--shadow-lg);display:none;flex-direction:column;z-index:500;}
   .detail-panel.open{display:flex;animation:panelIn 0.18s ease;}
   @keyframes panelIn{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
@@ -711,12 +803,12 @@ document.addEventListener('keydown', e => {
   .dp-top-row{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px;}
   .dp-id{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text-3);margin-bottom:2px;}
   .dp-name{font-family:'Fraunces',serif;font-size:18px;font-weight:700;line-height:1.1;}
-  .btn-close-dp{background:var(--bg-3);border:1px solid var(--border-mid);color:var(--text-3);cursor:pointer;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;border-radius:2px;transition:all 0.12s;}
+  .btn-close-dp{background:var(--bg-3);border:1px solid var(--border-mid);color:var(--text-3);cursor:pointer;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;border-radius:2px;}
   .btn-close-dp:hover{background:var(--bg-4);color:var(--text-1);}
   .dp-chips{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
   .dp-loc{font-size:12px;color:var(--text-2);font-weight:500;}
   .nivel-selector{display:flex;border:1px solid var(--border-mid);border-radius:2px;overflow:hidden;}
-  .nsel-opt{padding:4px 8px;font-size:9px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;cursor:pointer;background:var(--bg-2);border:none;border-right:1px solid var(--border);color:var(--text-3);font-family:'IBM Plex Sans',sans-serif;transition:all 0.1s;}
+  .nsel-opt{padding:4px 8px;font-size:9px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;cursor:pointer;background:var(--bg-2);border:none;border-right:1px solid var(--border);color:var(--text-3);font-family:'IBM Plex Sans',sans-serif;}
   .nsel-opt:last-child{border-right:none;}
   .nsel-opt:disabled{cursor:not-allowed;opacity:0.5;}
   .nsel-opt[data-n="1"].on{background:var(--crit-1-bg);color:var(--crit-1);}
@@ -733,7 +825,7 @@ document.addEventListener('keydown', e => {
   .tl-entry{display:flex;gap:10px;position:relative;padding-bottom:14px;animation:entryIn 0.2s ease;}
   @keyframes entryIn{from{opacity:0;transform:translateY(5px)}to{opacity:1}}
   .tl-entry:not(:last-child)::before{content:'';position:absolute;left:11px;top:22px;bottom:0;width:1px;background:var(--border-mid);}
-  .tl-node{width:22px;height:22px;border-radius:50%;flex-shrink:0;border:2px solid var(--border-dark);background:var(--bg-1);display:flex;align-items:center;justify-content:center;font-size:9px;z-index:1;position:relative;}
+  .tl-node{width:22px;height:22px;border-radius:50%;flex-shrink:0;border:2px solid;background:var(--bg-1);display:flex;align-items:center;justify-content:center;font-size:9px;z-index:1;position:relative;}
   .tl-node-1{border-color:var(--crit-1);background:var(--crit-1-bg);}
   .tl-node-2{border-color:var(--crit-2);background:var(--crit-2-bg);}
   .tl-node-3{border-color:var(--crit-3);background:var(--crit-3-bg);}
@@ -747,13 +839,13 @@ document.addEventListener('keydown', e => {
   .prio-Media{background:var(--crit-3-bg);color:var(--crit-3);}
   .prio-Baja{background:var(--crit-4-bg);color:var(--crit-4);}
   .tl-text{font-size:12px;line-height:1.5;}
-  .tl-author{font-size:10px;color:var(--text-3);margin-top:2px;font-style:italic;}
+  .tl-author{font-size:11px;color:var(--text-3);margin-top:2px;font-style:italic;}
   .dp-addaction{padding:10px 16px 14px;border-top:1px solid var(--border-mid);flex-shrink:0;background:var(--bg-2);}
   .dp-admin-btns{display:none;gap:6px;padding:8px 16px;border-top:1px solid var(--border);flex-shrink:0;}
   .btn-danger{padding:6px 12px;background:var(--crit-1-bg);border:1px solid var(--crit-1-border);color:var(--crit-1);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:11px;font-weight:600;border-radius:2px;}
   .btn-danger:hover{background:var(--crit-1);color:#fff;}
 
-  /* ── FORM INPUTS ── */
+  /* FORM */
   .f-input{background:var(--bg-1);border:1px solid var(--border-mid);color:var(--text-1);padding:7px 10px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;outline:none;border-radius:2px;transition:border-color 0.12s;width:100%;}
   .f-input:focus{border-color:var(--accent);}
   .f-input::placeholder{color:var(--text-4);}
@@ -764,9 +856,16 @@ document.addEventListener('keydown', e => {
   .btn-reg:disabled{background:var(--text-4);cursor:not-allowed;}
   .coord-box{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#1a7a4a;background:var(--crit-4-bg);border:1px solid var(--crit-4-border);padding:5px 10px;border-radius:2px;display:none;margin-top:4px;}
   .coord-box.show{display:block;}
-  .btn-mapa{padding:7px 11px;background:var(--accent-lt);border:1px solid #c0cfe8;color:var(--accent);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;border-radius:2px;white-space:nowrap;flex-shrink:0;}
+  .btn-mapa{padding:7px 11px;background:var(--accent-lt);border:1px solid #c0cfe8;color:var(--accent);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;border-radius:2px;white-space:nowrap;flex-shrink:0;transition:background 0.12s;}
+  .btn-mapa:hover{background:#d0dcf2;}
 
-  /* ── MODAL ── */
+  /* Places autocomplete dropdown */
+  .pac-container{z-index:2000!important;font-family:'IBM Plex Sans',sans-serif;font-size:13px;border-radius:2px;border:1px solid var(--border-dark);box-shadow:var(--shadow-md);}
+  .pac-item{padding:6px 10px;cursor:pointer;}
+  .pac-item:hover{background:var(--bg-2);}
+  .pac-item-query{font-size:13px;}
+
+  /* MODAL */
   .overlay{display:none;position:fixed;inset:0;background:rgba(30,25,15,0.45);z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
   .overlay.open{display:flex;animation:fadeO 0.15s ease;}
   @keyframes fadeO{from{opacity:0}to{opacity:1}}
@@ -784,7 +883,7 @@ document.addEventListener('keydown', e => {
   .btn-create-m:hover{background:#253d6e;}
   .btn-create-m:disabled{background:var(--text-4);cursor:not-allowed;}
 
-  /* ── TABLA USUARIOS ── */
+  /* TABLA USUARIOS */
   .users-toolbar{display:flex;align-items:center;justify-content:space-between;}
   .users-table-wrap{flex:1;overflow:auto;background:var(--bg-1);border:1px solid var(--border-mid);border-radius:3px;box-shadow:var(--shadow-sm);}
   table{width:100%;border-collapse:collapse;}
@@ -793,50 +892,33 @@ document.addEventListener('keydown', e => {
   td{padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;}
   tr:last-child td{border-bottom:none;}
   tr:hover td{background:var(--bg-2);}
-  .rol-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;letter-spacing:0.04em;}
+  .rol-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;}
   .rol-super_admin{background:#e8f0fb;color:var(--accent);border:1px solid #c0cfe8;}
   .rol-admin{background:var(--crit-3-bg);color:var(--crit-3);border:1px solid var(--crit-3-border);}
   .rol-usuario{background:var(--bg-3);color:var(--text-2);border:1px solid var(--border-mid);}
   .activo-badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;}
   .activo{background:var(--crit-4-bg);color:var(--crit-4);border:1px solid var(--crit-4-border);}
   .inactivo{background:var(--crit-1-bg);color:var(--crit-1);border:1px solid var(--crit-1-border);}
-  .tbl-btn{padding:4px 10px;background:var(--bg-2);border:1px solid var(--border-mid);color:var(--text-2);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:11px;font-weight:500;border-radius:2px;margin-right:4px;transition:all 0.1s;}
+  .tbl-btn{padding:4px 10px;background:var(--bg-2);border:1px solid var(--border-mid);color:var(--text-2);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:11px;font-weight:500;border-radius:2px;margin-right:4px;}
   .tbl-btn:hover{background:var(--bg-3);}
   .tbl-btn.danger{color:var(--crit-1);border-color:var(--crit-1-border);}
   .tbl-btn.danger:hover{background:var(--crit-1);color:#fff;}
 
-  /* ── TOAST ── */
+  /* TOAST */
   #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--accent);color:#fff;padding:10px 22px;border-radius:2px;font-size:13px;font-weight:500;box-shadow:var(--shadow-lg);opacity:0;transition:all 0.25s;pointer-events:none;z-index:2000;}
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
-
-  /* ── MAP MARKERS ── */
-  .cmark{display:flex;flex-direction:column;align-items:center;}
-  .cmark-body{width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 3px 10px rgba(0,0,0,0.25);border:2px solid rgba(255,255,255,0.8);}
-  .cmark-body span{transform:rotate(45deg);display:block;}
-  .cmark-n1{background:var(--crit-1);}
-  .cmark-n2{background:var(--crit-2);}
-  .cmark-n3{background:var(--crit-3);}
-  .cmark-n4{background:var(--crit-4);}
-  .leaflet-popup-content-wrapper{background:#fff!important;border:1px solid var(--border-dark)!important;border-radius:3px!important;box-shadow:var(--shadow-lg)!important;padding:0!important;}
-  .leaflet-popup-tip{background:#fff!important;}
-  .leaflet-popup-content{margin:0!important;padding:0!important;color:var(--text-1)!important;}
-  .pop-inner{padding:13px 15px;min-width:200px;}
-  .pop-name{font-family:'Fraunces',serif;font-size:14px;font-weight:700;margin-bottom:3px;}
-  .pop-meta{font-size:11px;color:var(--text-3);margin-bottom:3px;}
-  .pop-btn{display:block;width:100%;padding:7px;background:var(--accent);border:none;color:#fff;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;text-align:center;border-radius:2px;transition:background 0.12s;}
-  .pop-btn:hover{background:#253d6e;}
 </style>
 </head>
 <body>
 
-<!-- ══ LOGIN ══════════════════════════════════════════════════════ -->
+<!-- LOGIN -->
 <div id="screen-login">
   <div class="login-card">
     <div class="login-logo">
       <div class="login-icon">⚠</div>
       <div>
         <div class="login-title">SIGECA</div>
-        <div class="login-sub">Gestión de Catástrofes</div>
+        <div class="login-sub">Sistema de Gestión de Catástrofes</div>
       </div>
     </div>
     <div class="login-field">
@@ -852,17 +934,12 @@ document.addEventListener('keydown', e => {
   </div>
 </div>
 
-<!-- ══ APP ════════════════════════════════════════════════════════ -->
+<!-- APP -->
 <div id="screen-app" style="display:none">
-
-  <!-- HEADER -->
   <header>
     <div class="logo-mark">
       <div class="logo-icon">⚠</div>
-      <div>
-        <div class="logo-text">SIGECA</div>
-        <div class="logo-sub">Gestión de Catástrofes</div>
-      </div>
+      <div><div class="logo-text">SIGECA</div><div class="logo-sub">Gestión de Catástrofes</div></div>
     </div>
     <div class="hdr-div"></div>
     <div class="nivel-indicators">
@@ -883,17 +960,16 @@ document.addEventListener('keydown', e => {
     </div>
   </header>
 
-  <!-- NAV -->
   <nav class="app-nav">
     <button class="nav-item on" data-sec="operaciones" onclick="showSection('operaciones')">🗺 Operaciones</button>
     <button class="nav-item" id="nav-usuarios" data-sec="usuarios" onclick="showSection('usuarios')" style="display:none">👥 Usuarios</button>
   </nav>
 
-  <!-- ── SECCIÓN OPERACIONES ── -->
+  <!-- OPERACIONES -->
   <div id="section-operaciones">
     <div class="panel-left">
       <div class="panel-left-head">
-        <div class="section-label">Operaciones activas</div>
+        <div class="section-label">Operaciones registradas</div>
         <div class="filter-tabs">
           <button class="ftab on" onclick="setFiltro('all',this)">Todas</button>
           <button class="ftab" onclick="setFiltro('1',this)">N1</button>
@@ -914,7 +990,6 @@ document.addEventListener('keydown', e => {
       <div class="pick-banner" id="pick-banner">📍 Haz clic en el mapa para fijar la ubicación</div>
       <div id="map"></div>
 
-      <!-- DETAIL -->
       <div class="detail-panel" id="detail-panel">
         <div class="dp-header">
           <div class="dp-top-row">
@@ -929,13 +1004,13 @@ document.addEventListener('keydown', e => {
             <div class="dp-loc" id="dp-loc"></div>
           </div>
         </div>
-        <div style="padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+        <div style="padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:8px;">
           <span style="font-size:10px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;">Nivel:</span>
           <div class="nivel-selector">
-            <button class="nsel-opt" data-n="1" onclick="cambiarNivel(1)">N1</button>
-            <button class="nsel-opt" data-n="2" onclick="cambiarNivel(2)">N2</button>
-            <button class="nsel-opt" data-n="3" onclick="cambiarNivel(3)">N3</button>
-            <button class="nsel-opt" data-n="4" onclick="cambiarNivel(4)">N4</button>
+            <button class="nsel-opt" data-n="1" onclick="cambiarNivel(1)">N1 Mayor</button>
+            <button class="nsel-opt" data-n="2" onclick="cambiarNivel(2)">N2 Emerg.</button>
+            <button class="nsel-opt" data-n="3" onclick="cambiarNivel(3)">N3 Alerta</button>
+            <button class="nsel-opt" data-n="4" onclick="cambiarNivel(4)">N4 Seg.</button>
           </div>
         </div>
         <div class="dp-info-row" id="dp-info-row"></div>
@@ -961,7 +1036,7 @@ document.addEventListener('keydown', e => {
     </div>
   </div>
 
-  <!-- ── SECCIÓN USUARIOS ── -->
+  <!-- USUARIOS -->
   <div id="section-usuarios">
     <div class="users-toolbar">
       <div>
@@ -972,19 +1047,14 @@ document.addEventListener('keydown', e => {
     </div>
     <div class="users-table-wrap">
       <table>
-        <thead>
-          <tr>
-            <th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th>Acciones</th>
-          </tr>
-        </thead>
+        <thead><tr><th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th>Acciones</th></tr></thead>
         <tbody id="users-tbody"></tbody>
       </table>
     </div>
   </div>
+</div>
 
-</div><!-- /screen-app -->
-
-<!-- ══ MODAL NUEVA OPERACIÓN ══════════════════════════════════════ -->
+<!-- MODAL NUEVA OPERACIÓN -->
 <div class="overlay" id="overlay-op">
   <div class="modal">
     <div class="modal-head">
@@ -993,7 +1063,7 @@ document.addEventListener('keydown', e => {
     </div>
     <div class="modal-body">
       <div class="field">
-        <div class="field-lbl">Nombre *</div>
+        <div class="field-lbl">Nombre de la operación *</div>
         <input class="f-input" id="f-nombre" placeholder="Ej: Inundaciones Cuenca del Ebro">
       </div>
       <div class="field-row">
@@ -1026,25 +1096,22 @@ document.addEventListener('keydown', e => {
       </div>
       <div class="field-row">
         <div class="field" style="flex:1;">
-          <div class="field-lbl">Provincia / Municipio</div>
-          <input class="f-input" id="f-loc" placeholder="Ej: Valencia, Paiporta">
-        </div>
-        <div class="field" style="flex:1;">
           <div class="field-lbl">Director de Operaciones</div>
           <input class="f-input" id="f-dir" placeholder="Nombre y cargo">
         </div>
+        <div class="field" style="flex:1;">
+          <div class="field-lbl">Organismos coordinados</div>
+          <input class="f-input" id="f-org" placeholder="112, UME, Cruz Roja…">
+        </div>
       </div>
       <div class="field">
-        <div class="field-lbl">Organismos coordinados</div>
-        <input class="f-input" id="f-org" placeholder="Ej: 112, UME, Cruz Roja, DGT…">
-      </div>
-      <div class="field">
-        <div class="field-lbl">Ubicación en mapa</div>
+        <div class="field-lbl">📍 Ubicación — busca una dirección o haz clic en el mapa</div>
         <div style="display:flex;gap:6px;">
-          <input class="f-input" id="f-coord-label" placeholder="O haz clic en el mapa →">
-          <button class="btn-mapa" onclick="iniciarPick()">🗺 Seleccionar</button>
+          <input class="f-input" id="f-lugar" placeholder="Escribe una dirección, municipio o lugar…" autocomplete="off">
+          <button class="btn-mapa" onclick="iniciarPick()">🗺 En mapa</button>
         </div>
         <div class="coord-box" id="coord-box"></div>
+        <input type="hidden" id="f-loc">
       </div>
     </div>
     <div class="modal-foot">
@@ -1054,7 +1121,7 @@ document.addEventListener('keydown', e => {
   </div>
 </div>
 
-<!-- ══ MODAL USUARIO ══════════════════════════════════════════════ -->
+<!-- MODAL USUARIO -->
 <div class="overlay" id="overlay-user">
   <div class="modal" style="width:420px;">
     <div class="modal-head">
@@ -1099,16 +1166,13 @@ document.addEventListener('keydown', e => {
   </div>
 </div>
 
-<!-- TOAST -->
 <div id="toast"></div>
 
 <script>
-  // Reloj
   setInterval(() => {
     const el = document.getElementById('clock');
     if (el) el.textContent = new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   }, 1000);
 </script>
-
 </body>
 </html>
