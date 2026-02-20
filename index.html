@@ -678,7 +678,7 @@ ${dataContext}
     };
 
     // ── HELPERS SELECTORES SOLICITUD ───────────────────────────────────
-    function handleSolicitadoChange(prefix) {
+    window.handleSolicitadoChange = (prefix) => {
       const orgSelect = document.getElementById(`${prefix}-org`);
       const subContainer = document.getElementById(`${prefix}-org-sub`);
       const subInput = document.getElementById(`${prefix}-org-sub-input`);
@@ -709,7 +709,7 @@ ${dataContext}
       }
     }
 
-    function parseSolicitadoData(prefix) {
+    window.parseSolicitadoData = (prefix) => {
       const mainVal = document.getElementById(`${prefix}-org`).value;
       if (mainVal === '112' || mainVal === '061' || !mainVal) return mainVal;
 
@@ -2789,8 +2789,8 @@ ${dataContext}
           <div class="field-lbl">📍 Ubicación — busca una dirección o haz clic en el mapa</div>
           <div style="display:flex;gap:6px;">
             <input class="f-input" id="f-lugar" placeholder="Escribe una dirección, municipio o lugar…"
-              autocomplete="off">
-            <button class="btn-mapa" onclick="iniciarPick()">🗺 En mapa</button>
+              autocomplete="off" onkeydown="if(event.key==='Enter') event.preventDefault();">
+            <button type="button" class="btn-mapa" onclick="iniciarPick()">🗺 En mapa</button>
           </div>
           <div class="coord-box" id="coord-box"></div>
           <input type="hidden" id="f-loc">
@@ -2858,8 +2858,8 @@ ${dataContext}
           <div class="field-lbl">📍 Ubicación — busca una dirección o haz clic en el mapa</div>
           <div style="display:flex;gap:6px;">
             <input class="f-input" id="fe-lugar" placeholder="Escribe una dirección, municipio o lugar…"
-              autocomplete="off">
-            <button class="btn-mapa" onclick="iniciarEditPick()">🗺 En mapa</button>
+              autocomplete="off" onkeydown="if(event.key==='Enter') event.preventDefault();">
+            <button type="button" class="btn-mapa" onclick="iniciarEditPick()">🗺 En mapa</button>
           </div>
           <div class="coord-box" id="edit-coord-box"></div>
         </div>
