@@ -142,6 +142,14 @@
         });
       });
 
+      // Force refresh when map container becomes visible
+      new ResizeObserver(() => {
+        if (gmap && document.getElementById('map').offsetWidth > 0) {
+          google.maps.event.trigger(gmap, 'resize');
+          if (Object.keys(ops).length) renderMapa();
+        }
+      }).observe(document.getElementById('map'));
+
       if (Object.keys(ops).length) renderMapa();
     };
 
@@ -243,15 +251,24 @@
       };
     }
 
+    let boundsTimeout = null;
     function renderMapa() {
       if (!gmap) return;
       Object.keys(gmMarkers).forEach(id => {
         if (!ops[id]) { gmMarkers[id].setMap(null); delete gmMarkers[id]; }
       });
+
+      const bounds = new google.maps.LatLngBounds();
+      let hasValidCoords = false;
+
       Object.values(ops).forEach(op => {
         if (!op.coords) return;
         const t = TIPOS[op.tipo] || TIPOS.otro;
         const pos = { lat: op.coords.lat, lng: op.coords.lng };
+
+        bounds.extend(pos);
+        hasValidCoords = true;
+
         const icon = nivelIcon(op.nivel, t.emoji);
         if (gmMarkers[op.id]) {
           gmMarkers[op.id].setPosition(pos);
@@ -283,6 +300,15 @@
           gmMarkers[op.id] = marker;
         }
       });
+
+      if (hasValidCoords && !editPickMode && !picking) {
+        if (boundsTimeout) clearTimeout(boundsTimeout);
+        boundsTimeout = setTimeout(() => {
+          gmap.fitBounds(bounds, { top: 40, bottom: 40, left: 40, right: 380 });
+          // right padding for the desktop sidebar so it doesn't hide markers
+          if (gmap.getZoom() > 14) gmap.setZoom(14); // prevent excessive zooming on single marker
+        }, 100);
+      }
     }
 
     // ── PICK LOCATION (nueva operación) ───────────────────────────────
