@@ -22,11 +22,11 @@
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
     // ── CONFIGURACIÓN IA ───────────────────────────────────────────────
-    let geminiApiKey = 'AIzaSyC_7OvS8aTaKKhDKQrh8BUnmecDlN1s9L8'; // Clave por defecto proporcionada por el usuario
+    let geminiApiKey = '__GEMINI_API_KEY__'; // Clave por defecto proporcionada por el usuario
 
     // ── FIREBASE CONFIG ────────────────────────────────────────────────
     const firebaseConfig = {
-      apiKey: "AIzaSyAHtrxaBazArqa8znWsUIVYxTsS7zoOOmc",
+      apiKey: "__FIREBASE_API_KEY__",
       authDomain: "emercre.firebaseapp.com",
       projectId: "emercre",
       storageBucket: "emercre.firebasestorage.app",
@@ -966,7 +966,7 @@ ${dataContext}
         } else {
           if (!pass || pass.length < 6) { alert('La contraseña debe tener al menos 6 caracteres.'); btn.disabled = false; btn.textContent = 'Guardar'; return; }
           const res = await fetch(
-            `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=AIzaSyAHtrxaBazArqa8znWsUIVYxTsS7zoOOmc`,
+            `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=__FIREBASE_API_KEY__`,
             {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ email, password: pass, returnSecureToken: true })
@@ -1035,7 +1035,7 @@ ${dataContext}
 
   <!-- Google Maps + Places -->
   <script
-    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD5lt7WuK1XuTDrFYut30HN1zSpMOpncOY&libraries=places&callback=initGoogleMap&language=es"
+    src="https://maps.googleapis.com/maps/api/js?key=__GOOGLE_MAPS_API_KEY__&libraries=places&callback=initGoogleMap&language=es"
     async defer></script>
 
   <style>
