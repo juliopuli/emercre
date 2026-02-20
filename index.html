@@ -455,8 +455,8 @@
         ? op.creadoEn.toDate().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
         : '—';
       ir.innerHTML = '';
-      if (op.dir) ir.innerHTML += `<div class="dp-info-item"><strong>${op.dir}</strong>Director Operaciones</div>`;
-      if (op.org) ir.innerHTML += `<div class="dp-info-item"><strong>${op.org}</strong>Organismos</div>`;
+      if (op.dir) ir.innerHTML += `<div class="dp-info-item"><strong>${op.dir}</strong>Jefe de Operaciones</div>`;
+      if (op.org) ir.innerHTML += `<div class="dp-info-item"><strong>${op.org}</strong>Solicitado por</div>`;
       if (op.creadoPorNombre) ir.innerHTML += `<div class="dp-info-item"><strong>${op.creadoPorNombre}</strong>Creado por</div>`;
       ir.innerHTML += `<div class="dp-info-item"><strong>${ts}</strong>Inicio</div>`;
 
@@ -597,7 +597,7 @@
         const t = TIPOS[op.tipo] || TIPOS.otro;
         let dataContext = `Nombre operación: ${op.nombre}\n`;
         dataContext += `Tipo: ${t.label}\nUbicación: ${op.loc || 'N/A'}\n`;
-        dataContext += `Director: ${op.dir || 'N/A'}\nOrganismos: ${op.org || 'N/A'}\n\n`;
+        dataContext += `Jefe de Operaciones: ${op.dir || 'N/A'}\nSolicitado por: ${op.org || 'N/A'}\n\n`;
         dataContext += `================ HILO CRONOLÓGICO DE ACCIONES ================\n`;
 
         // 2. Traer todas las acciones/novedades ordenadas
@@ -677,11 +677,56 @@ ${dataContext}
       document.getElementById('overlay-ai-report').classList.remove('open');
     };
 
+    // ── HELPERS SELECTORES SOLICITUD ───────────────────────────────────
+    function handleSolicitadoChange(prefix) {
+      const orgSelect = document.getElementById(`${prefix}-org`);
+      const subContainer = document.getElementById(`${prefix}-org-sub`);
+      const subInput = document.getElementById(`${prefix}-org-sub-input`);
+      const subSelect = document.getElementById(`${prefix}-org-sub-select`);
+
+      if (subContainer) {
+        subContainer.style.display = 'block';
+        subInput.style.display = 'none';
+        subSelect.style.display = 'none';
+        subInput.value = '';
+
+        switch (orgSelect.value) {
+          case 'Ayuntamiento':
+            subInput.placeholder = "Indica qué ayuntamiento...";
+            subInput.style.display = 'block';
+            break;
+          case 'Cruz Roja':
+            subInput.placeholder = "Indica quién dentro de Cruz Roja...";
+            subInput.style.display = 'block';
+            break;
+          case 'Jefe de Operaciones':
+            subSelect.style.display = 'block';
+            break;
+          default:
+            subContainer.style.display = 'none';
+            break;
+        }
+      }
+    }
+
+    function parseSolicitadoData(prefix) {
+      const mainVal = document.getElementById(`${prefix}-org`).value;
+      if (mainVal === '112' || mainVal === '061' || !mainVal) return mainVal;
+
+      if (mainVal === 'Jefe de Operaciones') {
+        return `Jefe de Operaciones - ${document.getElementById(`${prefix}-org-sub-select`).value}`;
+      } else {
+        const sub = document.getElementById(`${prefix}-org-sub-input`).value.trim();
+        return sub ? `${mainVal} - ${sub}` : mainVal;
+      }
+    }
+
     // ── MODAL NUEVA OPERACIÓN ──────────────────────────────────────────
     window.abrirModalOp = () => {
       document.getElementById('overlay-op').classList.add('open');
       setTimeout(() => document.getElementById('f-nombre').focus(), 100);
       mostrarCoordBox();
+      handleSolicitadoChange('f');
     };
 
     window.cerrarModalOp = () => {
@@ -689,12 +734,14 @@ ${dataContext}
       pickedCoords = null;
       pickedAddress = '';
       if (tempGmMarker) { tempGmMarker.setMap(null); tempGmMarker = null; }
-      ['f-nombre', 'f-desc', 'f-loc', 'f-dir', 'f-org', 'f-lugar'].forEach(id => {
+      ['f-nombre', 'f-desc', 'f-loc', 'f-org-sub-input', 'f-lugar'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
       });
       document.getElementById('f-tipo').value = 'inundacion';
       document.getElementById('f-nivel').value = '3';
+      document.getElementById('f-dir').value = 'Julio Pulido Morilla';
+      document.getElementById('f-org').value = '112';
       document.getElementById('coord-box').classList.remove('show');
     };
 
@@ -709,13 +756,15 @@ ${dataContext}
         const locVal = document.getElementById('f-lugar').value.trim() || document.getElementById('f-loc').value.trim();
         const autorNombre = currentUserDoc.nombre || currentUser.email;
 
+        const orgFinal = parseSolicitadoData('f');
+
         const ref = await addDoc(collection(db, 'operaciones'), {
           nombre,
           tipo: document.getElementById('f-tipo').value,
           nivel,
           loc: locVal,
-          dir: document.getElementById('f-dir').value.trim(),
-          org: document.getElementById('f-org').value.trim(),
+          dir: document.getElementById('f-dir').value,
+          org: orgFinal,
           coords: pickedCoords || null,
           creadoPor: currentUser.uid,
           creadoPorNombre: autorNombre,
@@ -747,9 +796,45 @@ ${dataContext}
       // Poblar campos con datos actuales
       document.getElementById('fe-nombre').value = op.nombre || '';
       document.getElementById('fe-tipo').value = op.tipo || 'inundacion';
-      document.getElementById('fe-dir').value = op.dir || '';
-      document.getElementById('fe-org').value = op.org || '';
       document.getElementById('fe-lugar').value = op.loc || '';
+
+      // Jefe de operaciones
+      const optionsDir = Array.from(document.getElementById('fe-dir').options).map(o => o.value);
+      if (optionsDir.includes(op.dir)) {
+        document.getElementById('fe-dir').value = op.dir;
+      } else {
+        document.getElementById('fe-dir').value = 'Julio Pulido Morilla'; // fallback si existía un texto libre
+      }
+
+      // Solicitado por
+      const orgSelect = document.getElementById('fe-org');
+      const orgSubInput = document.getElementById('fe-org-sub-input');
+      const orgSubSelect = document.getElementById('fe-org-sub-select');
+
+      orgSubInput.value = '';
+      orgSubSelect.value = 'Julio Pulido Morilla';
+
+      if (!op.org) {
+        orgSelect.value = '112';
+      } else if (op.org.startsWith('Jefe de Operaciones - ')) {
+        orgSelect.value = 'Jefe de Operaciones';
+        orgSubSelect.value = op.org.replace('Jefe de Operaciones - ', '');
+      } else if (op.org.startsWith('Ayuntamiento - ')) {
+        orgSelect.value = 'Ayuntamiento';
+        orgSubInput.value = op.org.replace('Ayuntamiento - ', '');
+      } else if (op.org.startsWith('Cruz Roja - ')) {
+        orgSelect.value = 'Cruz Roja';
+        orgSubInput.value = op.org.replace('Cruz Roja - ', '');
+      } else {
+        // Si era texto libre anterior o coincide con opciones base
+        const optionsOrg = Array.from(orgSelect.options).map(o => o.value);
+        if (optionsOrg.includes(op.org)) {
+          orgSelect.value = op.org;
+        } else {
+          orgSelect.value = '112'; // fallback base
+        }
+      }
+      handleSolicitadoChange('fe');
 
       // Restaurar coords actuales como punto de partida
       editPickedCoords = op.coords || null;
@@ -776,12 +861,14 @@ ${dataContext}
       btn.disabled = true; btn.textContent = 'Guardando…';
       try {
         const locVal = document.getElementById('fe-lugar').value.trim();
+        const orgFinal = parseSolicitadoData('fe');
+
         const updates = {
           nombre,
           tipo: document.getElementById('fe-tipo').value,
           loc: locVal,
-          dir: document.getElementById('fe-dir').value.trim(),
-          org: document.getElementById('fe-org').value.trim(),
+          dir: document.getElementById('fe-dir').value,
+          org: orgFinal,
           actualizadoEn: serverTimestamp()
         };
         // Solo actualizar coords si el usuario eligió una nueva ubicación
@@ -2674,12 +2761,28 @@ ${dataContext}
         </div>
         <div class="field-row">
           <div class="field" style="flex:1;">
-            <div class="field-lbl">Director de Operaciones</div>
-            <input class="f-input" id="f-dir" placeholder="Nombre y cargo">
+            <div class="field-lbl">Jefe de Operaciones</div>
+            <select class="f-input f-select" id="f-dir" style="width:100%">
+              <option value="Julio Pulido Morilla">Julio Pulido Morilla</option>
+              <option value="Samuel Linares Cantero">Samuel Linares Cantero</option>
+            </select>
           </div>
           <div class="field" style="flex:1;">
-            <div class="field-lbl">Organismos coordinados</div>
-            <input class="f-input" id="f-org" placeholder="112, UME, Cruz Roja…">
+            <div class="field-lbl">Solicitado por:</div>
+            <select class="f-input f-select" id="f-org" style="width:100%" onchange="handleSolicitadoChange('f')">
+              <option value="112">112</option>
+              <option value="061">061</option>
+              <option value="Ayuntamiento">Ayuntamiento</option>
+              <option value="Cruz Roja">Cruz Roja</option>
+              <option value="Jefe de Operaciones">Jefe de Operaciones</option>
+            </select>
+            <div id="f-org-sub" style="display:none; margin-top:8px;">
+              <input class="f-input" id="f-org-sub-input" style="display:none;">
+              <select class="f-input f-select" id="f-org-sub-select" style="display:none; width:100%">
+                <option value="Julio Pulido Morilla">Julio Pulido Morilla</option>
+                <option value="Samuel Linares Cantero">Samuel Linares Cantero</option>
+              </select>
+            </div>
           </div>
         </div>
         <div class="field">
@@ -2727,12 +2830,28 @@ ${dataContext}
         </div>
         <div class="field-row">
           <div class="field" style="flex:1;">
-            <div class="field-lbl">Director de Operaciones</div>
-            <input class="f-input" id="fe-dir" placeholder="Nombre y cargo">
+            <div class="field-lbl">Jefe de Operaciones</div>
+            <select class="f-input f-select" id="fe-dir" style="width:100%">
+              <option value="Julio Pulido Morilla">Julio Pulido Morilla</option>
+              <option value="Samuel Linares Cantero">Samuel Linares Cantero</option>
+            </select>
           </div>
           <div class="field" style="flex:1;">
-            <div class="field-lbl">Organismos coordinados</div>
-            <input class="f-input" id="fe-org" placeholder="112, UME, Cruz Roja…">
+            <div class="field-lbl">Solicitado por:</div>
+            <select class="f-input f-select" id="fe-org" style="width:100%" onchange="handleSolicitadoChange('fe')">
+              <option value="112">112</option>
+              <option value="061">061</option>
+              <option value="Ayuntamiento">Ayuntamiento</option>
+              <option value="Cruz Roja">Cruz Roja</option>
+              <option value="Jefe de Operaciones">Jefe de Operaciones</option>
+            </select>
+            <div id="fe-org-sub" style="display:none; margin-top:8px;">
+              <input class="f-input" id="fe-org-sub-input" style="display:none;">
+              <select class="f-input f-select" id="fe-org-sub-select" style="display:none; width:100%">
+                <option value="Julio Pulido Morilla">Julio Pulido Morilla</option>
+                <option value="Samuel Linares Cantero">Samuel Linares Cantero</option>
+              </select>
+            </div>
           </div>
         </div>
         <div class="field">
