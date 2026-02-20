@@ -8,993 +8,997 @@
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,700;9..144,900&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import {
+  getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
+  onSnapshot, query, orderBy, serverTimestamp, getDoc, getDocs
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+// ── CONFIG ─────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyAHtrxaBazArqa8znWsUIVYxTsS7zoOOmc",
+  authDomain: "emercre.firebaseapp.com",
+  projectId: "emercre",
+  storageBucket: "emercre.firebasestorage.app",
+  messagingSenderId: "277256770434",
+  appId: "1:277256770434:web:225aa9c7ff6b862d72b59b"
+};
+
+const app  = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db   = getFirestore(app);
+
+// ── ESTADO GLOBAL ──────────────────────────────────────────────────
+let currentUser    = null;
+let currentRole    = null;
+let currentUserDoc = null;
+let selOpId        = null;
+let filtro         = 'all';
+let picking        = false;
+let coords         = null;
+let map, markerLayer;
+let unsubOps       = null;
+let unsubAcciones  = null;
+let ops            = {};   // { id: opData }
+let editingUserId  = null;
+
+// ── TIPO / NIVEL ───────────────────────────────────────────────────
+const TIPOS = {
+  inundacion: { label:'Inundación',        emoji:'🌊', color:'#2980b9' },
+  incendio:   { label:'Incendio forestal', emoji:'🔥', color:'#c0392b' },
+  seismo:     { label:'Seísmo',            emoji:'🌍', color:'#8e44ad' },
+  temporal:   { label:'Temporal',          emoji:'🌪', color:'#16a085' },
+  accidente:  { label:'Accidente',         emoji:'🚛', color:'#d35400' },
+  quimico:    { label:'Inc. Químico',      emoji:'☣️', color:'#c0392b' },
+  sanitaria:  { label:'Emerg. Sanitaria',  emoji:'🦠', color:'#e74c3c' },
+  otro:       { label:'Otro',              emoji:'📋', color:'#7f8c8d' }
+};
+const NIVEL_LABELS = { 1:'Emergencia Mayor', 2:'Emergencia', 3:'Alerta', 4:'Seguimiento' };
+const ROL_LABELS   = { super_admin:'Super Admin', admin:'Administrador', usuario:'Usuario' };
+
+// ── AUTH STATE ─────────────────────────────────────────────────────
+onAuthStateChanged(auth, async user => {
+  if (user) {
+    const snap = await getDoc(doc(db, 'users', user.uid));
+    if (!snap.exists() || snap.data().activo === false) {
+      await signOut(auth);
+      mostrarError('login', 'Usuario no autorizado o desactivado.');
+      return;
+    }
+    currentUser    = user;
+    currentUserDoc = snap.data();
+    currentRole    = currentUserDoc.role;
+    mostrarApp();
+    initApp();
+  } else {
+    currentUser = null;
+    currentRole = null;
+    mostrarLogin();
+    detenerListeners();
+  }
+});
+
+// ── LOGIN ──────────────────────────────────────────────────────────
+window.doLogin = async () => {
+  const email = document.getElementById('l-email').value.trim();
+  const pass  = document.getElementById('l-pass').value;
+  if (!email || !pass) return;
+  document.getElementById('btn-login').disabled = true;
+  document.getElementById('btn-login').textContent = 'Accediendo…';
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+  } catch(e) {
+    mostrarError('login', 'Email o contraseña incorrectos.');
+    document.getElementById('btn-login').disabled = false;
+    document.getElementById('btn-login').textContent = 'Acceder';
+  }
+};
+
+window.doLogout = async () => {
+  await signOut(auth);
+};
+
+// ── INIT APP ───────────────────────────────────────────────────────
+function initApp() {
+  // nombre usuario en header
+  document.getElementById('hdr-user').textContent =
+    `${currentUserDoc.nombre || currentUser.email}`;
+  document.getElementById('hdr-role').textContent = ROL_LABELS[currentRole] || currentRole;
+
+  // mostrar/ocultar controles según rol
+  applyRoleUI();
+
+  // init mapa si no existe
+  if (!map) initMap();
+  else { map.invalidateSize(); renderMapa(); }
+
+  // suscribir operaciones en tiempo real
+  suscribirOps();
+
+  // nav por defecto
+  showSection('operaciones');
+}
+
+function applyRoleUI() {
+  const isSA    = currentRole === 'super_admin';
+  const isAdmin = currentRole === 'admin' || isSA;
+
+  // Menú usuarios solo super_admin
+  document.getElementById('nav-usuarios').style.display = isSA ? 'flex' : 'none';
+  // Botón nueva operación
+  document.getElementById('btn-nueva-op').style.display = isAdmin ? 'flex' : 'none';
+}
+
+function detenerListeners() {
+  if (unsubOps)      { unsubOps();      unsubOps = null; }
+  if (unsubAcciones) { unsubAcciones(); unsubAcciones = null; }
+  ops = {};
+}
+
+// ── SUSCRIPCIÓN OPERACIONES TIEMPO REAL ───────────────────────────
+function suscribirOps() {
+  if (unsubOps) unsubOps();
+  const q = query(collection(db, 'operaciones'), orderBy('creadoEn', 'desc'));
+  unsubOps = onSnapshot(q, snap => {
+    snap.docChanges().forEach(change => {
+      if (change.type === 'removed') {
+        delete ops[change.doc.id];
+      } else {
+        ops[change.doc.id] = { id: change.doc.id, ...change.doc.data() };
+      }
+    });
+    renderSidebar();
+    renderMapa();
+    actualizarContadores();
+    if (selOpId && ops[selOpId]) renderDetalle(ops[selOpId]);
+  });
+}
+
+// ── MAPA ───────────────────────────────────────────────────────────
+function initMap() {
+  map = L.map('map', { zoomControl: false }).setView([40.4, -3.7], 6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap', maxZoom: 19
+  }).addTo(map);
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+  markerLayer = L.layerGroup().addTo(map);
+
+  map.on('click', e => {
+    if (!picking) return;
+    coords = { lat: parseFloat(e.latlng.lat.toFixed(6)), lng: parseFloat(e.latlng.lng.toFixed(6)) };
+    document.getElementById('coord-box').textContent = `📍 ${coords.lat}, ${coords.lng}`;
+    document.getElementById('coord-box').classList.add('show');
+    stopPick();
+    abrirModalOp();
+  });
+}
+
+function renderMapa() {
+  if (!markerLayer) return;
+  markerLayer.clearLayers();
+  Object.values(ops).forEach(op => {
+    if (!op.coords) return;
+    const t    = TIPOS[op.tipo] || TIPOS.otro;
+    const icon = L.divIcon({
+      html: `<div class="cmark"><div class="cmark-body cmark-n${op.nivel}"><span>${t.emoji}</span></div></div>`,
+      className: '', iconSize: [34,40], iconAnchor: [17,40], popupAnchor: [0,-42]
+    });
+    const m = L.marker([op.coords.lat, op.coords.lng], { icon }).addTo(markerLayer);
+    m.bindPopup(`<div class="pop-inner">
+      <div class="pop-name">${op.nombre}</div>
+      <div class="pop-meta">${t.emoji} ${t.label} · ${op.loc||''}</div>
+      <div style="margin-bottom:10px"><span class="nivel-pill pill-${op.nivel}">N${op.nivel} ${NIVEL_LABELS[op.nivel]}</span></div>
+      <button class="pop-btn" onclick="abrirDetalle('${op.id}');map && map.closePopup && map.closePopup()">Ver operación →</button>
+    </div>`, { maxWidth: 260 });
+  });
+}
+
+// ── CONTADORES ─────────────────────────────────────────────────────
+function actualizarContadores() {
+  [1,2,3,4].forEach(n => {
+    const el = document.getElementById('cnt'+n);
+    if (el) el.textContent = Object.values(ops).filter(o => o.nivel == n).length;
+  });
+}
+
+// ── RENDER SIDEBAR ─────────────────────────────────────────────────
+function renderSidebar() {
+  const list  = document.getElementById('ops-list');
+  const empty = document.getElementById('empty-msg');
+  list.querySelectorAll('.op-card').forEach(c => c.remove());
+
+  let visible = Object.values(ops);
+  if (filtro !== 'all') visible = visible.filter(o => String(o.nivel) === filtro);
+  visible.sort((a,b) => a.nivel - b.nivel);
+
+  if (!visible.length) { empty.classList.add('show'); return; }
+  empty.classList.remove('show');
+
+  visible.forEach(op => {
+    const t    = TIPOS[op.tipo] || TIPOS.otro;
+    const card = document.createElement('div');
+    card.className = 'op-card' + (selOpId === op.id ? ' sel' : '');
+    card.dataset.nivel = op.nivel;
+    card.innerHTML = `
+      <div class="card-top">
+        <div>
+          <div class="card-id">${op.id.substring(0,8).toUpperCase()}</div>
+          <div class="card-name">${op.nombre}</div>
+        </div>
+        <span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${t.label}</span>
+      </div>
+      <div class="card-meta">
+        <span class="card-loc">📍 ${op.loc||'Sin ubicación'}</span>
+        <span class="nivel-pill pill-${op.nivel}">N${op.nivel} ${NIVEL_LABELS[op.nivel]}</span>
+      </div>`;
+    card.addEventListener('click', () => abrirDetalle(op.id));
+    list.appendChild(card);
+  });
+}
+
+// ── FILTRO ─────────────────────────────────────────────────────────
+window.setFiltro = (f, btn) => {
+  filtro = f;
+  document.querySelectorAll('.ftab').forEach(b => b.classList.remove('on','on-n1','on-n2','on-n3','on-n4'));
+  btn.classList.add(f === 'all' ? 'on' : `on-n${f}`);
+  renderSidebar();
+};
+
+// ── DETALLE ────────────────────────────────────────────────────────
+window.abrirDetalle = (id) => {
+  selOpId = id;
+  const op = ops[id];
+  if (!op) return;
+  document.getElementById('detail-panel').classList.add('open');
+  renderDetalle(op);
+  renderSidebar();
+  if (op.coords) map.flyTo([op.coords.lat, op.coords.lng], 13, { duration: 1 });
+  // suscribir acciones
+  suscribirAcciones(id);
+};
+
+window.cerrarDetalle = () => {
+  document.getElementById('detail-panel').classList.remove('open');
+  selOpId = null;
+  if (unsubAcciones) { unsubAcciones(); unsubAcciones = null; }
+  renderSidebar();
+};
+
+function suscribirAcciones(opId) {
+  if (unsubAcciones) unsubAcciones();
+  const q = query(collection(db, 'operaciones', opId, 'acciones'), orderBy('timestamp', 'desc'));
+  unsubAcciones = onSnapshot(q, snap => {
+    const acciones = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    renderTimeline(acciones, ops[opId]);
+  });
+}
+
+function renderDetalle(op) {
+  const t          = TIPOS[op.tipo] || TIPOS.otro;
+  const isAdmin    = currentRole === 'admin' || currentRole === 'super_admin';
+  const isSA       = currentRole === 'super_admin';
+
+  document.getElementById('dp-id').textContent   = op.id.substring(0,8).toUpperCase();
+  document.getElementById('dp-name').textContent = op.nombre;
+  document.getElementById('dp-loc').innerHTML    = op.loc ? `📍 ${op.loc}` : '';
+  document.getElementById('dp-type-tag').innerHTML =
+    `<span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${t.label}</span>`;
+
+  document.querySelectorAll('.nsel-opt').forEach(b => {
+    b.classList.toggle('on', parseInt(b.dataset.n) === op.nivel);
+    b.disabled = !isAdmin;
+  });
+
+  // info
+  const ir = document.getElementById('dp-info-row');
+  ir.innerHTML = '';
+  if (op.dir) { ir.innerHTML += `<div class="dp-info-item"><strong>${op.dir}</strong>Director Operaciones</div>`; }
+  if (op.org) { ir.innerHTML += `<div class="dp-info-item"><strong>${op.org}</strong>Organismos</div>`; }
+  const ts = op.creadoEn?.toDate ? op.creadoEn.toDate().toLocaleString('es-ES',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+  ir.innerHTML += `<div class="dp-info-item"><strong>${ts}</strong>Inicio</div>`;
+
+  // botones admin
+  document.getElementById('dp-admin-btns').style.display = isSA ? 'flex' : 'none';
+}
+
+function renderTimeline(acciones, op) {
+  const tl = document.getElementById('dp-timeline');
+  const t  = op ? (TIPOS[op.tipo] || TIPOS.otro) : TIPOS.otro;
+  const nivel = op ? op.nivel : 1;
+  if (!acciones.length) {
+    tl.innerHTML = '<div class="tl-empty">// Sin novedades registradas //</div>';
+    return;
+  }
+  tl.innerHTML = acciones.map(a => {
+    const ts = a.timestamp?.toDate ? a.timestamp.toDate().toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : a.ts || '—';
+    return `<div class="tl-entry">
+      <div class="tl-node tl-node-${nivel}">${t.emoji}</div>
+      <div class="tl-body">
+        <div class="tl-meta">
+          <span class="tl-ts">${ts}</span>
+          <span class="tl-prio prio-${a.prioridad}">${a.prioridad}</span>
+        </div>
+        <div class="tl-text">${a.texto}</div>
+        ${a.autor ? `<div class="tl-author">— ${a.autor}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── CAMBIAR NIVEL ──────────────────────────────────────────────────
+window.cambiarNivel = async (n) => {
+  if (!selOpId) return;
+  await updateDoc(doc(db, 'operaciones', selOpId), { nivel: n, actualizadoEn: serverTimestamp() });
+};
+
+// ── AÑADIR ACCIÓN ──────────────────────────────────────────────────
+window.addAccion = async () => {
+  if (!selOpId) return;
+  const texto = document.getElementById('a-texto').value.trim();
+  if (!texto) { document.getElementById('a-texto').focus(); return; }
+  const btn = document.getElementById('btn-reg-accion');
+  btn.disabled = true;
+  try {
+    await addDoc(collection(db, 'operaciones', selOpId, 'acciones'), {
+      texto,
+      prioridad: document.getElementById('a-prio').value,
+      autor:     document.getElementById('a-autor').value.trim() || currentUserDoc.nombre,
+      uid:       currentUser.uid,
+      timestamp: serverTimestamp()
+    });
+    await updateDoc(doc(db, 'operaciones', selOpId), { actualizadoEn: serverTimestamp() });
+    document.getElementById('a-texto').value = '';
+  } catch(e) { alert('Error al registrar: '+e.message); }
+  btn.disabled = false;
+};
+
+// ── BORRAR OPERACIÓN (super_admin) ─────────────────────────────────
+window.borrarOp = async () => {
+  if (!selOpId) return;
+  if (!confirm('¿Borrar esta operación? Esta acción no se puede deshacer.')) return;
+  await deleteDoc(doc(db, 'operaciones', selOpId));
+  cerrarDetalle();
+};
+
+// ── MODAL NUEVA OPERACIÓN ──────────────────────────────────────────
+window.abrirModalOp = () => {
+  document.getElementById('overlay-op').classList.add('open');
+  document.getElementById('f-nombre').focus();
+  if (coords) {
+    document.getElementById('coord-box').textContent = `📍 ${coords.lat}, ${coords.lng}`;
+    document.getElementById('coord-box').classList.add('show');
+  }
+};
+window.cerrarModalOp = () => {
+  document.getElementById('overlay-op').classList.remove('open');
+  coords = null;
+  document.getElementById('coord-box').classList.remove('show');
+  ['f-nombre','f-desc','f-loc','f-dir','f-org'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('f-tipo').value = 'inundacion';
+  document.getElementById('f-nivel').value = '3';
+};
+
+window.iniciarPick = () => {
+  picking = true;
+  document.getElementById('overlay-op').classList.remove('open');
+  document.getElementById('pick-banner').classList.add('on');
+  map.getContainer().style.cursor = 'crosshair';
+  showSection('operaciones');
+};
+function stopPick() {
+  picking = false;
+  document.getElementById('pick-banner').classList.remove('on');
+  map.getContainer().style.cursor = '';
+}
+
+window.crearOp = async () => {
+  const nombre = document.getElementById('f-nombre').value.trim();
+  if (!nombre) { document.getElementById('f-nombre').focus(); return; }
+  const btn = document.getElementById('btn-crear-op');
+  btn.disabled = true; btn.textContent = 'Creando…';
+  try {
+    const nivel = parseInt(document.getElementById('f-nivel').value);
+    const desc  = document.getElementById('f-desc').value.trim();
+    const ref   = await addDoc(collection(db, 'operaciones'), {
+      nombre,
+      tipo:         document.getElementById('f-tipo').value,
+      nivel,
+      loc:          document.getElementById('f-loc').value.trim(),
+      dir:          document.getElementById('f-dir').value.trim(),
+      org:          document.getElementById('f-org').value.trim(),
+      coords:       coords || null,
+      creadoPor:    currentUser.uid,
+      creadoEn:     serverTimestamp(),
+      actualizadoEn:serverTimestamp()
+    });
+    if (desc) {
+      await addDoc(collection(db, 'operaciones', ref.id, 'acciones'), {
+        texto:     desc,
+        prioridad: nivel <= 2 ? 'Crítica' : nivel === 3 ? 'Alta' : 'Media',
+        autor:     currentUserDoc.nombre || currentUser.email,
+        uid:       currentUser.uid,
+        timestamp: serverTimestamp()
+      });
+    }
+    cerrarModalOp();
+    abrirDetalle(ref.id);
+  } catch(e) { alert('Error: '+e.message); }
+  btn.disabled = false; btn.textContent = 'Crear operación →';
+};
+
+// ── GESTIÓN DE USUARIOS (super_admin) ─────────────────────────────
+window.showSection = (sec) => {
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
+  document.getElementById('section-operaciones').style.display = sec === 'operaciones' ? 'flex' : 'none';
+  document.getElementById('section-usuarios').style.display    = sec === 'usuarios'    ? 'flex' : 'none';
+  if (sec === 'usuarios') cargarUsuarios();
+  if (sec === 'operaciones' && map) setTimeout(() => map.invalidateSize(), 100);
+};
+
+async function cargarUsuarios() {
+  const snap  = await getDocs(collection(db, 'users'));
+  const tbody = document.getElementById('users-tbody');
+  tbody.innerHTML = '';
+  snap.forEach(d => {
+    const u   = d.data();
+    const tr  = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${u.nombre||'—'}</td>
+      <td>${u.email}</td>
+      <td><span class="rol-badge rol-${u.role}">${ROL_LABELS[u.role]||u.role}</span></td>
+      <td><span class="activo-badge ${u.activo!==false?'activo':'inactivo'}">${u.activo!==false?'Activo':'Inactivo'}</span></td>
+      <td>
+        <button class="tbl-btn" onclick="editarUsuario('${d.id}')">Editar</button>
+        ${d.id !== currentUser.uid ? `<button class="tbl-btn danger" onclick="borrarUsuario('${d.id}')">Borrar</button>` : '<span style="font-size:11px;color:var(--text-4)">(tú)</span>'}
+      </td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+window.abrirModalUsuario = () => {
+  editingUserId = null;
+  document.getElementById('modal-user-title').textContent = 'Nuevo usuario';
+  ['u-nombre','u-email','u-pass'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('u-role').value  = 'usuario';
+  document.getElementById('u-activo').value = 'true';
+  document.getElementById('u-pass-row').style.display = 'flex';
+  document.getElementById('overlay-user').classList.add('open');
+  document.getElementById('u-nombre').focus();
+};
+
+window.editarUsuario = async (uid) => {
+  const snap = await getDoc(doc(db, 'users', uid));
+  if (!snap.exists()) return;
+  const u = snap.data();
+  editingUserId = uid;
+  document.getElementById('modal-user-title').textContent = 'Editar usuario';
+  document.getElementById('u-nombre').value  = u.nombre || '';
+  document.getElementById('u-email').value   = u.email  || '';
+  document.getElementById('u-role').value    = u.role   || 'usuario';
+  document.getElementById('u-activo').value  = u.activo === false ? 'false' : 'true';
+  document.getElementById('u-pass-row').style.display = 'none'; // no cambiar pass aquí
+  document.getElementById('overlay-user').classList.add('open');
+};
+
+window.cerrarModalUsuario = () => {
+  document.getElementById('overlay-user').classList.remove('open');
+  editingUserId = null;
+};
+
+window.guardarUsuario = async () => {
+  const nombre = document.getElementById('u-nombre').value.trim();
+  const email  = document.getElementById('u-email').value.trim();
+  const pass   = document.getElementById('u-pass').value;
+  const role   = document.getElementById('u-role').value;
+  const activo = document.getElementById('u-activo').value === 'true';
+
+  if (!nombre || !email) { alert('Nombre y email son obligatorios.'); return; }
+  const btn = document.getElementById('btn-guardar-user');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+
+  try {
+    if (editingUserId) {
+      // Solo actualiza datos en Firestore (no cambia contraseña aquí — requeriría Admin SDK)
+      await updateDoc(doc(db, 'users', editingUserId), { nombre, role, activo });
+      mostrarToast('Usuario actualizado correctamente.');
+    } else {
+      // Crear usuario nuevo via Auth REST API
+      const res = await fetch(
+        `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=AIzaSyAHtrxaBazArqa8znWsUIVYxTsS7zoOOmc`,
+        { method:'POST', headers:{'Content-Type':'application/json'},
+          body: JSON.stringify({ email, password: pass, returnSecureToken: true }) }
+      );
+      const data = await res.json();
+      if (data.error) throw new Error(data.error.message);
+      await setDoc(doc(db, 'users', data.localId), {
+        nombre, email, role, activo,
+        creadoPor:  currentUser.uid,
+        creadoEn:   serverTimestamp()
+      });
+      mostrarToast('Usuario creado correctamente.');
+    }
+    cerrarModalUsuario();
+    cargarUsuarios();
+  } catch(e) { alert('Error: '+e.message); }
+  btn.disabled = false; btn.textContent = 'Guardar';
+};
+
+window.borrarUsuario = async (uid) => {
+  if (!confirm('¿Eliminar este usuario de Firestore? No podrá acceder.')) return;
+  // Desactivar en lugar de borrar Auth (requiere Admin SDK para borrar Auth)
+  await updateDoc(doc(db, 'users', uid), { activo: false });
+  mostrarToast('Usuario desactivado.');
+  cargarUsuarios();
+};
+
+// ── TOAST ──────────────────────────────────────────────────────────
+function mostrarToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ── HELPERS UI ─────────────────────────────────────────────────────
+function mostrarLogin() {
+  document.getElementById('screen-login').style.display = 'flex';
+  document.getElementById('screen-app').style.display   = 'none';
+}
+function mostrarApp() {
+  document.getElementById('screen-login').style.display = 'none';
+  document.getElementById('screen-app').style.display   = 'flex';
+}
+function mostrarError(ctx, msg) {
+  const el = document.getElementById(`err-${ctx}`);
+  if (el) { el.textContent = msg; el.style.display = 'block'; }
+}
+
+// Enter en login
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('l-pass')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') window.doLogin();
+  });
+  document.getElementById('l-email')?.addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('l-pass').focus();
+  });
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    window.cerrarModalOp && cerrarModalOp();
+    window.cerrarDetalle && cerrarDetalle();
+    window.cerrarModalUsuario && cerrarModalUsuario();
+    if (picking) stopPick();
+  }
+});
+
+</script>
+
 <style>
   :root {
-    --bg:       #f4f2ee;
-    --bg-1:     #ffffff;
-    --bg-2:     #f9f8f5;
-    --bg-3:     #eeece7;
-    --bg-4:     #e5e2da;
-
-    --text-1:   #1a1814;
-    --text-2:   #5c5848;
-    --text-3:   #9c9486;
-    --text-4:   #c8c0b2;
-
-    --border:       rgba(0,0,0,0.08);
-    --border-mid:   rgba(0,0,0,0.14);
-    --border-dark:  rgba(0,0,0,0.22);
-
-    /* Nivel / criticidad */
-    --crit-1: #c0392b;   /* Nivel 1 – Emergencia Mayor */
-    --crit-1-bg: #fdf1f0;
-    --crit-1-border: #e8b4b0;
-
-    --crit-2: #d35400;   /* Nivel 2 – Emergencia */
-    --crit-2-bg: #fef5ee;
-    --crit-2-border: #f0c8a0;
-
-    --crit-3: #c08c00;   /* Nivel 3 – Alerta */
-    --crit-3-bg: #fefbee;
-    --crit-3-border: #eadb94;
-
-    --crit-4: #1a7a4a;   /* Nivel 4 – Seguimiento */
-    --crit-4-bg: #f0faf4;
-    --crit-4-border: #a8d8bc;
-
-    /* Tipo catástrofe */
-    --t-inundacion:  #2980b9;
-    --t-incendio:    #c0392b;
-    --t-seismo:      #8e44ad;
-    --t-temporal:    #16a085;
-    --t-accidente:   #d35400;
-    --t-quimico:     #c0392b;
-    --t-sanitaria:   #e74c3c;
-    --t-otro:        #7f8c8d;
-
-    --accent:    #1a3a6e;
-    --accent-lt: #eaf0fb;
-
-    --shadow-sm: 0 1px 4px rgba(0,0,0,0.08);
-    --shadow-md: 0 4px 16px rgba(0,0,0,0.10);
-    --shadow-lg: 0 8px 32px rgba(0,0,0,0.14);
+    --bg:#f4f2ee; --bg-1:#ffffff; --bg-2:#f9f8f5; --bg-3:#eeece7; --bg-4:#e5e2da;
+    --text-1:#1a1814; --text-2:#5c5848; --text-3:#9c9486; --text-4:#c8c0b2;
+    --border:rgba(0,0,0,0.08); --border-mid:rgba(0,0,0,0.14); --border-dark:rgba(0,0,0,0.22);
+    --crit-1:#c0392b; --crit-1-bg:#fdf1f0; --crit-1-border:#e8b4b0;
+    --crit-2:#d35400; --crit-2-bg:#fef5ee; --crit-2-border:#f0c8a0;
+    --crit-3:#c08c00; --crit-3-bg:#fefbee; --crit-3-border:#eadb94;
+    --crit-4:#1a7a4a; --crit-4-bg:#f0faf4; --crit-4-border:#a8d8bc;
+    --accent:#1a3a6e; --accent-lt:#eaf0fb;
+    --shadow-sm:0 1px 4px rgba(0,0,0,0.08);
+    --shadow-md:0 4px 16px rgba(0,0,0,0.10);
+    --shadow-lg:0 8px 32px rgba(0,0,0,0.14);
   }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'IBM Plex Sans',sans-serif;background:var(--bg);color:var(--text-1);height:100vh;overflow:hidden;display:flex;flex-direction:column;font-size:14px;}
 
-  * { margin:0; padding:0; box-sizing:border-box; }
-
-  body {
-    font-family: 'IBM Plex Sans', sans-serif;
-    background: var(--bg);
-    color: var(--text-1);
-    height: 100vh;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    font-size: 14px;
+  /* ── LOGIN ── */
+  #screen-login{
+    display:flex; align-items:center; justify-content:center;
+    height:100vh; background:var(--bg);
   }
+  .login-card{
+    background:var(--bg-1); border:1px solid var(--border-dark);
+    border-radius:4px; padding:40px 40px 36px;
+    width:380px; box-shadow:var(--shadow-lg);
+    display:flex; flex-direction:column; gap:20px;
+  }
+  .login-logo{display:flex;align-items:center;gap:12px;margin-bottom:4px;}
+  .login-icon{width:40px;height:40px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;border-radius:2px;}
+  .login-title{font-family:'Fraunces',serif;font-size:22px;font-weight:700;color:var(--accent);}
+  .login-sub{font-size:10px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-3);}
+  .login-field{display:flex;flex-direction:column;gap:5px;}
+  .login-lbl{font-size:10px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-3);}
+  .login-input{background:var(--bg-2);border:1px solid var(--border-mid);color:var(--text-1);padding:9px 12px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;outline:none;border-radius:2px;transition:border-color 0.12s;}
+  .login-input:focus{border-color:var(--accent);}
+  .btn-login{padding:11px;background:var(--accent);border:none;color:#fff;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:600;border-radius:2px;transition:background 0.12s;}
+  .btn-login:hover{background:#253d6e;}
+  .btn-login:disabled{background:var(--text-4);cursor:not-allowed;}
+  .login-err{font-size:12px;color:var(--crit-1);background:var(--crit-1-bg);border:1px solid var(--crit-1-border);padding:8px 12px;border-radius:2px;display:none;}
+
+  /* ── APP ── */
+  #screen-app{display:flex;flex-direction:column;height:100vh;overflow:hidden;}
 
   /* ── HEADER ── */
-  header {
-    height: 56px;
-    background: var(--bg-1);
-    border-bottom: 1px solid var(--border-mid);
-    display: flex;
-    align-items: center;
-    padding: 0 20px;
-    gap: 20px;
-    flex-shrink: 0;
-    box-shadow: var(--shadow-sm);
-    z-index: 200;
-  }
+  header{height:54px;background:var(--bg-1);border-bottom:1px solid var(--border-mid);display:flex;align-items:center;padding:0 18px;gap:16px;flex-shrink:0;box-shadow:var(--shadow-sm);z-index:200;}
+  .logo-mark{display:flex;align-items:center;gap:9px;flex-shrink:0;}
+  .logo-icon{width:30px;height:30px;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;border-radius:2px;}
+  .logo-text{font-family:'Fraunces',serif;font-size:17px;font-weight:700;color:var(--accent);}
+  .logo-sub{font-size:8px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-3);}
+  .hdr-div{width:1px;height:26px;background:var(--border-mid);flex-shrink:0;}
+  .nivel-indicators{display:flex;gap:5px;}
+  .nivel-chip{display:flex;align-items:center;gap:5px;padding:3px 9px;border-radius:2px;border:1px solid;}
+  .nivel-chip-val{font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:500;}
+  .nivel-chip-lbl{font-size:8px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;}
+  .chip-n1{background:var(--crit-1-bg);border-color:var(--crit-1-border);color:var(--crit-1);}
+  .chip-n2{background:var(--crit-2-bg);border-color:var(--crit-2-border);color:var(--crit-2);}
+  .chip-n3{background:var(--crit-3-bg);border-color:var(--crit-3-border);color:var(--crit-3);}
+  .chip-n4{background:var(--crit-4-bg);border-color:var(--crit-4-border);color:var(--crit-4);}
+  .hdr-right{display:flex;align-items:center;gap:10px;margin-left:auto;flex-shrink:0;}
+  .hdr-user-info{text-align:right;}
+  .hdr-user-name{font-size:13px;font-weight:600;color:var(--text-1);}
+  .hdr-user-role{font-size:10px;color:var(--text-3);letter-spacing:0.04em;}
+  .live-dot{width:7px;height:7px;border-radius:50%;background:#27ae60;box-shadow:0 0 0 2px rgba(39,174,96,0.25);animation:livepulse 2.5s infinite;}
+  @keyframes livepulse{0%,100%{box-shadow:0 0 0 2px rgba(39,174,96,0.25)}50%{box-shadow:0 0 0 5px rgba(39,174,96,0.1)}}
+  .clock{font-family:'IBM Plex Mono',monospace;font-size:12px;color:var(--text-2);}
+  .btn-nueva{display:flex;align-items:center;gap:6px;background:var(--accent);color:#fff;border:none;cursor:pointer;padding:7px 14px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;border-radius:2px;transition:background 0.12s;white-space:nowrap;}
+  .btn-nueva:hover{background:#253d6e;}
+  .btn-logout{padding:6px 12px;background:transparent;border:1px solid var(--border-mid);color:var(--text-3);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:11px;border-radius:2px;transition:all 0.12s;}
+  .btn-logout:hover{border-color:var(--border-dark);color:var(--text-1);}
 
-  .logo-mark {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-shrink: 0;
-  }
-  .logo-icon {
-    width: 32px;
-    height: 32px;
-    background: var(--accent);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-size: 16px;
-  }
-  .logo-text {
-    font-family: 'Fraunces', serif;
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--accent);
-    letter-spacing: -0.01em;
-    line-height: 1;
-  }
-  .logo-sub {
-    font-size: 9px;
-    font-weight: 500;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--text-3);
-    line-height: 1;
-    margin-top: 2px;
-  }
+  /* ── NAV ── */
+  .app-nav{display:flex;gap:0;border-bottom:1px solid var(--border-mid);background:var(--bg-1);flex-shrink:0;padding:0 18px;}
+  .nav-item{display:flex;align-items:center;gap:6px;padding:10px 16px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text-3);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:500;transition:all 0.12s;margin-bottom:-1px;}
+  .nav-item:hover{color:var(--text-1);}
+  .nav-item.on{color:var(--accent);border-bottom-color:var(--accent);font-weight:600;}
 
-  .header-divider {
-    width: 1px;
-    height: 28px;
-    background: var(--border-mid);
-    flex-shrink: 0;
-  }
-
-  .nivel-indicators {
-    display: flex;
-    gap: 6px;
-    flex: 1;
-  }
-  .nivel-chip {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 2px;
-    border: 1px solid;
-    cursor: default;
-  }
-  .nivel-chip-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-  }
-  .nivel-chip-val {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 15px;
-    font-weight: 500;
-    line-height: 1;
-  }
-  .nivel-chip-lbl {
-    font-size: 9px;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .chip-n1 { background: var(--crit-1-bg); border-color: var(--crit-1-border); color: var(--crit-1); }
-  .chip-n2 { background: var(--crit-2-bg); border-color: var(--crit-2-border); color: var(--crit-2); }
-  .chip-n3 { background: var(--crit-3-bg); border-color: var(--crit-3-border); color: var(--crit-3); }
-  .chip-n4 { background: var(--crit-4-bg); border-color: var(--crit-4-border); color: var(--crit-4); }
-
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-shrink: 0;
-  }
-
-  .live-indicator {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--text-3);
-    letter-spacing: 0.04em;
-  }
-  .live-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: #27ae60;
-    box-shadow: 0 0 0 2px rgba(39,174,96,0.25);
-    animation: livepulse 2.5s infinite;
-  }
-  @keyframes livepulse { 0%,100%{box-shadow:0 0 0 2px rgba(39,174,96,0.25)} 50%{box-shadow:0 0 0 5px rgba(39,174,96,0.1)} }
-
-  .clock {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 13px;
-    color: var(--text-2);
-    letter-spacing: 0.04em;
-  }
-
-  .btn-nueva {
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    background: var(--accent);
-    color: #fff;
-    border: none;
-    cursor: pointer;
-    padding: 8px 16px;
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    transition: background 0.15s, box-shadow 0.15s;
-    border-radius: 2px;
-    white-space: nowrap;
-  }
-  .btn-nueva:hover { background: #253d6e; box-shadow: var(--shadow-md); }
-
-  /* ── MAIN LAYOUT ── */
-  .main {
-    display: flex;
-    flex: 1;
-    overflow: hidden;
-  }
+  /* ── SECTIONS ── */
+  #section-operaciones{flex:1;overflow:hidden;display:flex;}
+  #section-usuarios{flex:1;overflow:hidden;display:none;flex-direction:column;padding:24px;gap:16px;background:var(--bg);}
 
   /* ── PANEL IZQUIERDO ── */
-  .panel-left {
-    width: 340px;
-    flex-shrink: 0;
-    display: flex;
-    flex-direction: column;
-    background: var(--bg-1);
-    border-right: 1px solid var(--border-mid);
-    overflow: hidden;
-  }
+  .panel-left{width:320px;flex-shrink:0;display:flex;flex-direction:column;background:var(--bg-1);border-right:1px solid var(--border-mid);}
+  .panel-left-head{padding:12px 14px 10px;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .section-label{font-size:9px;font-weight:600;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-3);margin-bottom:8px;}
+  .filter-tabs{display:flex;border:1px solid var(--border-mid);border-radius:2px;overflow:hidden;}
+  .ftab{flex:1;padding:5px 4px;background:var(--bg-2);border:none;border-right:1px solid var(--border);color:var(--text-3);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:11px;font-weight:600;transition:all 0.12s;}
+  .ftab:last-child{border-right:none;}
+  .ftab.on{background:var(--bg-1);color:var(--text-1);}
+  .ftab.on-n1{background:var(--crit-1-bg);color:var(--crit-1);}
+  .ftab.on-n2{background:var(--crit-2-bg);color:var(--crit-2);}
+  .ftab.on-n3{background:var(--crit-3-bg);color:var(--crit-3);}
+  .ftab.on-n4{background:var(--crit-4-bg);color:var(--crit-4);}
+  .ops-list{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:5px;}
+  .ops-list::-webkit-scrollbar{width:3px;}
+  .ops-list::-webkit-scrollbar-thumb{background:var(--bg-4);}
+  .empty-msg{display:none;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;gap:8px;color:var(--text-4);text-align:center;font-size:12px;}
+  .empty-msg.show{display:flex;}
 
-  .panel-left-head {
-    padding: 14px 16px 10px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
+  .op-card{background:var(--bg-1);border:1px solid var(--border-mid);border-left:4px solid transparent;padding:10px 12px;cursor:pointer;transition:all 0.12s;border-radius:0 2px 2px 0;box-shadow:var(--shadow-sm);}
+  .op-card:hover{box-shadow:var(--shadow-md);}
+  .op-card.sel{background:var(--accent-lt);}
+  .op-card[data-nivel="1"]{border-left-color:var(--crit-1);}
+  .op-card[data-nivel="2"]{border-left-color:var(--crit-2);}
+  .op-card[data-nivel="3"]{border-left-color:var(--crit-3);}
+  .op-card[data-nivel="4"]{border-left-color:var(--crit-4);}
+  .card-top{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:5px;}
+  .card-id{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text-3);margin-bottom:2px;}
+  .card-name{font-size:13px;font-weight:600;line-height:1.2;}
+  .card-type-tag{font-size:10px;font-weight:600;padding:2px 6px;border-radius:10px;white-space:nowrap;flex-shrink:0;border:1px solid;}
+  .card-meta{display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--text-3);}
+  .nivel-pill{font-size:9px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;padding:2px 6px;border-radius:2px;border:1px solid;}
+  .pill-1{background:var(--crit-1-bg);color:var(--crit-1);border-color:var(--crit-1-border);}
+  .pill-2{background:var(--crit-2-bg);color:var(--crit-2);border-color:var(--crit-2-border);}
+  .pill-3{background:var(--crit-3-bg);color:var(--crit-3);border-color:var(--crit-3-border);}
+  .pill-4{background:var(--crit-4-bg);color:var(--crit-4);border-color:var(--crit-4-border);}
 
-  .section-label {
-    font-size: 9px;
-    font-weight: 600;
-    letter-spacing: 0.14em;
-    text-transform: uppercase;
-    color: var(--text-3);
-    margin-bottom: 10px;
-  }
-
-  .filter-tabs {
-    display: flex;
-    border: 1px solid var(--border-mid);
-    border-radius: 2px;
-    overflow: hidden;
-  }
-  .ftab {
-    flex: 1;
-    padding: 6px 4px;
-    background: var(--bg-2);
-    border: none;
-    color: var(--text-3);
-    cursor: pointer;
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    transition: all 0.12s;
-    border-right: 1px solid var(--border);
-  }
-  .ftab:last-child { border-right: none; }
-  .ftab:hover { background: var(--bg-3); color: var(--text-2); }
-  .ftab.on { background: var(--bg-1); color: var(--text-1); font-weight: 600; }
-  .ftab.on-n1 { background: var(--crit-1-bg); color: var(--crit-1); }
-  .ftab.on-n2 { background: var(--crit-2-bg); color: var(--crit-2); }
-  .ftab.on-n3 { background: var(--crit-3-bg); color: var(--crit-3); }
-  .ftab.on-n4 { background: var(--crit-4-bg); color: var(--crit-4); }
-
-  .ops-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 10px;
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-  .ops-list::-webkit-scrollbar { width: 4px; }
-  .ops-list::-webkit-scrollbar-track { background: transparent; }
-  .ops-list::-webkit-scrollbar-thumb { background: var(--bg-4); border-radius: 2px; }
-
-  .empty-msg {
-    display: none;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 40px 20px;
-    gap: 10px;
-    color: var(--text-4);
-    text-align: center;
-    font-size: 12px;
-  }
-  .empty-msg.show { display: flex; }
-  .empty-msg-icon { font-size: 32px; opacity: 0.4; }
-
-  /* OP CARD */
-  .op-card {
-    background: var(--bg-1);
-    border: 1px solid var(--border-mid);
-    border-left: 4px solid transparent;
-    padding: 11px 13px;
-    cursor: pointer;
-    transition: all 0.12s;
-    border-radius: 0 2px 2px 0;
-    box-shadow: var(--shadow-sm);
-    position: relative;
-  }
-  .op-card:hover { box-shadow: var(--shadow-md); border-color: var(--border-dark); }
-  .op-card.sel { background: var(--accent-lt); border-color: var(--border-dark); box-shadow: var(--shadow-md); }
-
-  .op-card[data-nivel="1"] { border-left-color: var(--crit-1); }
-  .op-card[data-nivel="2"] { border-left-color: var(--crit-2); }
-  .op-card[data-nivel="3"] { border-left-color: var(--crit-3); }
-  .op-card[data-nivel="4"] { border-left-color: var(--crit-4); }
-
-  .card-top {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 5px;
-  }
-  .card-id {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 9px;
-    color: var(--text-3);
-    margin-bottom: 2px;
-  }
-  .card-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-1);
-    line-height: 1.2;
-  }
-  .card-type-tag {
-    font-size: 10px;
-    font-weight: 600;
-    padding: 2px 7px;
-    border-radius: 10px;
-    letter-spacing: 0.03em;
-    white-space: nowrap;
-    flex-shrink: 0;
-    border: 1px solid;
-  }
-  .card-meta {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    font-size: 11px;
-    color: var(--text-3);
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-  .card-loc { display: flex; align-items: center; gap: 3px; }
-  .card-bottom {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  .nivel-pill {
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    padding: 2px 6px;
-    border-radius: 2px;
-    border: 1px solid;
-  }
-  .pill-1 { background: var(--crit-1-bg); color: var(--crit-1); border-color: var(--crit-1-border); }
-  .pill-2 { background: var(--crit-2-bg); color: var(--crit-2); border-color: var(--crit-2-border); }
-  .pill-3 { background: var(--crit-3-bg); color: var(--crit-3); border-color: var(--crit-3-border); }
-  .pill-4 { background: var(--crit-4-bg); color: var(--crit-4); border-color: var(--crit-4-border); }
-  .act-count {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 10px;
-    color: var(--text-4);
-  }
-
-  /* ── MAP ZONE ── */
-  .map-zone {
-    flex: 1;
-    position: relative;
-    overflow: hidden;
-  }
-  #map {
-    width: 100%;
-    height: 100%;
-  }
-
-  .pick-banner {
-    display: none;
-    position: absolute;
-    top: 14px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: var(--accent);
-    color: #fff;
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    padding: 9px 20px;
-    z-index: 600;
-    border-radius: 2px;
-    box-shadow: var(--shadow-lg);
-    pointer-events: none;
-    letter-spacing: 0.02em;
-    animation: blink-soft 1.4s infinite;
-  }
-  @keyframes blink-soft { 0%,100%{opacity:1} 50%{opacity:0.75} }
-  .pick-banner.on { display: block; }
+  /* ── MAP ── */
+  .map-zone{flex:1;position:relative;overflow:hidden;}
+  #map{width:100%;height:100%;}
+  .pick-banner{display:none;position:absolute;top:14px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;font-size:13px;font-weight:600;padding:9px 20px;z-index:600;border-radius:2px;box-shadow:var(--shadow-lg);pointer-events:none;animation:blinkS 1.4s infinite;}
+  @keyframes blinkS{0%,100%{opacity:1}50%{opacity:0.7}}
+  .pick-banner.on{display:block;}
 
   /* ── DETAIL PANEL ── */
-  .detail-panel {
-    position: absolute;
-    top: 12px;
-    right: 12px;
-    width: 380px;
-    max-height: calc(100vh - 82px);
-    background: var(--bg-1);
-    border: 1px solid var(--border-dark);
-    border-radius: 2px;
-    box-shadow: var(--shadow-lg);
-    display: none;
-    flex-direction: column;
-    z-index: 500;
-  }
-  .detail-panel.open {
-    display: flex;
-    animation: panelIn 0.18s ease;
-  }
-  @keyframes panelIn { from { opacity:0; transform: translateX(16px); } to { opacity:1; transform:none; } }
+  .detail-panel{position:absolute;top:12px;right:12px;width:370px;max-height:calc(100vh - 130px);background:var(--bg-1);border:1px solid var(--border-dark);border-radius:2px;box-shadow:var(--shadow-lg);display:none;flex-direction:column;z-index:500;}
+  .detail-panel.open{display:flex;animation:panelIn 0.18s ease;}
+  @keyframes panelIn{from{opacity:0;transform:translateX(14px)}to{opacity:1;transform:none}}
+  .dp-header{padding:14px 16px 10px;border-bottom:1px solid var(--border);flex-shrink:0;}
+  .dp-top-row{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:8px;}
+  .dp-id{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text-3);margin-bottom:2px;}
+  .dp-name{font-family:'Fraunces',serif;font-size:18px;font-weight:700;line-height:1.1;}
+  .btn-close-dp{background:var(--bg-3);border:1px solid var(--border-mid);color:var(--text-3);cursor:pointer;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;border-radius:2px;transition:all 0.12s;}
+  .btn-close-dp:hover{background:var(--bg-4);color:var(--text-1);}
+  .dp-chips{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .dp-loc{font-size:12px;color:var(--text-2);font-weight:500;}
+  .nivel-selector{display:flex;border:1px solid var(--border-mid);border-radius:2px;overflow:hidden;}
+  .nsel-opt{padding:4px 8px;font-size:9px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;cursor:pointer;background:var(--bg-2);border:none;border-right:1px solid var(--border);color:var(--text-3);font-family:'IBM Plex Sans',sans-serif;transition:all 0.1s;}
+  .nsel-opt:last-child{border-right:none;}
+  .nsel-opt:disabled{cursor:not-allowed;opacity:0.5;}
+  .nsel-opt[data-n="1"].on{background:var(--crit-1-bg);color:var(--crit-1);}
+  .nsel-opt[data-n="2"].on{background:var(--crit-2-bg);color:var(--crit-2);}
+  .nsel-opt[data-n="3"].on{background:var(--crit-3-bg);color:var(--crit-3);}
+  .nsel-opt[data-n="4"].on{background:var(--crit-4-bg);color:var(--crit-4);}
+  .dp-info-row{padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;gap:16px;flex-wrap:wrap;}
+  .dp-info-item{font-size:10px;color:var(--text-3);}
+  .dp-info-item strong{display:block;font-size:11px;color:var(--text-2);font-weight:500;}
+  .dp-timeline{flex:1;overflow-y:auto;padding:12px 16px;}
+  .dp-timeline::-webkit-scrollbar{width:3px;}
+  .dp-timeline::-webkit-scrollbar-thumb{background:var(--bg-4);}
+  .tl-empty{text-align:center;padding:24px 0;color:var(--text-4);font-size:11px;font-family:'IBM Plex Mono',monospace;}
+  .tl-entry{display:flex;gap:10px;position:relative;padding-bottom:14px;animation:entryIn 0.2s ease;}
+  @keyframes entryIn{from{opacity:0;transform:translateY(5px)}to{opacity:1}}
+  .tl-entry:not(:last-child)::before{content:'';position:absolute;left:11px;top:22px;bottom:0;width:1px;background:var(--border-mid);}
+  .tl-node{width:22px;height:22px;border-radius:50%;flex-shrink:0;border:2px solid var(--border-dark);background:var(--bg-1);display:flex;align-items:center;justify-content:center;font-size:9px;z-index:1;position:relative;}
+  .tl-node-1{border-color:var(--crit-1);background:var(--crit-1-bg);}
+  .tl-node-2{border-color:var(--crit-2);background:var(--crit-2-bg);}
+  .tl-node-3{border-color:var(--crit-3);background:var(--crit-3-bg);}
+  .tl-node-4{border-color:var(--crit-4);background:var(--crit-4-bg);}
+  .tl-body{flex:1;}
+  .tl-meta{display:flex;align-items:center;gap:6px;margin-bottom:3px;}
+  .tl-ts{font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--text-4);}
+  .tl-prio{font-size:9px;font-weight:700;padding:1px 5px;border-radius:10px;}
+  .prio-Crítica{background:var(--crit-1-bg);color:var(--crit-1);}
+  .prio-Alta{background:var(--crit-2-bg);color:var(--crit-2);}
+  .prio-Media{background:var(--crit-3-bg);color:var(--crit-3);}
+  .prio-Baja{background:var(--crit-4-bg);color:var(--crit-4);}
+  .tl-text{font-size:12px;line-height:1.5;}
+  .tl-author{font-size:10px;color:var(--text-3);margin-top:2px;font-style:italic;}
+  .dp-addaction{padding:10px 16px 14px;border-top:1px solid var(--border-mid);flex-shrink:0;background:var(--bg-2);}
+  .dp-admin-btns{display:none;gap:6px;padding:8px 16px;border-top:1px solid var(--border);flex-shrink:0;}
+  .btn-danger{padding:6px 12px;background:var(--crit-1-bg);border:1px solid var(--crit-1-border);color:var(--crit-1);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:11px;font-weight:600;border-radius:2px;}
+  .btn-danger:hover{background:var(--crit-1);color:#fff;}
 
-  .dp-header {
-    padding: 16px 18px 12px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  .dp-top-row {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 8px;
-    margin-bottom: 10px;
-  }
-  .dp-id {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 10px;
-    color: var(--text-3);
-    margin-bottom: 3px;
-  }
-  .dp-name {
-    font-family: 'Fraunces', serif;
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--text-1);
-    line-height: 1.1;
-  }
-  .btn-close-dp {
-    background: var(--bg-3);
-    border: 1px solid var(--border-mid);
-    color: var(--text-3);
-    cursor: pointer;
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 14px;
-    flex-shrink: 0;
-    border-radius: 2px;
-    transition: all 0.12s;
-  }
-  .btn-close-dp:hover { background: var(--bg-4); color: var(--text-1); }
-
-  .dp-chips {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    flex-wrap: wrap;
-  }
-
-  .dp-loc {
-    font-size: 12px;
-    color: var(--text-2);
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-weight: 500;
-  }
-
-  /* Nivel selector */
-  .nivel-selector {
-    display: flex;
-    border: 1px solid var(--border-mid);
-    border-radius: 2px;
-    overflow: hidden;
-    flex-shrink: 0;
-  }
-  .nsel-opt {
-    padding: 4px 9px;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    cursor: pointer;
-    background: var(--bg-2);
-    border: none;
-    border-right: 1px solid var(--border);
-    color: var(--text-3);
-    font-family: 'IBM Plex Sans', sans-serif;
-    transition: all 0.1s;
-  }
-  .nsel-opt:last-child { border-right: none; }
-  .nsel-opt[data-n="1"].on { background: var(--crit-1-bg); color: var(--crit-1); }
-  .nsel-opt[data-n="2"].on { background: var(--crit-2-bg); color: var(--crit-2); }
-  .nsel-opt[data-n="3"].on { background: var(--crit-3-bg); color: var(--crit-3); }
-  .nsel-opt[data-n="4"].on { background: var(--crit-4-bg); color: var(--crit-4); }
-
-  /* IC row */
-  .dp-info-row {
-    padding: 8px 18px;
-    border-bottom: 1px solid var(--border);
-    flex-shrink: 0;
-    display: flex;
-    gap: 20px;
-  }
-  .dp-info-item { font-size: 11px; color: var(--text-3); }
-  .dp-info-item strong { display: block; font-size: 12px; color: var(--text-2); font-weight: 500; }
-
-  /* Timeline */
-  .dp-timeline {
-    flex: 1;
-    overflow-y: auto;
-    padding: 14px 18px;
-  }
-  .dp-timeline::-webkit-scrollbar { width: 3px; }
-  .dp-timeline::-webkit-scrollbar-thumb { background: var(--bg-4); }
-
-  .tl-empty {
-    text-align: center;
-    padding: 30px 0;
-    color: var(--text-4);
-    font-size: 12px;
-    font-family: 'IBM Plex Mono', monospace;
-  }
-
-  .tl-entry {
-    display: flex;
-    gap: 12px;
-    position: relative;
-    padding-bottom: 18px;
-    animation: entryIn 0.2s ease;
-  }
-  @keyframes entryIn { from { opacity:0; transform: translateY(6px); } to { opacity:1; } }
-  .tl-entry:not(:last-child)::before {
-    content: '';
-    position: absolute;
-    left: 11px;
-    top: 24px;
-    bottom: 0;
-    width: 1px;
-    background: var(--border-mid);
-  }
-  .tl-node {
-    width: 23px;
-    height: 23px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    border: 2px solid var(--border-dark);
-    background: var(--bg-1);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 10px;
-    z-index: 1;
-    position: relative;
-    margin-top: 1px;
-  }
-  .tl-node-1 { border-color: var(--crit-1); background: var(--crit-1-bg); }
-  .tl-node-2 { border-color: var(--crit-2); background: var(--crit-2-bg); }
-  .tl-node-3 { border-color: var(--crit-3); background: var(--crit-3-bg); }
-  .tl-node-4 { border-color: var(--crit-4); background: var(--crit-4-bg); }
-
-  .tl-body { flex: 1; }
-  .tl-meta {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 4px;
-  }
-  .tl-ts {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 9px;
-    color: var(--text-4);
-  }
-  .tl-prio {
-    font-size: 9px;
-    font-weight: 700;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    padding: 1px 6px;
-    border-radius: 10px;
-  }
-  .prio-Crítica { background: var(--crit-1-bg); color: var(--crit-1); }
-  .prio-Alta    { background: var(--crit-2-bg); color: var(--crit-2); }
-  .prio-Media   { background: var(--crit-3-bg); color: var(--crit-3); }
-  .prio-Baja    { background: var(--crit-4-bg); color: var(--crit-4); }
-
-  .tl-text {
-    font-size: 13px;
-    color: var(--text-1);
-    line-height: 1.5;
-  }
-  .tl-author {
-    font-size: 11px;
-    color: var(--text-3);
-    margin-top: 3px;
-    font-style: italic;
-  }
-
-  /* Add action */
-  .dp-addaction {
-    padding: 12px 18px 16px;
-    border-top: 1px solid var(--border-mid);
-    flex-shrink: 0;
-    background: var(--bg-2);
-  }
-  .dp-addaction .section-label { margin-bottom: 8px; }
-
-  .form-row { display: flex; gap: 6px; margin-bottom: 6px; }
-  .f-input {
-    background: var(--bg-1);
-    border: 1px solid var(--border-mid);
-    color: var(--text-1);
-    padding: 7px 10px;
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 12px;
-    outline: none;
-    border-radius: 2px;
-    transition: border-color 0.12s;
-    width: 100%;
-  }
-  .f-input:focus { border-color: var(--accent); }
-  .f-input::placeholder { color: var(--text-4); }
-  .f-select {
-    background: var(--bg-1);
-    border: 1px solid var(--border-mid);
-    color: var(--text-2);
-    padding: 7px 8px;
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 12px;
-    outline: none;
-    cursor: pointer;
-    border-radius: 2px;
-    flex-shrink: 0;
-  }
-  .btn-reg {
-    width: 100%;
-    padding: 9px;
-    background: var(--accent);
-    border: none;
-    color: #fff;
-    cursor: pointer;
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-    border-radius: 2px;
-    transition: background 0.12s, box-shadow 0.12s;
-    margin-top: 4px;
-  }
-  .btn-reg:hover { background: #253d6e; box-shadow: var(--shadow-md); }
+  /* ── FORM INPUTS ── */
+  .f-input{background:var(--bg-1);border:1px solid var(--border-mid);color:var(--text-1);padding:7px 10px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;outline:none;border-radius:2px;transition:border-color 0.12s;width:100%;}
+  .f-input:focus{border-color:var(--accent);}
+  .f-input::placeholder{color:var(--text-4);}
+  .f-select{background:var(--bg-1);border:1px solid var(--border-mid);color:var(--text-2);padding:7px 8px;font-family:'IBM Plex Sans',sans-serif;font-size:12px;outline:none;cursor:pointer;border-radius:2px;flex-shrink:0;}
+  .form-row{display:flex;gap:6px;margin-bottom:6px;}
+  .btn-reg{width:100%;padding:8px;background:var(--accent);border:none;color:#fff;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;border-radius:2px;transition:background 0.12s;margin-top:4px;}
+  .btn-reg:hover{background:#253d6e;}
+  .btn-reg:disabled{background:var(--text-4);cursor:not-allowed;}
+  .coord-box{font-family:'IBM Plex Mono',monospace;font-size:11px;color:#1a7a4a;background:var(--crit-4-bg);border:1px solid var(--crit-4-border);padding:5px 10px;border-radius:2px;display:none;margin-top:4px;}
+  .coord-box.show{display:block;}
+  .btn-mapa{padding:7px 11px;background:var(--accent-lt);border:1px solid #c0cfe8;color:var(--accent);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;border-radius:2px;white-space:nowrap;flex-shrink:0;}
 
   /* ── MODAL ── */
-  .overlay {
-    display: none;
-    position: fixed;
-    inset: 0;
-    background: rgba(30,25,15,0.45);
-    z-index: 1000;
-    align-items: center;
-    justify-content: center;
-    backdrop-filter: blur(4px);
-  }
-  .overlay.open { display: flex; animation: fadeO 0.15s ease; }
-  @keyframes fadeO { from { opacity:0; } to { opacity:1; } }
+  .overlay{display:none;position:fixed;inset:0;background:rgba(30,25,15,0.45);z-index:1000;align-items:center;justify-content:center;backdrop-filter:blur(4px);}
+  .overlay.open{display:flex;animation:fadeO 0.15s ease;}
+  @keyframes fadeO{from{opacity:0}to{opacity:1}}
+  .modal{background:var(--bg-1);border:1px solid var(--border-dark);border-radius:3px;width:500px;max-width:96vw;box-shadow:var(--shadow-lg);animation:modalIn 0.18s ease;max-height:92vh;display:flex;flex-direction:column;overflow:hidden;}
+  @keyframes modalIn{from{opacity:0;transform:translateY(-14px)}to{opacity:1;transform:none}}
+  .modal-head{padding:18px 20px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+  .modal-title{font-family:'Fraunces',serif;font-size:18px;font-weight:700;}
+  .modal-body{padding:16px 20px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;}
+  .field{display:flex;flex-direction:column;gap:4px;}
+  .field-lbl{font-size:9px;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-3);}
+  .field-row{display:flex;gap:10px;}
+  .modal-foot{padding:12px 20px 16px;display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border);flex-shrink:0;}
+  .btn-cancel-m{padding:8px 16px;background:var(--bg-2);border:1px solid var(--border-mid);color:var(--text-2);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:500;border-radius:2px;}
+  .btn-create-m{padding:8px 20px;background:var(--accent);border:none;color:#fff;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;border-radius:2px;transition:background 0.12s;}
+  .btn-create-m:hover{background:#253d6e;}
+  .btn-create-m:disabled{background:var(--text-4);cursor:not-allowed;}
 
-  .modal {
-    background: var(--bg-1);
-    border: 1px solid var(--border-dark);
-    border-radius: 3px;
-    width: 520px;
-    max-width: 96vw;
-    box-shadow: var(--shadow-lg);
-    animation: modalIn 0.18s ease;
-    max-height: 92vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  @keyframes modalIn { from { opacity:0; transform: translateY(-16px); } to { opacity:1; transform: none; } }
+  /* ── TABLA USUARIOS ── */
+  .users-toolbar{display:flex;align-items:center;justify-content:space-between;}
+  .users-table-wrap{flex:1;overflow:auto;background:var(--bg-1);border:1px solid var(--border-mid);border-radius:3px;box-shadow:var(--shadow-sm);}
+  table{width:100%;border-collapse:collapse;}
+  thead tr{background:var(--bg-2);border-bottom:2px solid var(--border-mid);}
+  th{padding:10px 14px;text-align:left;font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-3);}
+  td{padding:10px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  tr:hover td{background:var(--bg-2);}
+  .rol-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;letter-spacing:0.04em;}
+  .rol-super_admin{background:#e8f0fb;color:var(--accent);border:1px solid #c0cfe8;}
+  .rol-admin{background:var(--crit-3-bg);color:var(--crit-3);border:1px solid var(--crit-3-border);}
+  .rol-usuario{background:var(--bg-3);color:var(--text-2);border:1px solid var(--border-mid);}
+  .activo-badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:10px;}
+  .activo{background:var(--crit-4-bg);color:var(--crit-4);border:1px solid var(--crit-4-border);}
+  .inactivo{background:var(--crit-1-bg);color:var(--crit-1);border:1px solid var(--crit-1-border);}
+  .tbl-btn{padding:4px 10px;background:var(--bg-2);border:1px solid var(--border-mid);color:var(--text-2);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:11px;font-weight:500;border-radius:2px;margin-right:4px;transition:all 0.1s;}
+  .tbl-btn:hover{background:var(--bg-3);}
+  .tbl-btn.danger{color:var(--crit-1);border-color:var(--crit-1-border);}
+  .tbl-btn.danger:hover{background:var(--crit-1);color:#fff;}
 
-  .modal-head {
-    padding: 20px 22px 16px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-shrink: 0;
-  }
-  .modal-title {
-    font-family: 'Fraunces', serif;
-    font-size: 20px;
-    font-weight: 700;
-    color: var(--text-1);
-  }
-  .modal-body {
-    padding: 18px 22px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    overflow-y: auto;
-  }
-  .field { display: flex; flex-direction: column; gap: 5px; }
-  .field-lbl {
-    font-size: 10px;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text-3);
-  }
-  .field-row { display: flex; gap: 10px; }
-  .modal-foot {
-    padding: 14px 22px 18px;
-    display: flex;
-    gap: 8px;
-    justify-content: flex-end;
-    border-top: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  .btn-cancel-m {
-    padding: 9px 18px;
-    background: var(--bg-2);
-    border: 1px solid var(--border-mid);
-    color: var(--text-2);
-    cursor: pointer;
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 13px;
-    font-weight: 500;
-    border-radius: 2px;
-    transition: all 0.12s;
-  }
-  .btn-cancel-m:hover { background: var(--bg-3); border-color: var(--border-dark); }
-  .btn-create-m {
-    padding: 9px 22px;
-    background: var(--accent);
-    border: none;
-    color: #fff;
-    cursor: pointer;
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 13px;
-    font-weight: 600;
-    border-radius: 2px;
-    transition: all 0.12s;
-  }
-  .btn-create-m:hover { background: #253d6e; box-shadow: var(--shadow-md); }
+  /* ── TOAST ── */
+  #toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--accent);color:#fff;padding:10px 22px;border-radius:2px;font-size:13px;font-weight:500;box-shadow:var(--shadow-lg);opacity:0;transition:all 0.25s;pointer-events:none;z-index:2000;}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
-  .coord-box {
-    font-family: 'IBM Plex Mono', monospace;
-    font-size: 11px;
-    color: #1a7a4a;
-    background: var(--crit-4-bg);
-    border: 1px solid var(--crit-4-border);
-    padding: 6px 10px;
-    border-radius: 2px;
-    display: none;
-    margin-top: 4px;
-  }
-  .coord-box.show { display: block; }
-
-  .btn-mapa {
-    padding: 7px 12px;
-    background: var(--accent-lt);
-    border: 1px solid #c0cfe8;
-    color: var(--accent);
-    cursor: pointer;
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 12px;
-    font-weight: 600;
-    border-radius: 2px;
-    white-space: nowrap;
-    transition: all 0.12s;
-    flex-shrink: 0;
-  }
-  .btn-mapa:hover { background: #d0dcf2; }
-
-  /* ── Custom Leaflet Markers ── */
-  .cmark { display:flex; flex-direction:column; align-items:center; }
-  .cmark-body {
-    width: 34px; height: 34px;
-    border-radius: 50% 50% 50% 0;
-    transform: rotate(-45deg);
-    display: flex; align-items: center; justify-content: center;
-    font-size: 14px;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.25);
-    border: 2px solid rgba(255,255,255,0.8);
-  }
-  .cmark-body span { transform: rotate(45deg); display:block; }
-  .cmark-n1 { background: var(--crit-1); }
-  .cmark-n2 { background: var(--crit-2); }
-  .cmark-n3 { background: var(--crit-3); }
-  .cmark-n4 { background: var(--crit-4); }
-  .cmark-closed { opacity: 0.45; filter: grayscale(0.6); }
-
-  /* Leaflet popup */
-  .leaflet-popup-content-wrapper {
-    background: #fff !important;
-    border: 1px solid var(--border-dark) !important;
-    border-radius: 3px !important;
-    box-shadow: var(--shadow-lg) !important;
-    padding: 0 !important;
-  }
-  .leaflet-popup-tip { background: #fff !important; }
-  .leaflet-popup-content { margin: 0 !important; padding: 0 !important; color: var(--text-1) !important; }
-  .pop-inner { padding: 14px 16px; min-width: 210px; }
-  .pop-name {
-    font-family: 'Fraunces', serif;
-    font-size: 15px;
-    font-weight: 700;
-    margin-bottom: 4px;
-    line-height: 1.2;
-  }
-  .pop-meta { font-size: 11px; color: var(--text-3); margin-bottom: 3px; }
-  .pop-n { font-size: 11px; color: var(--text-2); margin-bottom: 10px; }
-  .pop-btn {
-    display: block;
-    width: 100%;
-    padding: 8px;
-    background: var(--accent);
-    border: none;
-    color: #fff;
-    cursor: pointer;
-    font-family: 'IBM Plex Sans', sans-serif;
-    font-size: 12px;
-    font-weight: 600;
-    text-align: center;
-    border-radius: 2px;
-    transition: background 0.12s;
-    letter-spacing: 0.02em;
-  }
-  .pop-btn:hover { background: #253d6e; }
+  /* ── MAP MARKERS ── */
+  .cmark{display:flex;flex-direction:column;align-items:center;}
+  .cmark-body{width:34px;height:34px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center;font-size:14px;box-shadow:0 3px 10px rgba(0,0,0,0.25);border:2px solid rgba(255,255,255,0.8);}
+  .cmark-body span{transform:rotate(45deg);display:block;}
+  .cmark-n1{background:var(--crit-1);}
+  .cmark-n2{background:var(--crit-2);}
+  .cmark-n3{background:var(--crit-3);}
+  .cmark-n4{background:var(--crit-4);}
+  .leaflet-popup-content-wrapper{background:#fff!important;border:1px solid var(--border-dark)!important;border-radius:3px!important;box-shadow:var(--shadow-lg)!important;padding:0!important;}
+  .leaflet-popup-tip{background:#fff!important;}
+  .leaflet-popup-content{margin:0!important;padding:0!important;color:var(--text-1)!important;}
+  .pop-inner{padding:13px 15px;min-width:200px;}
+  .pop-name{font-family:'Fraunces',serif;font-size:14px;font-weight:700;margin-bottom:3px;}
+  .pop-meta{font-size:11px;color:var(--text-3);margin-bottom:3px;}
+  .pop-btn{display:block;width:100%;padding:7px;background:var(--accent);border:none;color:#fff;cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;text-align:center;border-radius:2px;transition:background 0.12s;}
+  .pop-btn:hover{background:#253d6e;}
 </style>
 </head>
 <body>
 
-<!-- ── HEADER ── -->
-<header>
-  <div class="logo-mark">
-    <div class="logo-icon">⚠</div>
-    <div>
-      <div class="logo-text">SIGECA</div>
-      <div class="logo-sub">Gestión de Catástrofes</div>
-    </div>
-  </div>
-  <div class="header-divider"></div>
-
-  <div class="nivel-indicators">
-    <div class="nivel-chip chip-n1">
-      <div class="nivel-chip-dot" style="background:var(--crit-1)"></div>
-      <span class="nivel-chip-val" id="cnt1">0</span>
-      <span class="nivel-chip-lbl">Nivel 1</span>
-    </div>
-    <div class="nivel-chip chip-n2">
-      <div class="nivel-chip-dot" style="background:var(--crit-2)"></div>
-      <span class="nivel-chip-val" id="cnt2">0</span>
-      <span class="nivel-chip-lbl">Nivel 2</span>
-    </div>
-    <div class="nivel-chip chip-n3">
-      <div class="nivel-chip-dot" style="background:var(--crit-3)"></div>
-      <span class="nivel-chip-val" id="cnt3">0</span>
-      <span class="nivel-chip-lbl">Nivel 3</span>
-    </div>
-    <div class="nivel-chip chip-n4">
-      <div class="nivel-chip-dot" style="background:var(--crit-4)"></div>
-      <span class="nivel-chip-val" id="cnt4">0</span>
-      <span class="nivel-chip-lbl">Nivel 4</span>
-    </div>
-  </div>
-
-  <div class="header-right">
-    <div class="live-indicator">
-      <div class="live-dot"></div>
-      <span>Sistema activo</span>
-    </div>
-    <div class="clock" id="clock">--:--:--</div>
-    <button class="btn-nueva" onclick="abrirModal()">+ Nueva operación</button>
-  </div>
-</header>
-
-<!-- ── MAIN ── -->
-<div class="main">
-
-  <!-- PANEL IZQUIERDO -->
-  <div class="panel-left">
-    <div class="panel-left-head">
-      <div class="section-label">Operaciones registradas</div>
-      <div class="filter-tabs">
-        <button class="ftab on" data-f="all" onclick="setFiltro('all',this)">Todas</button>
-        <button class="ftab" data-f="1" onclick="setFiltro('1',this)">N1</button>
-        <button class="ftab" data-f="2" onclick="setFiltro('2',this)">N2</button>
-        <button class="ftab" data-f="3" onclick="setFiltro('3',this)">N3</button>
-        <button class="ftab" data-f="4" onclick="setFiltro('4',this)">N4</button>
+<!-- ══ LOGIN ══════════════════════════════════════════════════════ -->
+<div id="screen-login">
+  <div class="login-card">
+    <div class="login-logo">
+      <div class="login-icon">⚠</div>
+      <div>
+        <div class="login-title">SIGECA</div>
+        <div class="login-sub">Gestión de Catástrofes</div>
       </div>
     </div>
-    <div class="ops-list" id="ops-list">
-      <div class="empty-msg show" id="empty-msg">
-        <div class="empty-msg-icon">📋</div>
-        <span>No hay operaciones registradas.<br>Crea la primera pulsando el botón.</span>
-      </div>
+    <div class="login-field">
+      <div class="login-lbl">Email</div>
+      <input class="login-input" id="l-email" type="email" placeholder="usuario@organismo.es" autocomplete="username">
     </div>
-  </div>
-
-  <!-- MAP -->
-  <div class="map-zone">
-    <div class="pick-banner" id="pick-banner">📍 Haz clic en el mapa para fijar la ubicación</div>
-    <div id="map"></div>
-
-    <!-- DETAIL PANEL -->
-    <div class="detail-panel" id="detail-panel">
-      <div class="dp-header">
-        <div class="dp-top-row">
-          <div>
-            <div class="dp-id" id="dp-id"></div>
-            <div class="dp-name" id="dp-name"></div>
-          </div>
-          <button class="btn-close-dp" onclick="cerrarDetalle()">✕</button>
-        </div>
-        <div class="dp-chips">
-          <div id="dp-type-tag"></div>
-          <div class="dp-loc" id="dp-loc"></div>
-        </div>
-      </div>
-      <div style="padding:10px 18px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
-        <div style="font-size:11px;color:var(--text-3);font-weight:500;">Nivel de activación:</div>
-        <div class="nivel-selector" id="nivel-selector">
-          <button class="nsel-opt" data-n="1" onclick="cambiarNivel(1)">N1 Emergencia Mayor</button>
-          <button class="nsel-opt" data-n="2" onclick="cambiarNivel(2)">N2 Emergencia</button>
-          <button class="nsel-opt" data-n="3" onclick="cambiarNivel(3)">N3 Alerta</button>
-          <button class="nsel-opt" data-n="4" onclick="cambiarNivel(4)">N4 Seguimiento</button>
-        </div>
-      </div>
-      <div class="dp-info-row" id="dp-info-row"></div>
-      <div class="dp-timeline" id="dp-timeline"></div>
-      <div class="dp-addaction">
-        <div class="section-label">Registrar novedad</div>
-        <div class="form-row">
-          <select class="f-select" id="a-prio">
-            <option value="Crítica">🔴 Crítica</option>
-            <option value="Alta">🟠 Alta</option>
-            <option value="Media" selected>🟡 Media</option>
-            <option value="Baja">🟢 Baja</option>
-          </select>
-          <input class="f-input" id="a-autor" placeholder="Unidad / Cargo" style="flex:1;">
-        </div>
-        <textarea class="f-input" id="a-texto" placeholder="Describe la novedad, acción o decisión tomada…" style="resize:vertical;min-height:62px;margin-bottom:6px;"></textarea>
-        <button class="btn-reg" onclick="addAccion()">Registrar novedad</button>
-      </div>
+    <div class="login-field">
+      <div class="login-lbl">Contraseña</div>
+      <input class="login-input" id="l-pass" type="password" placeholder="••••••••" autocomplete="current-password">
     </div>
+    <div class="login-err" id="err-login"></div>
+    <button class="btn-login" id="btn-login" onclick="doLogin()">Acceder</button>
   </div>
 </div>
 
-<!-- ── MODAL NUEVA OP ── -->
-<div class="overlay" id="overlay">
+<!-- ══ APP ════════════════════════════════════════════════════════ -->
+<div id="screen-app" style="display:none">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo-mark">
+      <div class="logo-icon">⚠</div>
+      <div>
+        <div class="logo-text">SIGECA</div>
+        <div class="logo-sub">Gestión de Catástrofes</div>
+      </div>
+    </div>
+    <div class="hdr-div"></div>
+    <div class="nivel-indicators">
+      <div class="nivel-chip chip-n1"><span class="nivel-chip-val" id="cnt1">0</span><span class="nivel-chip-lbl">N1</span></div>
+      <div class="nivel-chip chip-n2"><span class="nivel-chip-val" id="cnt2">0</span><span class="nivel-chip-lbl">N2</span></div>
+      <div class="nivel-chip chip-n3"><span class="nivel-chip-val" id="cnt3">0</span><span class="nivel-chip-lbl">N3</span></div>
+      <div class="nivel-chip chip-n4"><span class="nivel-chip-val" id="cnt4">0</span><span class="nivel-chip-lbl">N4</span></div>
+    </div>
+    <div class="hdr-right">
+      <div class="live-dot"></div>
+      <div class="clock" id="clock">--:--:--</div>
+      <div class="hdr-user-info">
+        <div class="hdr-user-name" id="hdr-user"></div>
+        <div class="hdr-user-role" id="hdr-role"></div>
+      </div>
+      <button id="btn-nueva-op" class="btn-nueva" onclick="abrirModalOp()">+ Nueva operación</button>
+      <button class="btn-logout" onclick="doLogout()">Salir</button>
+    </div>
+  </header>
+
+  <!-- NAV -->
+  <nav class="app-nav">
+    <button class="nav-item on" data-sec="operaciones" onclick="showSection('operaciones')">🗺 Operaciones</button>
+    <button class="nav-item" id="nav-usuarios" data-sec="usuarios" onclick="showSection('usuarios')" style="display:none">👥 Usuarios</button>
+  </nav>
+
+  <!-- ── SECCIÓN OPERACIONES ── -->
+  <div id="section-operaciones">
+    <div class="panel-left">
+      <div class="panel-left-head">
+        <div class="section-label">Operaciones activas</div>
+        <div class="filter-tabs">
+          <button class="ftab on" onclick="setFiltro('all',this)">Todas</button>
+          <button class="ftab" onclick="setFiltro('1',this)">N1</button>
+          <button class="ftab" onclick="setFiltro('2',this)">N2</button>
+          <button class="ftab" onclick="setFiltro('3',this)">N3</button>
+          <button class="ftab" onclick="setFiltro('4',this)">N4</button>
+        </div>
+      </div>
+      <div class="ops-list" id="ops-list">
+        <div class="empty-msg show" id="empty-msg">
+          <div style="font-size:28px;opacity:0.4">📋</div>
+          <span>Sin operaciones registradas.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="map-zone">
+      <div class="pick-banner" id="pick-banner">📍 Haz clic en el mapa para fijar la ubicación</div>
+      <div id="map"></div>
+
+      <!-- DETAIL -->
+      <div class="detail-panel" id="detail-panel">
+        <div class="dp-header">
+          <div class="dp-top-row">
+            <div>
+              <div class="dp-id" id="dp-id"></div>
+              <div class="dp-name" id="dp-name"></div>
+            </div>
+            <button class="btn-close-dp" onclick="cerrarDetalle()">✕</button>
+          </div>
+          <div class="dp-chips">
+            <div id="dp-type-tag"></div>
+            <div class="dp-loc" id="dp-loc"></div>
+          </div>
+        </div>
+        <div style="padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+          <span style="font-size:10px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;">Nivel:</span>
+          <div class="nivel-selector">
+            <button class="nsel-opt" data-n="1" onclick="cambiarNivel(1)">N1</button>
+            <button class="nsel-opt" data-n="2" onclick="cambiarNivel(2)">N2</button>
+            <button class="nsel-opt" data-n="3" onclick="cambiarNivel(3)">N3</button>
+            <button class="nsel-opt" data-n="4" onclick="cambiarNivel(4)">N4</button>
+          </div>
+        </div>
+        <div class="dp-info-row" id="dp-info-row"></div>
+        <div class="dp-timeline" id="dp-timeline"></div>
+        <div class="dp-addaction">
+          <div class="section-label">Registrar novedad</div>
+          <div class="form-row">
+            <select class="f-select" id="a-prio">
+              <option value="Crítica">🔴 Crítica</option>
+              <option value="Alta">🟠 Alta</option>
+              <option value="Media" selected>🟡 Media</option>
+              <option value="Baja">🟢 Baja</option>
+            </select>
+            <input class="f-input" id="a-autor" placeholder="Unidad / Cargo" style="flex:1;">
+          </div>
+          <textarea class="f-input" id="a-texto" placeholder="Describe la novedad, acción o decisión…" style="resize:vertical;min-height:58px;margin-bottom:4px;"></textarea>
+          <button class="btn-reg" id="btn-reg-accion" onclick="addAccion()">Registrar novedad</button>
+        </div>
+        <div class="dp-admin-btns" id="dp-admin-btns">
+          <button class="btn-danger" onclick="borrarOp()">🗑 Borrar operación</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── SECCIÓN USUARIOS ── -->
+  <div id="section-usuarios">
+    <div class="users-toolbar">
+      <div>
+        <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;">Gestión de usuarios</div>
+        <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Solo el Super Admin puede crear, editar y desactivar usuarios.</div>
+      </div>
+      <button class="btn-nueva" onclick="abrirModalUsuario()">+ Nuevo usuario</button>
+    </div>
+    <div class="users-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Nombre</th><th>Email</th><th>Rol</th><th>Estado</th><th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /screen-app -->
+
+<!-- ══ MODAL NUEVA OPERACIÓN ══════════════════════════════════════ -->
+<div class="overlay" id="overlay-op">
   <div class="modal">
     <div class="modal-head">
       <div class="modal-title">Nueva operación</div>
-      <button class="btn-close-dp" onclick="cerrarModal()">✕</button>
+      <button class="btn-close-dp" onclick="cerrarModalOp()">✕</button>
     </div>
     <div class="modal-body">
       <div class="field">
-        <div class="field-lbl">Nombre de la operación *</div>
+        <div class="field-lbl">Nombre *</div>
         <input class="f-input" id="f-nombre" placeholder="Ej: Inundaciones Cuenca del Ebro">
       </div>
       <div class="field-row">
         <div class="field" style="flex:1;">
-          <div class="field-lbl">Tipo de catástrofe *</div>
+          <div class="field-lbl">Tipo de catástrofe</div>
           <select class="f-input f-select" id="f-tipo" style="width:100%">
             <option value="inundacion">🌊 Inundación / DANA</option>
             <option value="incendio">🔥 Incendio forestal</option>
@@ -1007,7 +1011,7 @@
           </select>
         </div>
         <div class="field" style="flex:1;">
-          <div class="field-lbl">Nivel de activación *</div>
+          <div class="field-lbl">Nivel de activación</div>
           <select class="f-input f-select" id="f-nivel" style="width:100%">
             <option value="1">N1 — Emergencia Mayor</option>
             <option value="2">N2 — Emergencia</option>
@@ -1018,7 +1022,7 @@
       </div>
       <div class="field">
         <div class="field-lbl">Descripción inicial</div>
-        <textarea class="f-input" id="f-desc" placeholder="Descripción de la situación inicial, recursos movilizados, estimaciones…" style="resize:vertical;min-height:76px;"></textarea>
+        <textarea class="f-input" id="f-desc" placeholder="Situación inicial, recursos movilizados…" style="resize:vertical;min-height:68px;"></textarea>
       </div>
       <div class="field-row">
         <div class="field" style="flex:1;">
@@ -1037,376 +1041,74 @@
       <div class="field">
         <div class="field-lbl">Ubicación en mapa</div>
         <div style="display:flex;gap:6px;">
-          <input class="f-input" id="f-coord-label" placeholder="Descripción del lugar o coordenadas" style="flex:1;">
+          <input class="f-input" id="f-coord-label" placeholder="O haz clic en el mapa →">
           <button class="btn-mapa" onclick="iniciarPick()">🗺 Seleccionar</button>
         </div>
-        <div class="coord-box" id="coord-box">Sin coordenadas seleccionadas</div>
+        <div class="coord-box" id="coord-box"></div>
       </div>
     </div>
     <div class="modal-foot">
-      <button class="btn-cancel-m" onclick="cerrarModal()">Cancelar</button>
-      <button class="btn-create-m" onclick="crearOp()">Crear operación →</button>
+      <button class="btn-cancel-m" onclick="cerrarModalOp()">Cancelar</button>
+      <button class="btn-create-m" id="btn-crear-op" onclick="crearOp()">Crear operación →</button>
     </div>
   </div>
 </div>
 
+<!-- ══ MODAL USUARIO ══════════════════════════════════════════════ -->
+<div class="overlay" id="overlay-user">
+  <div class="modal" style="width:420px;">
+    <div class="modal-head">
+      <div class="modal-title" id="modal-user-title">Nuevo usuario</div>
+      <button class="btn-close-dp" onclick="cerrarModalUsuario()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <div class="field-lbl">Nombre completo *</div>
+        <input class="f-input" id="u-nombre" placeholder="Nombre y apellidos">
+      </div>
+      <div class="field">
+        <div class="field-lbl">Email *</div>
+        <input class="f-input" id="u-email" type="email" placeholder="usuario@organismo.es">
+      </div>
+      <div class="field" id="u-pass-row">
+        <div class="field-lbl">Contraseña inicial *</div>
+        <input class="f-input" id="u-pass" type="password" placeholder="Mínimo 6 caracteres">
+      </div>
+      <div class="field-row">
+        <div class="field" style="flex:1;">
+          <div class="field-lbl">Rol</div>
+          <select class="f-input f-select" id="u-role" style="width:100%">
+            <option value="usuario">Usuario</option>
+            <option value="admin">Administrador</option>
+            <option value="super_admin">Super Admin</option>
+          </select>
+        </div>
+        <div class="field" style="flex:1;">
+          <div class="field-lbl">Estado</div>
+          <select class="f-input f-select" id="u-activo" style="width:100%">
+            <option value="true">Activo</option>
+            <option value="false">Inactivo</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel-m" onclick="cerrarModalUsuario()">Cancelar</button>
+      <button class="btn-create-m" id="btn-guardar-user" onclick="guardarUsuario()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div id="toast"></div>
+
 <script>
-// ── CONFIG TIPOS ──────────────────────────────────────────
-const TIPOS = {
-  inundacion: { label:'Inundación',      emoji:'🌊', color:'#2980b9' },
-  incendio:   { label:'Incendio forestal',emoji:'🔥', color:'#c0392b' },
-  seismo:     { label:'Seísmo',          emoji:'🌍', color:'#8e44ad' },
-  temporal:   { label:'Temporal',        emoji:'🌪', color:'#16a085' },
-  accidente:  { label:'Accidente',       emoji:'🚛', color:'#d35400' },
-  quimico:    { label:'Inc. Químico',    emoji:'☣️', color:'#c0392b' },
-  sanitaria:  { label:'Emerg. Sanitaria',emoji:'🦠', color:'#e74c3c' },
-  otro:       { label:'Otro',            emoji:'📋', color:'#7f8c8d' }
-};
-
-const NIVEL_LABELS = {
-  1:'Emergencia Mayor', 2:'Emergencia', 3:'Alerta', 4:'Seguimiento'
-};
-
-// ── ESTADO ───────────────────────────────────────────────
-let ops = [];
-let contador = 0;
-let filtro = 'all';
-let selId = null;
-let picking = false;
-let coords = null;
-let tempMark = null;
-let map, markerLayer;
-
-// ── MAPA ─────────────────────────────────────────────────
-function initMap() {
-  map = L.map('map', { zoomControl: false }).setView([40.4, -3.7], 6);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution:'© OpenStreetMap', maxZoom:19
-  }).addTo(map);
-  L.control.zoom({ position:'bottomright' }).addTo(map);
-  markerLayer = L.layerGroup().addTo(map);
-
-  map.on('click', e => {
-    if (!picking) return;
-    coords = { lat: parseFloat(e.latlng.lat.toFixed(6)), lng: parseFloat(e.latlng.lng.toFixed(6)) };
-    document.getElementById('coord-box').textContent = `📍 ${coords.lat}, ${coords.lng}`;
-    document.getElementById('coord-box').classList.add('show');
-    stopPick();
-    abrirModal();
-  });
-}
-
-// ── RELOJ ────────────────────────────────────────────────
-setInterval(() => {
-  document.getElementById('clock').textContent =
-    new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-}, 1000);
-
-// ── CONTADORES ───────────────────────────────────────────
-function actualizarContadores() {
-  [1,2,3,4].forEach(n => {
-    document.getElementById('cnt'+n).textContent = ops.filter(o=>o.nivel==n).length;
-  });
-}
-
-// ── RENDER SIDEBAR ────────────────────────────────────────
-function renderSidebar() {
-  const list = document.getElementById('ops-list');
-  const empty = document.getElementById('empty-msg');
-  list.querySelectorAll('.op-card').forEach(c=>c.remove());
-
-  let visible = filtro === 'all' ? ops : ops.filter(o=>String(o.nivel)===filtro);
-  visible = [...visible].sort((a,b) => a.nivel - b.nivel || b.creadoEn - a.creadoEn);
-
-  if (!visible.length) { empty.classList.add('show'); return; }
-  empty.classList.remove('show');
-
-  visible.forEach(op => {
-    const t = TIPOS[op.tipo];
-    const card = document.createElement('div');
-    card.className = 'op-card' + (selId===op.id?' sel':'');
-    card.dataset.nivel = op.nivel;
-    card.dataset.id = op.id;
-    card.innerHTML = `
-      <div class="card-top">
-        <div>
-          <div class="card-id">${op.id}</div>
-          <div class="card-name">${op.nombre}</div>
-        </div>
-        <span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${t.label}</span>
-      </div>
-      <div class="card-meta">
-        <span class="card-loc">📍 ${op.loc||'Sin ubicación'}</span>
-        <div class="card-bottom">
-          <span class="nivel-pill pill-${op.nivel}">N${op.nivel} ${NIVEL_LABELS[op.nivel]}</span>
-          <span class="act-count">${op.acciones.length} novedades</span>
-        </div>
-      </div>`;
-    card.addEventListener('click', () => abrirDetalle(op.id));
-    list.appendChild(card);
-  });
-}
-
-// ── RENDER MAPA ───────────────────────────────────────────
-function renderMapa() {
-  markerLayer.clearLayers();
-  ops.forEach(op => {
-    if (!op.coords) return;
-    const t = TIPOS[op.tipo];
-    const closed = op.nivel === 4;
-    const icon = L.divIcon({
-      html: `<div class="cmark${closed?' cmark-closed':''}"><div class="cmark-body cmark-n${op.nivel}"><span>${t.emoji}</span></div></div>`,
-      className:'', iconSize:[34,40], iconAnchor:[17,40], popupAnchor:[0,-40]
-    });
-    const m = L.marker([op.coords.lat, op.coords.lng], { icon }).addTo(markerLayer);
-    m.bindPopup(`<div class="pop-inner">
-      <div class="pop-name">${op.nombre}</div>
-      <div class="pop-meta">${t.emoji} ${t.label} · ${op.loc||''}</div>
-      <div class="pop-n"><span class="nivel-pill pill-${op.nivel}">N${op.nivel} ${NIVEL_LABELS[op.nivel]}</span></div>
-      <button class="pop-btn" onclick="abrirDetalle('${op.id}');map.closePopup()">Ver operación →</button>
-    </div>`, { maxWidth:260 });
-  });
-}
-
-// ── FILTRO ────────────────────────────────────────────────
-function setFiltro(f, btn) {
-  filtro = f;
-  document.querySelectorAll('.ftab').forEach(b => {
-    b.classList.remove('on','on-n1','on-n2','on-n3','on-n4');
-  });
-  if (f==='all') btn.classList.add('on');
-  else btn.classList.add(`on-n${f}`);
-  renderSidebar();
-}
-
-// ── DETALLE ───────────────────────────────────────────────
-function abrirDetalle(id) {
-  selId = id;
-  const op = ops.find(o=>o.id===id);
-  if (!op) return;
-  document.getElementById('detail-panel').classList.add('open');
-  renderDetalle(op);
-  renderSidebar();
-  if (op.coords) map.flyTo([op.coords.lat, op.coords.lng], 13, {duration:1});
-}
-
-function cerrarDetalle() {
-  document.getElementById('detail-panel').classList.remove('open');
-  selId = null;
-  renderSidebar();
-}
-
-function renderDetalle(op) {
-  const t = TIPOS[op.tipo];
-  document.getElementById('dp-id').textContent = op.id;
-  document.getElementById('dp-name').textContent = op.nombre;
-  document.getElementById('dp-loc').innerHTML = op.loc ? `📍 ${op.loc}` : (op.coords ? `📍 ${op.coords.lat}, ${op.coords.lng}` : '');
-  document.getElementById('dp-type-tag').innerHTML = `<span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${t.label}</span>`;
-  document.querySelectorAll('.nsel-opt').forEach(b => b.classList.toggle('on', parseInt(b.dataset.n)===op.nivel));
-
-  // Info row
-  const ir = document.getElementById('dp-info-row');
-  ir.innerHTML = '';
-  if (op.dir) { const d=document.createElement('div'); d.className='dp-info-item'; d.innerHTML=`<strong>${op.dir}</strong>Director de Operaciones`; ir.appendChild(d); }
-  if (op.org) { const d=document.createElement('div'); d.className='dp-info-item'; d.innerHTML=`<strong>${op.org}</strong>Organismos`; ir.appendChild(d); }
-  const dd = document.createElement('div'); dd.className='dp-info-item';
-  dd.innerHTML=`<strong>${op.creadoEn.toLocaleString('es-ES',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})}</strong>Inicio`;
-  ir.appendChild(dd);
-
-  // Timeline
-  const tl = document.getElementById('dp-timeline');
-  if (!op.acciones.length) { tl.innerHTML='<div class="tl-empty">// Sin novedades registradas //</div>'; return; }
-  tl.innerHTML = [...op.acciones].reverse().map(a => `
-    <div class="tl-entry">
-      <div class="tl-node tl-node-${op.nivel}">${t.emoji}</div>
-      <div class="tl-body">
-        <div class="tl-meta">
-          <span class="tl-ts">${a.ts}</span>
-          <span class="tl-prio prio-${a.prio}">${a.prio}</span>
-        </div>
-        <div class="tl-text">${a.texto}</div>
-        ${a.autor ? `<div class="tl-author">— ${a.autor}</div>` : ''}
-      </div>
-    </div>`).join('');
-}
-
-function cambiarNivel(n) {
-  const op = ops.find(o=>o.id===selId);
-  if (!op) return;
-  op.nivel = n;
-  renderDetalle(op);
-  renderSidebar();
-  renderMapa();
-  actualizarContadores();
-}
-
-function addAccion() {
-  const op = ops.find(o=>o.id===selId);
-  if (!op) return;
-  const texto = document.getElementById('a-texto').value.trim();
-  if (!texto) { document.getElementById('a-texto').focus(); return; }
-  const now = new Date();
-  op.acciones.push({
-    id: Date.now(),
-    texto,
-    prio: document.getElementById('a-prio').value,
-    autor: document.getElementById('a-autor').value.trim(),
-    ts: now.toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
-  });
-  document.getElementById('a-texto').value = '';
-  renderDetalle(op);
-  renderSidebar();
-}
-
-// ── MODAL ─────────────────────────────────────────────────
-function abrirModal() {
-  document.getElementById('overlay').classList.add('open');
-  document.getElementById('f-nombre').focus();
-  if (coords) {
-    document.getElementById('coord-box').textContent = `📍 ${coords.lat}, ${coords.lng}`;
-    document.getElementById('coord-box').classList.add('show');
-  }
-}
-function cerrarModal() {
-  document.getElementById('overlay').classList.remove('open');
-  coords = null;
-  if (tempMark) { map.removeLayer(tempMark); tempMark=null; }
-  document.getElementById('coord-box').classList.remove('show');
-  limpiarModal();
-}
-function limpiarModal() {
-  ['f-nombre','f-desc','f-loc','f-dir','f-org','f-coord-label'].forEach(id=>document.getElementById(id).value='');
-  document.getElementById('f-tipo').value='inundacion';
-  document.getElementById('f-nivel').value='3';
-}
-
-function iniciarPick() {
-  picking = true;
-  document.getElementById('overlay').classList.remove('open');
-  document.getElementById('pick-banner').classList.add('on');
-  map.getContainer().style.cursor = 'crosshair';
-}
-function stopPick() {
-  picking = false;
-  document.getElementById('pick-banner').classList.remove('on');
-  map.getContainer().style.cursor = '';
-}
-
-function crearOp() {
-  const nombre = document.getElementById('f-nombre').value.trim();
-  if (!nombre) { document.getElementById('f-nombre').focus(); return; }
-  contador++;
-  const now = new Date();
-  const desc = document.getElementById('f-desc').value.trim();
-  const dir = document.getElementById('f-dir').value.trim();
-  const nivel = parseInt(document.getElementById('f-nivel').value);
-
-  const op = {
-    id: `OPC-${String(contador).padStart(4,'0')}`,
-    nombre,
-    tipo: document.getElementById('f-tipo').value,
-    nivel,
-    loc: document.getElementById('f-loc').value.trim(),
-    dir,
-    org: document.getElementById('f-org').value.trim(),
-    coords: coords ? {...coords} : null,
-    creadoEn: now,
-    acciones: desc ? [{
-      id: Date.now(),
-      texto: desc,
-      prio: nivel<=2 ? 'Crítica' : nivel===3 ? 'Alta' : 'Media',
-      autor: dir || 'Sistema SIGECA',
-      ts: now.toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
-    }] : []
-  };
-
-  ops.push(op);
-  cerrarModal();
-  renderSidebar();
-  renderMapa();
-  actualizarContadores();
-  abrirDetalle(op.id);
-}
-
-// ── DATOS DE EJEMPLO ──────────────────────────────────────
-function cargarEjemplos() {
-  const ejemplos = [
-    {
-      nombre:'DANA — Cuenca del Segura',
-      tipo:'inundacion', nivel:1,
-      loc:'Murcia / Orihuela', dir:'Dtor. Gral. Protección Civil',
-      org:'112, UME, Cruz Roja, DGT, CHC',
-      coords:{lat:38.08, lng:-0.95},
-      acciones:[
-        {texto:'Activación Nivel 1. Desbordamiento del Segura en Orihuela. 450 viviendas afectadas. UME desplegada con 200 efectivos.',prio:'Crítica',autor:'CECOP Murcia',ts:'12/04 06:30'},
-        {texto:'Rescate de 38 personas en zona de Molina de Segura. 6 equipos de balsas en acción.',prio:'Crítica',autor:'UME – Sección Acuática',ts:'12/04 08:15'},
-        {texto:'Apertura de albergue en Pabellón Municipal de Orihuela. Capacidad: 800 personas.',prio:'Alta',autor:'Cruz Roja',ts:'12/04 09:40'},
-        {texto:'Corte total A-7 en sentido Cartagena. Desvío habilitado por N-340.',prio:'Media',autor:'DGT Murcia',ts:'12/04 10:05'}
-      ]
-    },
-    {
-      nombre:'Incendio forestal Sierra Calderona',
-      tipo:'incendio', nivel:2,
-      loc:'Valencia / Bétera', dir:'Coordinadora IVACE Emergencias',
-      org:'112 CV, BRIVA, Bomberos Mancomunitat',
-      coords:{lat:39.70, lng:-0.46},
-      acciones:[
-        {texto:'Detección por avistamiento aéreo a las 14:22. Activación nivel 2. 3 medios aéreos y 4 cuadrillas terrestres.',prio:'Alta',autor:'CICU Valencia',ts:'11/04 14:30'},
-        {texto:'Foco principal controlado. Perímetro estimado 340 ha. Retraso por viento N de 25 km/h.',prio:'Alta',autor:'Dir. Extinción',ts:'11/04 17:10'}
-      ]
-    },
-    {
-      nombre:'Temporal costero Tramontana',
-      tipo:'temporal', nivel:3,
-      loc:'Girona / Alt Empordà', dir:'Jefa de Servei 112 Catalunya',
-      org:'112 CAT, Salvament Marítim, Mossos',
-      coords:{lat:42.25, lng:3.18},
-      acciones:[
-        {texto:'Alerta amarilla activada. Vientos de 100 km/h previstos. Puerto cerrado a embarcaciones menores.',prio:'Media',autor:'Meteocat',ts:'10/04 08:00'}
-      ]
-    },
-    {
-      nombre:'Seísmo 4.2 ML — Comarca Granada',
-      tipo:'seismo', nivel:4,
-      loc:'Granada / Loja', dir:'Delegado territorial Emergencias',
-      org:'112 AND, Bomberos Granada, SAS',
-      coords:{lat:37.17, lng:-4.15},
-      acciones:[
-        {texto:'Sismo 4.2 ML a las 03:17. Sin heridos reportados. Inspección de edificios en curso.',prio:'Baja',autor:'IGN / CECOP Andalucía',ts:'09/04 03:45'}
-      ]
-    }
-  ];
-
-  ejemplos.forEach((e,i) => {
-    contador++;
-    const now = new Date(Date.now() - i*7200000);
-    ops.push({
-      id:`OPC-${String(contador).padStart(4,'0')}`,
-      nombre: e.nombre, tipo: e.tipo, nivel: e.nivel,
-      loc: e.loc, dir: e.dir, org: e.org,
-      coords: e.coords,
-      creadoEn: now,
-      acciones: e.acciones.map((a,j)=>({...a,id:Date.now()+j}))
-    });
-  });
-}
-
-// ── TECLADO ───────────────────────────────────────────────
-document.addEventListener('keydown', e => {
-  if (e.key==='Escape') {
-    cerrarModal();
-    cerrarDetalle();
-    if (picking) stopPick();
-  }
-  if ((e.ctrlKey||e.metaKey) && e.key==='n') { e.preventDefault(); abrirModal(); }
-});
-
-// ── INIT ─────────────────────────────────────────────────
-initMap();
-cargarEjemplos();
-renderSidebar();
-renderMapa();
-actualizarContadores();
+  // Reloj
+  setInterval(() => {
+    const el = document.getElementById('clock');
+    if (el) el.textContent = new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  }, 1000);
 </script>
+
 </body>
 </html>
