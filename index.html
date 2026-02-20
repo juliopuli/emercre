@@ -1,0 +1,1412 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIGECA — Sistema de Gestión de Catástrofes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Fraunces:opsz,wght@9..144,300;9..144,700;9..144,900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root {
+    --bg:       #f4f2ee;
+    --bg-1:     #ffffff;
+    --bg-2:     #f9f8f5;
+    --bg-3:     #eeece7;
+    --bg-4:     #e5e2da;
+
+    --text-1:   #1a1814;
+    --text-2:   #5c5848;
+    --text-3:   #9c9486;
+    --text-4:   #c8c0b2;
+
+    --border:       rgba(0,0,0,0.08);
+    --border-mid:   rgba(0,0,0,0.14);
+    --border-dark:  rgba(0,0,0,0.22);
+
+    /* Nivel / criticidad */
+    --crit-1: #c0392b;   /* Nivel 1 – Emergencia Mayor */
+    --crit-1-bg: #fdf1f0;
+    --crit-1-border: #e8b4b0;
+
+    --crit-2: #d35400;   /* Nivel 2 – Emergencia */
+    --crit-2-bg: #fef5ee;
+    --crit-2-border: #f0c8a0;
+
+    --crit-3: #c08c00;   /* Nivel 3 – Alerta */
+    --crit-3-bg: #fefbee;
+    --crit-3-border: #eadb94;
+
+    --crit-4: #1a7a4a;   /* Nivel 4 – Seguimiento */
+    --crit-4-bg: #f0faf4;
+    --crit-4-border: #a8d8bc;
+
+    /* Tipo catástrofe */
+    --t-inundacion:  #2980b9;
+    --t-incendio:    #c0392b;
+    --t-seismo:      #8e44ad;
+    --t-temporal:    #16a085;
+    --t-accidente:   #d35400;
+    --t-quimico:     #c0392b;
+    --t-sanitaria:   #e74c3c;
+    --t-otro:        #7f8c8d;
+
+    --accent:    #1a3a6e;
+    --accent-lt: #eaf0fb;
+
+    --shadow-sm: 0 1px 4px rgba(0,0,0,0.08);
+    --shadow-md: 0 4px 16px rgba(0,0,0,0.10);
+    --shadow-lg: 0 8px 32px rgba(0,0,0,0.14);
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text-1);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    font-size: 14px;
+  }
+
+  /* ── HEADER ── */
+  header {
+    height: 56px;
+    background: var(--bg-1);
+    border-bottom: 1px solid var(--border-mid);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 20px;
+    flex-shrink: 0;
+    box-shadow: var(--shadow-sm);
+    z-index: 200;
+  }
+
+  .logo-mark {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .logo-icon {
+    width: 32px;
+    height: 32px;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 16px;
+  }
+  .logo-text {
+    font-family: 'Fraunces', serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -0.01em;
+    line-height: 1;
+  }
+  .logo-sub {
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    line-height: 1;
+    margin-top: 2px;
+  }
+
+  .header-divider {
+    width: 1px;
+    height: 28px;
+    background: var(--border-mid);
+    flex-shrink: 0;
+  }
+
+  .nivel-indicators {
+    display: flex;
+    gap: 6px;
+    flex: 1;
+  }
+  .nivel-chip {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 2px;
+    border: 1px solid;
+    cursor: default;
+  }
+  .nivel-chip-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+  .nivel-chip-val {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1;
+  }
+  .nivel-chip-lbl {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .chip-n1 { background: var(--crit-1-bg); border-color: var(--crit-1-border); color: var(--crit-1); }
+  .chip-n2 { background: var(--crit-2-bg); border-color: var(--crit-2-border); color: var(--crit-2); }
+  .chip-n3 { background: var(--crit-3-bg); border-color: var(--crit-3-border); color: var(--crit-3); }
+  .chip-n4 { background: var(--crit-4-bg); border-color: var(--crit-4-border); color: var(--crit-4); }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .live-indicator {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-3);
+    letter-spacing: 0.04em;
+  }
+  .live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #27ae60;
+    box-shadow: 0 0 0 2px rgba(39,174,96,0.25);
+    animation: livepulse 2.5s infinite;
+  }
+  @keyframes livepulse { 0%,100%{box-shadow:0 0 0 2px rgba(39,174,96,0.25)} 50%{box-shadow:0 0 0 5px rgba(39,174,96,0.1)} }
+
+  .clock {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--text-2);
+    letter-spacing: 0.04em;
+  }
+
+  .btn-nueva {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    padding: 8px 16px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    transition: background 0.15s, box-shadow 0.15s;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .btn-nueva:hover { background: #253d6e; box-shadow: var(--shadow-md); }
+
+  /* ── MAIN LAYOUT ── */
+  .main {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  /* ── PANEL IZQUIERDO ── */
+  .panel-left {
+    width: 340px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-1);
+    border-right: 1px solid var(--border-mid);
+    overflow: hidden;
+  }
+
+  .panel-left-head {
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+
+  .section-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-3);
+    margin-bottom: 10px;
+  }
+
+  .filter-tabs {
+    display: flex;
+    border: 1px solid var(--border-mid);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .ftab {
+    flex: 1;
+    padding: 6px 4px;
+    background: var(--bg-2);
+    border: none;
+    color: var(--text-3);
+    cursor: pointer;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    transition: all 0.12s;
+    border-right: 1px solid var(--border);
+  }
+  .ftab:last-child { border-right: none; }
+  .ftab:hover { background: var(--bg-3); color: var(--text-2); }
+  .ftab.on { background: var(--bg-1); color: var(--text-1); font-weight: 600; }
+  .ftab.on-n1 { background: var(--crit-1-bg); color: var(--crit-1); }
+  .ftab.on-n2 { background: var(--crit-2-bg); color: var(--crit-2); }
+  .ftab.on-n3 { background: var(--crit-3-bg); color: var(--crit-3); }
+  .ftab.on-n4 { background: var(--crit-4-bg); color: var(--crit-4); }
+
+  .ops-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .ops-list::-webkit-scrollbar { width: 4px; }
+  .ops-list::-webkit-scrollbar-track { background: transparent; }
+  .ops-list::-webkit-scrollbar-thumb { background: var(--bg-4); border-radius: 2px; }
+
+  .empty-msg {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    gap: 10px;
+    color: var(--text-4);
+    text-align: center;
+    font-size: 12px;
+  }
+  .empty-msg.show { display: flex; }
+  .empty-msg-icon { font-size: 32px; opacity: 0.4; }
+
+  /* OP CARD */
+  .op-card {
+    background: var(--bg-1);
+    border: 1px solid var(--border-mid);
+    border-left: 4px solid transparent;
+    padding: 11px 13px;
+    cursor: pointer;
+    transition: all 0.12s;
+    border-radius: 0 2px 2px 0;
+    box-shadow: var(--shadow-sm);
+    position: relative;
+  }
+  .op-card:hover { box-shadow: var(--shadow-md); border-color: var(--border-dark); }
+  .op-card.sel { background: var(--accent-lt); border-color: var(--border-dark); box-shadow: var(--shadow-md); }
+
+  .op-card[data-nivel="1"] { border-left-color: var(--crit-1); }
+  .op-card[data-nivel="2"] { border-left-color: var(--crit-2); }
+  .op-card[data-nivel="3"] { border-left-color: var(--crit-3); }
+  .op-card[data-nivel="4"] { border-left-color: var(--crit-4); }
+
+  .card-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 5px;
+  }
+  .card-id {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    color: var(--text-3);
+    margin-bottom: 2px;
+  }
+  .card-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-1);
+    line-height: 1.2;
+  }
+  .card-type-tag {
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 7px;
+    border-radius: 10px;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+    flex-shrink: 0;
+    border: 1px solid;
+  }
+  .card-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 11px;
+    color: var(--text-3);
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+  .card-loc { display: flex; align-items: center; gap: 3px; }
+  .card-bottom {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .nivel-pill {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 2px;
+    border: 1px solid;
+  }
+  .pill-1 { background: var(--crit-1-bg); color: var(--crit-1); border-color: var(--crit-1-border); }
+  .pill-2 { background: var(--crit-2-bg); color: var(--crit-2); border-color: var(--crit-2-border); }
+  .pill-3 { background: var(--crit-3-bg); color: var(--crit-3); border-color: var(--crit-3-border); }
+  .pill-4 { background: var(--crit-4-bg); color: var(--crit-4); border-color: var(--crit-4-border); }
+  .act-count {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--text-4);
+  }
+
+  /* ── MAP ZONE ── */
+  .map-zone {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+  #map {
+    width: 100%;
+    height: 100%;
+  }
+
+  .pick-banner {
+    display: none;
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--accent);
+    color: #fff;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 9px 20px;
+    z-index: 600;
+    border-radius: 2px;
+    box-shadow: var(--shadow-lg);
+    pointer-events: none;
+    letter-spacing: 0.02em;
+    animation: blink-soft 1.4s infinite;
+  }
+  @keyframes blink-soft { 0%,100%{opacity:1} 50%{opacity:0.75} }
+  .pick-banner.on { display: block; }
+
+  /* ── DETAIL PANEL ── */
+  .detail-panel {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 380px;
+    max-height: calc(100vh - 82px);
+    background: var(--bg-1);
+    border: 1px solid var(--border-dark);
+    border-radius: 2px;
+    box-shadow: var(--shadow-lg);
+    display: none;
+    flex-direction: column;
+    z-index: 500;
+  }
+  .detail-panel.open {
+    display: flex;
+    animation: panelIn 0.18s ease;
+  }
+  @keyframes panelIn { from { opacity:0; transform: translateX(16px); } to { opacity:1; transform:none; } }
+
+  .dp-header {
+    padding: 16px 18px 12px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .dp-top-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+  .dp-id {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--text-3);
+    margin-bottom: 3px;
+  }
+  .dp-name {
+    font-family: 'Fraunces', serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-1);
+    line-height: 1.1;
+  }
+  .btn-close-dp {
+    background: var(--bg-3);
+    border: 1px solid var(--border-mid);
+    color: var(--text-3);
+    cursor: pointer;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+    border-radius: 2px;
+    transition: all 0.12s;
+  }
+  .btn-close-dp:hover { background: var(--bg-4); color: var(--text-1); }
+
+  .dp-chips {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .dp-loc {
+    font-size: 12px;
+    color: var(--text-2);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-weight: 500;
+  }
+
+  /* Nivel selector */
+  .nivel-selector {
+    display: flex;
+    border: 1px solid var(--border-mid);
+    border-radius: 2px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .nsel-opt {
+    padding: 4px 9px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    cursor: pointer;
+    background: var(--bg-2);
+    border: none;
+    border-right: 1px solid var(--border);
+    color: var(--text-3);
+    font-family: 'IBM Plex Sans', sans-serif;
+    transition: all 0.1s;
+  }
+  .nsel-opt:last-child { border-right: none; }
+  .nsel-opt[data-n="1"].on { background: var(--crit-1-bg); color: var(--crit-1); }
+  .nsel-opt[data-n="2"].on { background: var(--crit-2-bg); color: var(--crit-2); }
+  .nsel-opt[data-n="3"].on { background: var(--crit-3-bg); color: var(--crit-3); }
+  .nsel-opt[data-n="4"].on { background: var(--crit-4-bg); color: var(--crit-4); }
+
+  /* IC row */
+  .dp-info-row {
+    padding: 8px 18px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+    display: flex;
+    gap: 20px;
+  }
+  .dp-info-item { font-size: 11px; color: var(--text-3); }
+  .dp-info-item strong { display: block; font-size: 12px; color: var(--text-2); font-weight: 500; }
+
+  /* Timeline */
+  .dp-timeline {
+    flex: 1;
+    overflow-y: auto;
+    padding: 14px 18px;
+  }
+  .dp-timeline::-webkit-scrollbar { width: 3px; }
+  .dp-timeline::-webkit-scrollbar-thumb { background: var(--bg-4); }
+
+  .tl-empty {
+    text-align: center;
+    padding: 30px 0;
+    color: var(--text-4);
+    font-size: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+  }
+
+  .tl-entry {
+    display: flex;
+    gap: 12px;
+    position: relative;
+    padding-bottom: 18px;
+    animation: entryIn 0.2s ease;
+  }
+  @keyframes entryIn { from { opacity:0; transform: translateY(6px); } to { opacity:1; } }
+  .tl-entry:not(:last-child)::before {
+    content: '';
+    position: absolute;
+    left: 11px;
+    top: 24px;
+    bottom: 0;
+    width: 1px;
+    background: var(--border-mid);
+  }
+  .tl-node {
+    width: 23px;
+    height: 23px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 2px solid var(--border-dark);
+    background: var(--bg-1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    z-index: 1;
+    position: relative;
+    margin-top: 1px;
+  }
+  .tl-node-1 { border-color: var(--crit-1); background: var(--crit-1-bg); }
+  .tl-node-2 { border-color: var(--crit-2); background: var(--crit-2-bg); }
+  .tl-node-3 { border-color: var(--crit-3); background: var(--crit-3-bg); }
+  .tl-node-4 { border-color: var(--crit-4); background: var(--crit-4-bg); }
+
+  .tl-body { flex: 1; }
+  .tl-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+  .tl-ts {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    color: var(--text-4);
+  }
+  .tl-prio {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 1px 6px;
+    border-radius: 10px;
+  }
+  .prio-Crítica { background: var(--crit-1-bg); color: var(--crit-1); }
+  .prio-Alta    { background: var(--crit-2-bg); color: var(--crit-2); }
+  .prio-Media   { background: var(--crit-3-bg); color: var(--crit-3); }
+  .prio-Baja    { background: var(--crit-4-bg); color: var(--crit-4); }
+
+  .tl-text {
+    font-size: 13px;
+    color: var(--text-1);
+    line-height: 1.5;
+  }
+  .tl-author {
+    font-size: 11px;
+    color: var(--text-3);
+    margin-top: 3px;
+    font-style: italic;
+  }
+
+  /* Add action */
+  .dp-addaction {
+    padding: 12px 18px 16px;
+    border-top: 1px solid var(--border-mid);
+    flex-shrink: 0;
+    background: var(--bg-2);
+  }
+  .dp-addaction .section-label { margin-bottom: 8px; }
+
+  .form-row { display: flex; gap: 6px; margin-bottom: 6px; }
+  .f-input {
+    background: var(--bg-1);
+    border: 1px solid var(--border-mid);
+    color: var(--text-1);
+    padding: 7px 10px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 12px;
+    outline: none;
+    border-radius: 2px;
+    transition: border-color 0.12s;
+    width: 100%;
+  }
+  .f-input:focus { border-color: var(--accent); }
+  .f-input::placeholder { color: var(--text-4); }
+  .f-select {
+    background: var(--bg-1);
+    border: 1px solid var(--border-mid);
+    color: var(--text-2);
+    padding: 7px 8px;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 12px;
+    outline: none;
+    cursor: pointer;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+  .btn-reg {
+    width: 100%;
+    padding: 9px;
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    border-radius: 2px;
+    transition: background 0.12s, box-shadow 0.12s;
+    margin-top: 4px;
+  }
+  .btn-reg:hover { background: #253d6e; box-shadow: var(--shadow-md); }
+
+  /* ── MODAL ── */
+  .overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(30,25,15,0.45);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .overlay.open { display: flex; animation: fadeO 0.15s ease; }
+  @keyframes fadeO { from { opacity:0; } to { opacity:1; } }
+
+  .modal {
+    background: var(--bg-1);
+    border: 1px solid var(--border-dark);
+    border-radius: 3px;
+    width: 520px;
+    max-width: 96vw;
+    box-shadow: var(--shadow-lg);
+    animation: modalIn 0.18s ease;
+    max-height: 92vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  @keyframes modalIn { from { opacity:0; transform: translateY(-16px); } to { opacity:1; transform: none; } }
+
+  .modal-head {
+    padding: 20px 22px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .modal-title {
+    font-family: 'Fraunces', serif;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-1);
+  }
+  .modal-body {
+    padding: 18px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    overflow-y: auto;
+  }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field-lbl {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-3);
+  }
+  .field-row { display: flex; gap: 10px; }
+  .modal-foot {
+    padding: 14px 22px 18px;
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .btn-cancel-m {
+    padding: 9px 18px;
+    background: var(--bg-2);
+    border: 1px solid var(--border-mid);
+    color: var(--text-2);
+    cursor: pointer;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 2px;
+    transition: all 0.12s;
+  }
+  .btn-cancel-m:hover { background: var(--bg-3); border-color: var(--border-dark); }
+  .btn-create-m {
+    padding: 9px 22px;
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 2px;
+    transition: all 0.12s;
+  }
+  .btn-create-m:hover { background: #253d6e; box-shadow: var(--shadow-md); }
+
+  .coord-box {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: #1a7a4a;
+    background: var(--crit-4-bg);
+    border: 1px solid var(--crit-4-border);
+    padding: 6px 10px;
+    border-radius: 2px;
+    display: none;
+    margin-top: 4px;
+  }
+  .coord-box.show { display: block; }
+
+  .btn-mapa {
+    padding: 7px 12px;
+    background: var(--accent-lt);
+    border: 1px solid #c0cfe8;
+    color: var(--accent);
+    cursor: pointer;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: 2px;
+    white-space: nowrap;
+    transition: all 0.12s;
+    flex-shrink: 0;
+  }
+  .btn-mapa:hover { background: #d0dcf2; }
+
+  /* ── Custom Leaflet Markers ── */
+  .cmark { display:flex; flex-direction:column; align-items:center; }
+  .cmark-body {
+    width: 34px; height: 34px;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+    border: 2px solid rgba(255,255,255,0.8);
+  }
+  .cmark-body span { transform: rotate(45deg); display:block; }
+  .cmark-n1 { background: var(--crit-1); }
+  .cmark-n2 { background: var(--crit-2); }
+  .cmark-n3 { background: var(--crit-3); }
+  .cmark-n4 { background: var(--crit-4); }
+  .cmark-closed { opacity: 0.45; filter: grayscale(0.6); }
+
+  /* Leaflet popup */
+  .leaflet-popup-content-wrapper {
+    background: #fff !important;
+    border: 1px solid var(--border-dark) !important;
+    border-radius: 3px !important;
+    box-shadow: var(--shadow-lg) !important;
+    padding: 0 !important;
+  }
+  .leaflet-popup-tip { background: #fff !important; }
+  .leaflet-popup-content { margin: 0 !important; padding: 0 !important; color: var(--text-1) !important; }
+  .pop-inner { padding: 14px 16px; min-width: 210px; }
+  .pop-name {
+    font-family: 'Fraunces', serif;
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 4px;
+    line-height: 1.2;
+  }
+  .pop-meta { font-size: 11px; color: var(--text-3); margin-bottom: 3px; }
+  .pop-n { font-size: 11px; color: var(--text-2); margin-bottom: 10px; }
+  .pop-btn {
+    display: block;
+    width: 100%;
+    padding: 8px;
+    background: var(--accent);
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    text-align: center;
+    border-radius: 2px;
+    transition: background 0.12s;
+    letter-spacing: 0.02em;
+  }
+  .pop-btn:hover { background: #253d6e; }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="logo-mark">
+    <div class="logo-icon">⚠</div>
+    <div>
+      <div class="logo-text">SIGECA</div>
+      <div class="logo-sub">Gestión de Catástrofes</div>
+    </div>
+  </div>
+  <div class="header-divider"></div>
+
+  <div class="nivel-indicators">
+    <div class="nivel-chip chip-n1">
+      <div class="nivel-chip-dot" style="background:var(--crit-1)"></div>
+      <span class="nivel-chip-val" id="cnt1">0</span>
+      <span class="nivel-chip-lbl">Nivel 1</span>
+    </div>
+    <div class="nivel-chip chip-n2">
+      <div class="nivel-chip-dot" style="background:var(--crit-2)"></div>
+      <span class="nivel-chip-val" id="cnt2">0</span>
+      <span class="nivel-chip-lbl">Nivel 2</span>
+    </div>
+    <div class="nivel-chip chip-n3">
+      <div class="nivel-chip-dot" style="background:var(--crit-3)"></div>
+      <span class="nivel-chip-val" id="cnt3">0</span>
+      <span class="nivel-chip-lbl">Nivel 3</span>
+    </div>
+    <div class="nivel-chip chip-n4">
+      <div class="nivel-chip-dot" style="background:var(--crit-4)"></div>
+      <span class="nivel-chip-val" id="cnt4">0</span>
+      <span class="nivel-chip-lbl">Nivel 4</span>
+    </div>
+  </div>
+
+  <div class="header-right">
+    <div class="live-indicator">
+      <div class="live-dot"></div>
+      <span>Sistema activo</span>
+    </div>
+    <div class="clock" id="clock">--:--:--</div>
+    <button class="btn-nueva" onclick="abrirModal()">+ Nueva operación</button>
+  </div>
+</header>
+
+<!-- ── MAIN ── -->
+<div class="main">
+
+  <!-- PANEL IZQUIERDO -->
+  <div class="panel-left">
+    <div class="panel-left-head">
+      <div class="section-label">Operaciones registradas</div>
+      <div class="filter-tabs">
+        <button class="ftab on" data-f="all" onclick="setFiltro('all',this)">Todas</button>
+        <button class="ftab" data-f="1" onclick="setFiltro('1',this)">N1</button>
+        <button class="ftab" data-f="2" onclick="setFiltro('2',this)">N2</button>
+        <button class="ftab" data-f="3" onclick="setFiltro('3',this)">N3</button>
+        <button class="ftab" data-f="4" onclick="setFiltro('4',this)">N4</button>
+      </div>
+    </div>
+    <div class="ops-list" id="ops-list">
+      <div class="empty-msg show" id="empty-msg">
+        <div class="empty-msg-icon">📋</div>
+        <span>No hay operaciones registradas.<br>Crea la primera pulsando el botón.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div class="map-zone">
+    <div class="pick-banner" id="pick-banner">📍 Haz clic en el mapa para fijar la ubicación</div>
+    <div id="map"></div>
+
+    <!-- DETAIL PANEL -->
+    <div class="detail-panel" id="detail-panel">
+      <div class="dp-header">
+        <div class="dp-top-row">
+          <div>
+            <div class="dp-id" id="dp-id"></div>
+            <div class="dp-name" id="dp-name"></div>
+          </div>
+          <button class="btn-close-dp" onclick="cerrarDetalle()">✕</button>
+        </div>
+        <div class="dp-chips">
+          <div id="dp-type-tag"></div>
+          <div class="dp-loc" id="dp-loc"></div>
+        </div>
+      </div>
+      <div style="padding:10px 18px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;">
+        <div style="font-size:11px;color:var(--text-3);font-weight:500;">Nivel de activación:</div>
+        <div class="nivel-selector" id="nivel-selector">
+          <button class="nsel-opt" data-n="1" onclick="cambiarNivel(1)">N1 Emergencia Mayor</button>
+          <button class="nsel-opt" data-n="2" onclick="cambiarNivel(2)">N2 Emergencia</button>
+          <button class="nsel-opt" data-n="3" onclick="cambiarNivel(3)">N3 Alerta</button>
+          <button class="nsel-opt" data-n="4" onclick="cambiarNivel(4)">N4 Seguimiento</button>
+        </div>
+      </div>
+      <div class="dp-info-row" id="dp-info-row"></div>
+      <div class="dp-timeline" id="dp-timeline"></div>
+      <div class="dp-addaction">
+        <div class="section-label">Registrar novedad</div>
+        <div class="form-row">
+          <select class="f-select" id="a-prio">
+            <option value="Crítica">🔴 Crítica</option>
+            <option value="Alta">🟠 Alta</option>
+            <option value="Media" selected>🟡 Media</option>
+            <option value="Baja">🟢 Baja</option>
+          </select>
+          <input class="f-input" id="a-autor" placeholder="Unidad / Cargo" style="flex:1;">
+        </div>
+        <textarea class="f-input" id="a-texto" placeholder="Describe la novedad, acción o decisión tomada…" style="resize:vertical;min-height:62px;margin-bottom:6px;"></textarea>
+        <button class="btn-reg" onclick="addAccion()">Registrar novedad</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL NUEVA OP ── -->
+<div class="overlay" id="overlay">
+  <div class="modal">
+    <div class="modal-head">
+      <div class="modal-title">Nueva operación</div>
+      <button class="btn-close-dp" onclick="cerrarModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <div class="field-lbl">Nombre de la operación *</div>
+        <input class="f-input" id="f-nombre" placeholder="Ej: Inundaciones Cuenca del Ebro">
+      </div>
+      <div class="field-row">
+        <div class="field" style="flex:1;">
+          <div class="field-lbl">Tipo de catástrofe *</div>
+          <select class="f-input f-select" id="f-tipo" style="width:100%">
+            <option value="inundacion">🌊 Inundación / DANA</option>
+            <option value="incendio">🔥 Incendio forestal</option>
+            <option value="seismo">🌍 Seísmo / Terremoto</option>
+            <option value="temporal">🌪 Temporal / Viento</option>
+            <option value="accidente">🚛 Accidente grave</option>
+            <option value="quimico">☣️ Incidente químico</option>
+            <option value="sanitaria">🦠 Emergencia sanitaria</option>
+            <option value="otro">📋 Otro</option>
+          </select>
+        </div>
+        <div class="field" style="flex:1;">
+          <div class="field-lbl">Nivel de activación *</div>
+          <select class="f-input f-select" id="f-nivel" style="width:100%">
+            <option value="1">N1 — Emergencia Mayor</option>
+            <option value="2">N2 — Emergencia</option>
+            <option value="3" selected>N3 — Alerta</option>
+            <option value="4">N4 — Seguimiento</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-lbl">Descripción inicial</div>
+        <textarea class="f-input" id="f-desc" placeholder="Descripción de la situación inicial, recursos movilizados, estimaciones…" style="resize:vertical;min-height:76px;"></textarea>
+      </div>
+      <div class="field-row">
+        <div class="field" style="flex:1;">
+          <div class="field-lbl">Provincia / Municipio</div>
+          <input class="f-input" id="f-loc" placeholder="Ej: Valencia, Paiporta">
+        </div>
+        <div class="field" style="flex:1;">
+          <div class="field-lbl">Director de Operaciones</div>
+          <input class="f-input" id="f-dir" placeholder="Nombre y cargo">
+        </div>
+      </div>
+      <div class="field">
+        <div class="field-lbl">Organismos coordinados</div>
+        <input class="f-input" id="f-org" placeholder="Ej: 112, UME, Cruz Roja, DGT…">
+      </div>
+      <div class="field">
+        <div class="field-lbl">Ubicación en mapa</div>
+        <div style="display:flex;gap:6px;">
+          <input class="f-input" id="f-coord-label" placeholder="Descripción del lugar o coordenadas" style="flex:1;">
+          <button class="btn-mapa" onclick="iniciarPick()">🗺 Seleccionar</button>
+        </div>
+        <div class="coord-box" id="coord-box">Sin coordenadas seleccionadas</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn-cancel-m" onclick="cerrarModal()">Cancelar</button>
+      <button class="btn-create-m" onclick="crearOp()">Crear operación →</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── CONFIG TIPOS ──────────────────────────────────────────
+const TIPOS = {
+  inundacion: { label:'Inundación',      emoji:'🌊', color:'#2980b9' },
+  incendio:   { label:'Incendio forestal',emoji:'🔥', color:'#c0392b' },
+  seismo:     { label:'Seísmo',          emoji:'🌍', color:'#8e44ad' },
+  temporal:   { label:'Temporal',        emoji:'🌪', color:'#16a085' },
+  accidente:  { label:'Accidente',       emoji:'🚛', color:'#d35400' },
+  quimico:    { label:'Inc. Químico',    emoji:'☣️', color:'#c0392b' },
+  sanitaria:  { label:'Emerg. Sanitaria',emoji:'🦠', color:'#e74c3c' },
+  otro:       { label:'Otro',            emoji:'📋', color:'#7f8c8d' }
+};
+
+const NIVEL_LABELS = {
+  1:'Emergencia Mayor', 2:'Emergencia', 3:'Alerta', 4:'Seguimiento'
+};
+
+// ── ESTADO ───────────────────────────────────────────────
+let ops = [];
+let contador = 0;
+let filtro = 'all';
+let selId = null;
+let picking = false;
+let coords = null;
+let tempMark = null;
+let map, markerLayer;
+
+// ── MAPA ─────────────────────────────────────────────────
+function initMap() {
+  map = L.map('map', { zoomControl: false }).setView([40.4, -3.7], 6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution:'© OpenStreetMap', maxZoom:19
+  }).addTo(map);
+  L.control.zoom({ position:'bottomright' }).addTo(map);
+  markerLayer = L.layerGroup().addTo(map);
+
+  map.on('click', e => {
+    if (!picking) return;
+    coords = { lat: parseFloat(e.latlng.lat.toFixed(6)), lng: parseFloat(e.latlng.lng.toFixed(6)) };
+    document.getElementById('coord-box').textContent = `📍 ${coords.lat}, ${coords.lng}`;
+    document.getElementById('coord-box').classList.add('show');
+    stopPick();
+    abrirModal();
+  });
+}
+
+// ── RELOJ ────────────────────────────────────────────────
+setInterval(() => {
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}, 1000);
+
+// ── CONTADORES ───────────────────────────────────────────
+function actualizarContadores() {
+  [1,2,3,4].forEach(n => {
+    document.getElementById('cnt'+n).textContent = ops.filter(o=>o.nivel==n).length;
+  });
+}
+
+// ── RENDER SIDEBAR ────────────────────────────────────────
+function renderSidebar() {
+  const list = document.getElementById('ops-list');
+  const empty = document.getElementById('empty-msg');
+  list.querySelectorAll('.op-card').forEach(c=>c.remove());
+
+  let visible = filtro === 'all' ? ops : ops.filter(o=>String(o.nivel)===filtro);
+  visible = [...visible].sort((a,b) => a.nivel - b.nivel || b.creadoEn - a.creadoEn);
+
+  if (!visible.length) { empty.classList.add('show'); return; }
+  empty.classList.remove('show');
+
+  visible.forEach(op => {
+    const t = TIPOS[op.tipo];
+    const card = document.createElement('div');
+    card.className = 'op-card' + (selId===op.id?' sel':'');
+    card.dataset.nivel = op.nivel;
+    card.dataset.id = op.id;
+    card.innerHTML = `
+      <div class="card-top">
+        <div>
+          <div class="card-id">${op.id}</div>
+          <div class="card-name">${op.nombre}</div>
+        </div>
+        <span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${t.label}</span>
+      </div>
+      <div class="card-meta">
+        <span class="card-loc">📍 ${op.loc||'Sin ubicación'}</span>
+        <div class="card-bottom">
+          <span class="nivel-pill pill-${op.nivel}">N${op.nivel} ${NIVEL_LABELS[op.nivel]}</span>
+          <span class="act-count">${op.acciones.length} novedades</span>
+        </div>
+      </div>`;
+    card.addEventListener('click', () => abrirDetalle(op.id));
+    list.appendChild(card);
+  });
+}
+
+// ── RENDER MAPA ───────────────────────────────────────────
+function renderMapa() {
+  markerLayer.clearLayers();
+  ops.forEach(op => {
+    if (!op.coords) return;
+    const t = TIPOS[op.tipo];
+    const closed = op.nivel === 4;
+    const icon = L.divIcon({
+      html: `<div class="cmark${closed?' cmark-closed':''}"><div class="cmark-body cmark-n${op.nivel}"><span>${t.emoji}</span></div></div>`,
+      className:'', iconSize:[34,40], iconAnchor:[17,40], popupAnchor:[0,-40]
+    });
+    const m = L.marker([op.coords.lat, op.coords.lng], { icon }).addTo(markerLayer);
+    m.bindPopup(`<div class="pop-inner">
+      <div class="pop-name">${op.nombre}</div>
+      <div class="pop-meta">${t.emoji} ${t.label} · ${op.loc||''}</div>
+      <div class="pop-n"><span class="nivel-pill pill-${op.nivel}">N${op.nivel} ${NIVEL_LABELS[op.nivel]}</span></div>
+      <button class="pop-btn" onclick="abrirDetalle('${op.id}');map.closePopup()">Ver operación →</button>
+    </div>`, { maxWidth:260 });
+  });
+}
+
+// ── FILTRO ────────────────────────────────────────────────
+function setFiltro(f, btn) {
+  filtro = f;
+  document.querySelectorAll('.ftab').forEach(b => {
+    b.classList.remove('on','on-n1','on-n2','on-n3','on-n4');
+  });
+  if (f==='all') btn.classList.add('on');
+  else btn.classList.add(`on-n${f}`);
+  renderSidebar();
+}
+
+// ── DETALLE ───────────────────────────────────────────────
+function abrirDetalle(id) {
+  selId = id;
+  const op = ops.find(o=>o.id===id);
+  if (!op) return;
+  document.getElementById('detail-panel').classList.add('open');
+  renderDetalle(op);
+  renderSidebar();
+  if (op.coords) map.flyTo([op.coords.lat, op.coords.lng], 13, {duration:1});
+}
+
+function cerrarDetalle() {
+  document.getElementById('detail-panel').classList.remove('open');
+  selId = null;
+  renderSidebar();
+}
+
+function renderDetalle(op) {
+  const t = TIPOS[op.tipo];
+  document.getElementById('dp-id').textContent = op.id;
+  document.getElementById('dp-name').textContent = op.nombre;
+  document.getElementById('dp-loc').innerHTML = op.loc ? `📍 ${op.loc}` : (op.coords ? `📍 ${op.coords.lat}, ${op.coords.lng}` : '');
+  document.getElementById('dp-type-tag').innerHTML = `<span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${t.label}</span>`;
+  document.querySelectorAll('.nsel-opt').forEach(b => b.classList.toggle('on', parseInt(b.dataset.n)===op.nivel));
+
+  // Info row
+  const ir = document.getElementById('dp-info-row');
+  ir.innerHTML = '';
+  if (op.dir) { const d=document.createElement('div'); d.className='dp-info-item'; d.innerHTML=`<strong>${op.dir}</strong>Director de Operaciones`; ir.appendChild(d); }
+  if (op.org) { const d=document.createElement('div'); d.className='dp-info-item'; d.innerHTML=`<strong>${op.org}</strong>Organismos`; ir.appendChild(d); }
+  const dd = document.createElement('div'); dd.className='dp-info-item';
+  dd.innerHTML=`<strong>${op.creadoEn.toLocaleString('es-ES',{day:'2-digit',month:'2-digit',year:'2-digit',hour:'2-digit',minute:'2-digit'})}</strong>Inicio`;
+  ir.appendChild(dd);
+
+  // Timeline
+  const tl = document.getElementById('dp-timeline');
+  if (!op.acciones.length) { tl.innerHTML='<div class="tl-empty">// Sin novedades registradas //</div>'; return; }
+  tl.innerHTML = [...op.acciones].reverse().map(a => `
+    <div class="tl-entry">
+      <div class="tl-node tl-node-${op.nivel}">${t.emoji}</div>
+      <div class="tl-body">
+        <div class="tl-meta">
+          <span class="tl-ts">${a.ts}</span>
+          <span class="tl-prio prio-${a.prio}">${a.prio}</span>
+        </div>
+        <div class="tl-text">${a.texto}</div>
+        ${a.autor ? `<div class="tl-author">— ${a.autor}</div>` : ''}
+      </div>
+    </div>`).join('');
+}
+
+function cambiarNivel(n) {
+  const op = ops.find(o=>o.id===selId);
+  if (!op) return;
+  op.nivel = n;
+  renderDetalle(op);
+  renderSidebar();
+  renderMapa();
+  actualizarContadores();
+}
+
+function addAccion() {
+  const op = ops.find(o=>o.id===selId);
+  if (!op) return;
+  const texto = document.getElementById('a-texto').value.trim();
+  if (!texto) { document.getElementById('a-texto').focus(); return; }
+  const now = new Date();
+  op.acciones.push({
+    id: Date.now(),
+    texto,
+    prio: document.getElementById('a-prio').value,
+    autor: document.getElementById('a-autor').value.trim(),
+    ts: now.toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
+  });
+  document.getElementById('a-texto').value = '';
+  renderDetalle(op);
+  renderSidebar();
+}
+
+// ── MODAL ─────────────────────────────────────────────────
+function abrirModal() {
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('f-nombre').focus();
+  if (coords) {
+    document.getElementById('coord-box').textContent = `📍 ${coords.lat}, ${coords.lng}`;
+    document.getElementById('coord-box').classList.add('show');
+  }
+}
+function cerrarModal() {
+  document.getElementById('overlay').classList.remove('open');
+  coords = null;
+  if (tempMark) { map.removeLayer(tempMark); tempMark=null; }
+  document.getElementById('coord-box').classList.remove('show');
+  limpiarModal();
+}
+function limpiarModal() {
+  ['f-nombre','f-desc','f-loc','f-dir','f-org','f-coord-label'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f-tipo').value='inundacion';
+  document.getElementById('f-nivel').value='3';
+}
+
+function iniciarPick() {
+  picking = true;
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('pick-banner').classList.add('on');
+  map.getContainer().style.cursor = 'crosshair';
+}
+function stopPick() {
+  picking = false;
+  document.getElementById('pick-banner').classList.remove('on');
+  map.getContainer().style.cursor = '';
+}
+
+function crearOp() {
+  const nombre = document.getElementById('f-nombre').value.trim();
+  if (!nombre) { document.getElementById('f-nombre').focus(); return; }
+  contador++;
+  const now = new Date();
+  const desc = document.getElementById('f-desc').value.trim();
+  const dir = document.getElementById('f-dir').value.trim();
+  const nivel = parseInt(document.getElementById('f-nivel').value);
+
+  const op = {
+    id: `OPC-${String(contador).padStart(4,'0')}`,
+    nombre,
+    tipo: document.getElementById('f-tipo').value,
+    nivel,
+    loc: document.getElementById('f-loc').value.trim(),
+    dir,
+    org: document.getElementById('f-org').value.trim(),
+    coords: coords ? {...coords} : null,
+    creadoEn: now,
+    acciones: desc ? [{
+      id: Date.now(),
+      texto: desc,
+      prio: nivel<=2 ? 'Crítica' : nivel===3 ? 'Alta' : 'Media',
+      autor: dir || 'Sistema SIGECA',
+      ts: now.toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
+    }] : []
+  };
+
+  ops.push(op);
+  cerrarModal();
+  renderSidebar();
+  renderMapa();
+  actualizarContadores();
+  abrirDetalle(op.id);
+}
+
+// ── DATOS DE EJEMPLO ──────────────────────────────────────
+function cargarEjemplos() {
+  const ejemplos = [
+    {
+      nombre:'DANA — Cuenca del Segura',
+      tipo:'inundacion', nivel:1,
+      loc:'Murcia / Orihuela', dir:'Dtor. Gral. Protección Civil',
+      org:'112, UME, Cruz Roja, DGT, CHC',
+      coords:{lat:38.08, lng:-0.95},
+      acciones:[
+        {texto:'Activación Nivel 1. Desbordamiento del Segura en Orihuela. 450 viviendas afectadas. UME desplegada con 200 efectivos.',prio:'Crítica',autor:'CECOP Murcia',ts:'12/04 06:30'},
+        {texto:'Rescate de 38 personas en zona de Molina de Segura. 6 equipos de balsas en acción.',prio:'Crítica',autor:'UME – Sección Acuática',ts:'12/04 08:15'},
+        {texto:'Apertura de albergue en Pabellón Municipal de Orihuela. Capacidad: 800 personas.',prio:'Alta',autor:'Cruz Roja',ts:'12/04 09:40'},
+        {texto:'Corte total A-7 en sentido Cartagena. Desvío habilitado por N-340.',prio:'Media',autor:'DGT Murcia',ts:'12/04 10:05'}
+      ]
+    },
+    {
+      nombre:'Incendio forestal Sierra Calderona',
+      tipo:'incendio', nivel:2,
+      loc:'Valencia / Bétera', dir:'Coordinadora IVACE Emergencias',
+      org:'112 CV, BRIVA, Bomberos Mancomunitat',
+      coords:{lat:39.70, lng:-0.46},
+      acciones:[
+        {texto:'Detección por avistamiento aéreo a las 14:22. Activación nivel 2. 3 medios aéreos y 4 cuadrillas terrestres.',prio:'Alta',autor:'CICU Valencia',ts:'11/04 14:30'},
+        {texto:'Foco principal controlado. Perímetro estimado 340 ha. Retraso por viento N de 25 km/h.',prio:'Alta',autor:'Dir. Extinción',ts:'11/04 17:10'}
+      ]
+    },
+    {
+      nombre:'Temporal costero Tramontana',
+      tipo:'temporal', nivel:3,
+      loc:'Girona / Alt Empordà', dir:'Jefa de Servei 112 Catalunya',
+      org:'112 CAT, Salvament Marítim, Mossos',
+      coords:{lat:42.25, lng:3.18},
+      acciones:[
+        {texto:'Alerta amarilla activada. Vientos de 100 km/h previstos. Puerto cerrado a embarcaciones menores.',prio:'Media',autor:'Meteocat',ts:'10/04 08:00'}
+      ]
+    },
+    {
+      nombre:'Seísmo 4.2 ML — Comarca Granada',
+      tipo:'seismo', nivel:4,
+      loc:'Granada / Loja', dir:'Delegado territorial Emergencias',
+      org:'112 AND, Bomberos Granada, SAS',
+      coords:{lat:37.17, lng:-4.15},
+      acciones:[
+        {texto:'Sismo 4.2 ML a las 03:17. Sin heridos reportados. Inspección de edificios en curso.',prio:'Baja',autor:'IGN / CECOP Andalucía',ts:'09/04 03:45'}
+      ]
+    }
+  ];
+
+  ejemplos.forEach((e,i) => {
+    contador++;
+    const now = new Date(Date.now() - i*7200000);
+    ops.push({
+      id:`OPC-${String(contador).padStart(4,'0')}`,
+      nombre: e.nombre, tipo: e.tipo, nivel: e.nivel,
+      loc: e.loc, dir: e.dir, org: e.org,
+      coords: e.coords,
+      creadoEn: now,
+      acciones: e.acciones.map((a,j)=>({...a,id:Date.now()+j}))
+    });
+  });
+}
+
+// ── TECLADO ───────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key==='Escape') {
+    cerrarModal();
+    cerrarDetalle();
+    if (picking) stopPick();
+  }
+  if ((e.ctrlKey||e.metaKey) && e.key==='n') { e.preventDefault(); abrirModal(); }
+});
+
+// ── INIT ─────────────────────────────────────────────────
+initMap();
+cargarEjemplos();
+renderSidebar();
+renderMapa();
+actualizarContadores();
+</script>
+</body>
+</html>
