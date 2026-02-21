@@ -236,9 +236,14 @@
               ops[dId]._hasUpdate = oldOp._hasUpdate;
             }
 
-            if (ch.type === 'added' && !initialLoad && d.creadoPor !== currentUser.uid) {
-              hasNewOp = true;
-              ops[dId]._isNew = true;
+            // Detectar nueva operacion:
+            if (ch.type === 'added') {
+              // Si es la carga inicial, asumimos que no es nueva "en tiempo real"
+              // a no ser que tú mismo la hayas creado muy recientemente
+              if (!initialLoad && d.creadoPor !== currentUser.uid) {
+                hasNewOp = true;
+                ops[dId]._isNew = true;
+              }
             }
 
             if (ch.type === 'modified' && dId !== selOpId) {
@@ -251,10 +256,11 @@
           }
         });
 
-        initialLoad = false;
-        if (hasNewOp) {
+        if (hasNewOp && !initialLoad) {
           alertSound.play().catch(e => console.log('Ignored auto-play:', e));
         }
+
+        initialLoad = false;
 
         renderSidebar();
         renderMapa();
