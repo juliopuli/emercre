@@ -3250,7 +3250,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <div class="dp-info-row" id="dp-info-row"></div>
 
           <!-- RECURSOS ASIGNADOS -->
-          <details class="dp-recursos" id="dp-recursos-wrapper" open>
+          <details class="dp-recursos" id="dp-recursos-wrapper">
             <summary class="section-label" style="cursor:pointer; outline:none; font-size:10px; margin-bottom:6px;">
               Recursos asignados</summary>
             <div id="dp-recursos-list" style="display:flex; flex-direction:column; gap:4px; margin-bottom:8px;"></div>
@@ -3274,16 +3274,16 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
           <div class="dp-timeline" id="dp-timeline"></div>
           <div class="dp-addaction" id="dp-addaction-wrapper">
-            <div class="section-label">Registrar novedad</div>
-            <div class="form-row">
-              <select class="f-select" id="a-prio">
+            <div style="display:flex; gap:6px; margin-bottom:6px;">
+              <select class="f-select" id="a-prio" style="padding:4px; font-size:11px; width:95px;">
                 <option value="Crítica">🔴 Crítica</option>
                 <option value="Alta">🟠 Alta</option>
                 <option value="Media" selected>🟡 Media</option>
                 <option value="Baja">🟢 Baja</option>
               </select>
               <!-- Campo autor: readonly, siempre muestra el usuario conectado -->
-              <input class="f-input" id="a-autor" placeholder="Usuario conectado" style="flex:1;" readonly>
+              <input class="f-input" id="a-autor" placeholder="Usuario" style="flex:1; padding:4px; font-size:11px;"
+                readonly>
             </div>
             <textarea class="f-input" id="a-texto" placeholder="Describe la novedad, acción o decisión…"
               style="resize:vertical;min-height:45px;margin-bottom:4px;"></textarea>
