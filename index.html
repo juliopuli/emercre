@@ -178,6 +178,22 @@
       }
     };
 
+    // ── ACTIVIDAD (HEARTBEAT) ──────────────────────────────────────────
+    let lastHeartbeat = 0;
+    function actualizarActividad() {
+      if (!currentUser) return;
+      const now = Date.now();
+      // Throttle: Max una actualización cada 5 minutos (300.000 ms)
+      if (now - lastHeartbeat < 300000) return;
+      lastHeartbeat = now;
+      updateDoc(doc(db, 'users', currentUser.uid), {
+        ultimaActividad: serverTimestamp(),
+        enLinea: true
+      }).catch(() => { });
+    }
+    window.addEventListener('click', actualizarActividad);
+    window.addEventListener('keypress', actualizarActividad);
+
     // ── AUTH STATE ─────────────────────────────────────────────────────
     onAuthStateChanged(auth, async user => {
       if (user) {
@@ -190,6 +206,17 @@
         currentUser = user;
         currentUserDoc = snap.data();
         currentRole = currentUserDoc.role;
+
+        // Registrar entrada y marcar online
+        await updateDoc(doc(db, 'users', user.uid), {
+          enLinea: true,
+          ultimaActividad: serverTimestamp()
+        });
+        await addDoc(collection(db, 'users', user.uid, 'sessions'), {
+          tipo: 'entrada',
+          timestamp: serverTimestamp()
+        });
+
         mostrarApp();
         initApp();
       } else {
@@ -213,7 +240,18 @@
         btn.disabled = false; btn.textContent = 'Acceder';
       }
     };
-    window.doLogout = () => signOut(auth);
+    window.doLogout = async () => {
+      if (currentUser) {
+        try {
+          await addDoc(collection(db, 'users', currentUser.uid, 'sessions'), {
+            tipo: 'salida',
+            timestamp: serverTimestamp()
+          });
+          await updateDoc(doc(db, 'users', currentUser.uid), { enLinea: false });
+        } catch (e) { console.error("Error logout presence:", e); }
+      }
+      signOut(auth);
+    };
 
     // ── INIT APP ───────────────────────────────────────────────────────
     function initApp() {
@@ -1328,32 +1366,49 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         document.getElementById('section-tablas').style.display = sec === 'tablas' ? 'flex' : 'none';
       }
 
-      if (sec === 'usuarios') cargarUsuarios();
+      if (sec === 'usuarios') suscribirUsuarios();
       if (sec === 'tablas' && typeof window.showTablaMaestra === 'function') {
         window.showTablaMaestra('vehiculos');
       }
       if (sec === 'operaciones' && gmap) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
     };
 
-    async function cargarUsuarios() {
-      const snap = await getDocs(collection(db, 'users'));
-      const tbody = document.getElementById('users-tbody');
-      tbody.innerHTML = '';
-      snap.forEach(d => {
-        const u = d.data();
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td>${u.nombre || '—'}</td>
+    let unsubUsuarios = null;
+    function suscribirUsuarios() {
+      if (unsubUsuarios) unsubUsuarios();
+      unsubUsuarios = onSnapshot(collection(db, 'users'), snap => {
+        const tbody = document.getElementById('users-tbody');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        const now = Date.now();
+        const twoHours = 2 * 60 * 60 * 1000;
+
+        snap.forEach(d => {
+          const u = d.data();
+          const lastAct = u.ultimaActividad?.toMillis ? u.ultimaActividad.toMillis() : 0;
+          const isRecentlyActive = (now - lastAct) < twoHours;
+          const isOnline = u.enLinea === true && isRecentlyActive;
+
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+          <td>
+            <div style="display:flex; align-items:center; gap:8px;">
+              <div style="width:10px; height:10px; border-radius:50%; background:${isOnline ? '#2ecc71' : '#e74c3c'}; border:1px solid rgba(0,0,0,0.1);" title="${isOnline ? 'En línea' : 'Desconectado'}"></div>
+              ${u.nombre || '—'}
+            </div>
+          </td>
           <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${u.email}</td>
           <td><span class="rol-badge rol-${u.role}">${ROL_LABELS[u.role] || u.role}</span></td>
           <td><span class="activo-badge ${u.activo !== false ? 'activo' : 'inactivo'}">${u.activo !== false ? 'Activo' : 'Inactivo'}</span></td>
           <td>
             <button class="tbl-btn" onclick="editarUsuario('${d.id}')">Editar</button>
+            <button class="tbl-btn" onclick="abrirLogUsuario('${d.id}', '${u.nombre || u.email}')">Log</button>
             ${d.id !== currentUser.uid
-            ? `<button class="tbl-btn danger" onclick="borrarUsuario('${d.id}')">Desactivar</button>`
-            : '<span style="font-size:11px;color:var(--text-4)">(tú)</span>'}
+              ? `<button class="tbl-btn danger" onclick="borrarUsuario('${d.id}')">Desactivar</button>`
+              : '<span style="font-size:11px;color:var(--text-4)">(tú)</span>'}
           </td>`;
-        tbody.appendChild(tr);
+          tbody.appendChild(tr);
+        });
       });
     }
 
@@ -1366,6 +1421,41 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       document.getElementById('u-pass-row').style.display = 'flex';
       document.getElementById('overlay-user').classList.add('open');
       document.getElementById('u-nombre').focus();
+    };
+
+    let unsubUserLog = null;
+    window.abrirLogUsuario = (uid, nombre) => {
+      document.getElementById('log-user-name').textContent = nombre;
+      const tbody = document.getElementById('log-tbody');
+      tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;padding:20px;">Cargando historial...</td></tr>';
+
+      const q = query(collection(db, 'users', uid, 'sessions'), orderBy('timestamp', 'desc'));
+      if (unsubUserLog) unsubUserLog();
+
+      unsubUserLog = onSnapshot(q, snap => {
+        tbody.innerHTML = '';
+        if (snap.empty) {
+          tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;padding:20px;color:var(--text-4);">No hay registros de sesión.</td></tr>';
+          return;
+        }
+        snap.forEach(doc => {
+          const s = doc.data();
+          const ts = s.timestamp?.toDate ? s.timestamp.toDate().toLocaleString('es-ES') : '—';
+          const tipo = s.tipo === 'entrada' ? '🟢 Entrada (Login)' : '🔴 Salida (Logout)';
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td style="font-family:'IBM Plex Mono',monospace;">${ts}</td>
+            <td style="font-weight:600;">${tipo}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      });
+      document.getElementById('overlay-user-log').classList.add('open');
+    };
+
+    window.cerrarLogUsuario = () => {
+      document.getElementById('overlay-user-log').classList.remove('open');
+      if (unsubUserLog) { unsubUserLog(); unsubUserLog = null; }
     };
 
     window.editarUsuario = async uid => {
@@ -3216,10 +3306,10 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.4.0
+          Versión V.2.5.0
         </div>
       </div>
-
+      </footer>
       <div class="map-zone">
         <div class="pick-banner" id="pick-banner">📍 Haz clic en el mapa para fijar la ubicación</div>
         <div id="map"></div>
@@ -3660,6 +3750,34 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       </div>
       <div class="modal-foot">
         <button class="btn-cancel-m" onclick="cerrarModalInformeIA()">Cerrar panel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL LOG DE SESIONES -->
+  <div class="overlay" id="overlay-user-log">
+    <div class="modal" style="width:500px; max-width:95vw;">
+      <div class="modal-head">
+        <div class="modal-title">Historial de sesiones: <span id="log-user-name"></span></div>
+        <button class="btn-close-dp" onclick="cerrarLogUsuario()">✕</button>
+      </div>
+      <div class="modal-body" style="max-height:60vh; overflow-y:auto; padding:0;">
+        <table style="width:100%; border-collapse:collapse;">
+          <thead style="position:sticky; top:0; background:var(--bg-1); z-index:1; box-shadow:0 1px 0 var(--border);">
+            <tr>
+              <th style="text-align:left; padding:12px; font-size:11px; text-transform:uppercase; color:var(--text-3);">
+                Fecha y Hora</th>
+              <th style="text-align:left; padding:12px; font-size:11px; text-transform:uppercase; color:var(--text-3);">
+                Evento</th>
+            </tr>
+          </thead>
+          <tbody id="log-tbody">
+            <!-- Los logs se cargan aquí -->
+          </tbody>
+        </table>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel-m" onclick="cerrarLogUsuario()">Cerrar historial</button>
       </div>
     </div>
   </div>
