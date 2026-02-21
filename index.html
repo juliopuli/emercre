@@ -47,6 +47,7 @@
     let pickedCoords = null;
     let pickedAddress = '';
     let gmap = null;
+    let mapReady = false;
     let gmMarkers = {};
     let autocomplete = null;
     let autocompleteEdit = null;
@@ -104,63 +105,76 @@
         zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM }
       });
 
+      google.maps.event.addListenerOnce(gmap, 'tilesloaded', function () {
+        mapReady = true;
+        if (Object.keys(ops).length) renderMapa();
+      });
+
       gmap.addListener('click', () => {
         if (!picking && !editPickMode) window.cerrarDetalle();
       });
 
-      // Autocomplete — modal nueva operación
-      const input = document.getElementById('f-lugar');
-      autocomplete = new google.maps.places.Autocomplete(input, {
-        fields: ['geometry', 'formatted_address', 'name'],
-        componentRestrictions: { country: 'es' }
-      });
-      autocomplete.addListener('place_changed', () => {
-        const place = autocomplete.getPlace();
-        if (!place.geometry) return;
-        pickedCoords = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
-        pickedAddress = place.formatted_address || place.name || '';
-        mostrarCoordBox();
-        gmap.panTo(place.geometry.location);
-        gmap.setZoom(15);
-        if (tempGmMarker) tempGmMarker.setMap(null);
-        tempGmMarker = new google.maps.Marker({
-          position: place.geometry.location, map: gmap,
-          animation: google.maps.Animation.DROP,
-          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#1a3a6e', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 }
-        });
-      });
-
-      // Autocomplete — modal editar operación
-      const inputEdit = document.getElementById('fe-lugar');
-      autocompleteEdit = new google.maps.places.Autocomplete(inputEdit, {
-        fields: ['geometry', 'formatted_address', 'name'],
-        componentRestrictions: { country: 'es' }
-      });
-      autocompleteEdit.addListener('place_changed', () => {
-        const place = autocompleteEdit.getPlace();
-        if (!place.geometry) return;
-        editPickedCoords = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
-        editPickedAddress = place.formatted_address || place.name || '';
-        mostrarEditCoordBox();
-        gmap.panTo(place.geometry.location);
-        gmap.setZoom(15);
-        if (editTempGmMarker) editTempGmMarker.setMap(null);
-        editTempGmMarker = new google.maps.Marker({
-          position: place.geometry.location, map: gmap,
-          animation: google.maps.Animation.DROP,
-          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#1a3a6e', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 }
-        });
-      });
-
       // Force refresh when map container becomes visible
       new ResizeObserver(() => {
-        if (gmap && document.getElementById('map').offsetWidth > 0) {
+        if (gmap && mapReady && document.getElementById('map').offsetWidth > 0) {
           google.maps.event.trigger(gmap, 'resize');
           if (Object.keys(ops).length) renderMapa();
         }
       }).observe(document.getElementById('map'));
+    };
 
-      if (Object.keys(ops).length) renderMapa();
+    window.ensureAutocomplete = function () {
+      if (!autocomplete) {
+        const input = document.getElementById('f-lugar');
+        autocomplete = new google.maps.places.Autocomplete(input, {
+          fields: ['geometry', 'formatted_address', 'name'],
+          componentRestrictions: { country: 'es' }
+        });
+        autocomplete.addListener('place_changed', () => {
+          const place = autocomplete.getPlace();
+          if (!place.geometry) return;
+          pickedCoords = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
+          pickedAddress = place.formatted_address || place.name || '';
+          mostrarCoordBox();
+          if (mapReady && gmap) {
+            gmap.panTo(place.geometry.location);
+            gmap.setZoom(15);
+            if (tempGmMarker) tempGmMarker.setMap(null);
+            tempGmMarker = new google.maps.Marker({
+              position: place.geometry.location, map: gmap,
+              animation: google.maps.Animation.DROP,
+              icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#1a3a6e', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 }
+            });
+          }
+        });
+      }
+    };
+
+    window.ensureAutocompleteEdit = function () {
+      if (!autocompleteEdit) {
+        const inputEdit = document.getElementById('fe-lugar');
+        autocompleteEdit = new google.maps.places.Autocomplete(inputEdit, {
+          fields: ['geometry', 'formatted_address', 'name'],
+          componentRestrictions: { country: 'es' }
+        });
+        autocompleteEdit.addListener('place_changed', () => {
+          const place = autocompleteEdit.getPlace();
+          if (!place.geometry) return;
+          editPickedCoords = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
+          editPickedAddress = place.formatted_address || place.name || '';
+          mostrarEditCoordBox();
+          if (mapReady && gmap) {
+            gmap.panTo(place.geometry.location);
+            gmap.setZoom(15);
+            if (editTempGmMarker) editTempGmMarker.setMap(null);
+            editTempGmMarker = new google.maps.Marker({
+              position: place.geometry.location, map: gmap,
+              animation: google.maps.Animation.DROP,
+              icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#1a3a6e', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 }
+            });
+          }
+        });
+      }
     };
 
     // ── AUTH STATE ─────────────────────────────────────────────────────
@@ -209,6 +223,7 @@
       document.getElementById('nav-usuarios').style.display = currentRole === 'super_admin' ? 'flex' : 'none';
       suscribirOps();
       showSection('operaciones');
+      if (gmap && mapReady) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
     }
 
     function detenerListeners() {
@@ -321,7 +336,7 @@
 
     let boundsTimeout = null;
     function renderMapa() {
-      if (!gmap) return;
+      if (!gmap || !mapReady) return;
       Object.keys(gmMarkers).forEach(id => {
         if (!ops[id]) { gmMarkers[id].setMap(null); delete gmMarkers[id]; }
       });
@@ -381,6 +396,7 @@
 
     // ── PICK LOCATION (nueva operación) ───────────────────────────────
     window.iniciarPick = () => {
+      if (!gmap || !mapReady) return;
       picking = true;
       document.getElementById('overlay-op').classList.remove('open');
       document.getElementById('pick-banner').classList.add('on');
@@ -421,6 +437,7 @@
 
     // ── PICK LOCATION (editar operación) ──────────────────────────────
     window.iniciarEditPick = () => {
+      if (!gmap || !mapReady) return;
       editPickMode = true;
       document.getElementById('overlay-edit-op').classList.remove('open');
       document.getElementById('pick-banner').classList.add('on');
@@ -552,6 +569,7 @@
       }
 
       document.getElementById('detail-panel').classList.add('open');
+      if (gmap && mapReady) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
       renderDetalle(op);
       renderSidebar();
       if (op.coords && gmap) {
@@ -563,6 +581,7 @@
 
     window.cerrarDetalle = () => {
       document.getElementById('detail-panel').classList.remove('open');
+      if (gmap && mapReady) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
       selOpId = null;
       if (unsubAcciones) { unsubAcciones(); unsubAcciones = null; }
       renderSidebar();
@@ -958,6 +977,7 @@ ${dataContext}
 
     // ── MODAL NUEVA OPERACIÓN ──────────────────────────────────────────
     window.abrirModalOp = () => {
+      ensureAutocomplete();
       document.getElementById('overlay-op').classList.add('open');
       setTimeout(() => document.getElementById('f-nombre').focus(), 100);
       mostrarCoordBox();
@@ -1027,6 +1047,7 @@ ${dataContext}
     // ── MODAL EDITAR OPERACIÓN ─────────────────────────────────────────
     window.abrirModalEditOp = () => {
       if (!selOpId) return;
+      ensureAutocompleteEdit();
       const op = ops[selOpId];
       if (!op) return;
 
@@ -2933,7 +2954,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.0.0
+          Versión V.2.1.1
         </div>
       </div>
 
