@@ -94,6 +94,7 @@
       gmap = new google.maps.Map(document.getElementById('map'), {
         center: { lat: 40.4, lng: -3.7 },
         zoom: 6,
+        mapId: 'bc56b7cd6850d53c', // Map ID para Advanced Markers
         mapTypeId: 'roadmap',
         mapTypeControl: true,
         mapTypeControlOptions: {
@@ -140,11 +141,11 @@
           if (mapReady && gmap) {
             gmap.panTo(place.geometry.location);
             gmap.setZoom(15);
-            if (tempGmMarker) tempGmMarker.setMap(null);
-            tempGmMarker = new google.maps.Marker({
-              position: place.geometry.location, map: gmap,
-              animation: google.maps.Animation.DROP,
-              icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#1a3a6e', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 }
+            if (tempGmMarker) tempGmMarker.map = null;
+            tempGmMarker = new google.maps.marker.AdvancedMarkerElement({
+              position: place.geometry.location,
+              map: gmap,
+              title: place.name
             });
           }
         });
@@ -167,11 +168,11 @@
           if (mapReady && gmap) {
             gmap.panTo(place.geometry.location);
             gmap.setZoom(15);
-            if (editTempGmMarker) editTempGmMarker.setMap(null);
-            editTempGmMarker = new google.maps.Marker({
-              position: place.geometry.location, map: gmap,
-              animation: google.maps.Animation.DROP,
-              icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#1a3a6e', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 }
+            if (editTempGmMarker) editTempGmMarker.map = null;
+            editTempGmMarker = new google.maps.marker.AdvancedMarkerElement({
+              position: place.geometry.location,
+              map: gmap,
+              title: place.name
             });
           }
         });
@@ -236,7 +237,7 @@
     function cargarGoogleMaps() {
       const script = document.createElement('script');
       const apiKey = "__GOOGLE_MAPS_API_KEY__";
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initGoogleMap&language=es`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,marker&callback=initGoogleMap&language=es`;
       script.async = true;
       script.defer = true;
       document.head.appendChild(script);
@@ -357,71 +358,43 @@
     // ── MAPA ───────────────────────────────────────────────────────────
     function nivelIcon(nivel, emoji, isNew, hasUpdate, recursosSummary) {
       const color = NIVEL_COLORS[nivel] || '#888';
-      let badge = '';
-      if (isNew) {
-        badge = `<circle cx="64" cy="6" r="12" fill="#e74c3c" />
-                  <circle cx="64" cy="6" r="12" fill="#e74c3c" opacity="0.5">
-                    <animate attributeName="r" values="12;22" dur="1s" repeatCount="indefinite"/>
-                    <animate attributeName="opacity" values="0.5;0" dur="1s" repeatCount="indefinite"/>
-                  </circle>`;
-      } else if (hasUpdate) {
-        badge = `<circle cx="6" cy="6" r="10" fill="#2980b9" />`;
-      }
+      const container = document.createElement('div');
+      container.className = 'custom-marker';
+      container.style.setProperty('--nivel-color', color);
 
-      // Renderizar iconos de recursos si existen
-      let recursosHtml = '';
+      let html = `
+        <div class="marker-main">
+          ${isNew ? '<div class="marker-new-glow"></div>' : ''}
+          <div class="marker-cross">+</div>
+          <div class="marker-emoji">${emoji}</div>
+        </div>
+      `;
+
       if (recursosSummary) {
-        let offsetX = 2; // Empezamos un poco a la izquierda para centrar el bloque bajo el pin
-        const iconSize = 26; // Mucho más grande, similar al de la burbuja
-        const spacing = 6;
-
+        let badgesHtml = '<div class="marker-badges">';
         const types = [
-          { key: 'camiones', emoji: '🚒' }, // Camión rojo (estilo bomberos/emergencias)
-          { key: 'ambulancias', emoji: '🚑' },
-          { key: 'offroad', emoji: '🚙' }, // SUV/Todoterreno azul/gris
-          { key: 'van', emoji: '🚐' }
+          { key: 'camiones', icon: 'assets/icons/truck.png' },
+          { key: 'ambulancias', icon: 'assets/icons/ambulance.png' },
+          { key: 'offroad', icon: 'assets/icons/offroad.png' },
+          { key: 'van', icon: 'assets/icons/van.png' }
         ];
 
         types.forEach(t => {
           const count = recursosSummary[t.key] || 0;
           if (count > 0) {
-            recursosHtml += `
-              <g transform="translate(${offsetX}, 48)">
-                <rect width="${iconSize}" height="${iconSize}" rx="4" fill="white" stroke="#555" stroke-width="1"/>
-                <text x="${iconSize / 2}" y="${iconSize / 2 + 7}" text-anchor="middle" font-size="18">${t.emoji}</text>
-                ${count > 1 ? `
-                  <circle cx="${iconSize}" cy="0" r="9" fill="#e74c3c"/>
-                  <text x="${iconSize}" y="3" text-anchor="middle" font-size="10" fill="white" font-weight="700">${count}</text>`
-                : ''}
-              </g>`;
-            offsetX += iconSize + spacing + (count > 1 ? 8 : 0);
+            badgesHtml += `
+              <div class="badge-item">
+                <img src="${t.icon}" class="badge-img">
+                ${count > 1 ? `<div class="badge-count">${count}</div>` : ''}
+              </div>`;
           }
         });
+        badgesHtml += '</div>';
+        html += badgesHtml;
       }
 
-      const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="130" height="90" viewBox="0 0 130 90">
-      <defs>
-        <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-          <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.3"/>
-        </filter>
-      </defs>
-      <g filter="url(#shadow)">
-        <rect x="2" y="2" width="66" height="32" rx="16" ry="16" fill="white" stroke="${color}" stroke-width="2.5"/>
-        <path d="M 28 33 L 35 45 L 42 33 Z" fill="white"/>
-        <path d="M 27 33 L 35 45 L 43 33" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-        <line x1="29" y1="33.5" x2="41" y2="33.5" stroke="white" stroke-width="3.5"/>
-      </g>
-      <path d="M 12 15 h 5 v -5 h 6 v 5 h 5 v 6 h -5 v 5 h -6 v -5 h -5 z" fill="#cc0000"/>
-      <text x="48" y="25" text-anchor="middle" font-size="18">${emoji}</text>
-      ${badge}
-      ${recursosHtml}
-    </svg>`;
-      return {
-        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
-        scaledSize: new google.maps.Size(130, 90),
-        anchor: new google.maps.Point(35, 45)
-      };
+      container.innerHTML = html;
+      return container;
     }
 
     let boundsTimeout = null;
@@ -442,12 +415,17 @@
         bounds.extend(pos);
         hasValidCoords = true;
 
-        const icon = nivelIcon(op.nivel, t.emoji, op._isNew, op._hasUpdate, op.recursosSummary);
+        const iconContent = nivelIcon(op.nivel, t.emoji, op._isNew, op._hasUpdate, op.recursosSummary);
         if (gmMarkers[op.id]) {
-          gmMarkers[op.id].setPosition(pos);
-          gmMarkers[op.id].setIcon(icon);
+          gmMarkers[op.id].position = pos;
+          gmMarkers[op.id].content = iconContent;
         } else {
-          const marker = new google.maps.Marker({ position: pos, map: gmap, icon, title: op.nombre, animation: google.maps.Animation.DROP });
+          const marker = new google.maps.marker.AdvancedMarkerElement({
+            position: pos,
+            map: gmap,
+            content: iconContent,
+            title: op.nombre
+          });
           const iw = new google.maps.InfoWindow({ maxWidth: 260 });
           marker.addListener('click', () => {
             iw.setContent(`
@@ -504,10 +482,10 @@
           stopPick();
           window.abrirModalOp();
         });
-        if (tempGmMarker) tempGmMarker.setMap(null);
-        tempGmMarker = new google.maps.Marker({
-          position: e.latLng, map: gmap, animation: google.maps.Animation.DROP,
-          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#1a3a6e', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 }
+        if (tempGmMarker) tempGmMarker.map = null;
+        tempGmMarker = new google.maps.marker.AdvancedMarkerElement({
+          position: e.latLng,
+          map: gmap,
         });
       });
     };
@@ -545,10 +523,10 @@
           stopEditPick();
           document.getElementById('overlay-edit-op').classList.add('open');
         });
-        if (editTempGmMarker) editTempGmMarker.setMap(null);
-        editTempGmMarker = new google.maps.Marker({
-          position: e.latLng, map: gmap, animation: google.maps.Animation.DROP,
-          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#1a3a6e', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 2 }
+        if (editTempGmMarker) editTempGmMarker.map = null;
+        editTempGmMarker = new google.maps.marker.AdvancedMarkerElement({
+          position: e.latLng,
+          map: gmap,
         });
       });
     };
@@ -654,7 +632,7 @@
         // Re-renderizamos en mapa y lista para quitar la notificación visual
         if (gmMarkers[id]) {
           const t = TIPOS[op.tipo] || TIPOS.otro;
-          gmMarkers[id].setIcon(nivelIcon(op.nivel, t.emoji, false, false, op.recursosSummary));
+          gmMarkers[id].content = nivelIcon(op.nivel, t.emoji, false, false, op.recursosSummary);
         }
       }
 
@@ -933,7 +911,7 @@
       if (gmMarkers[selOpId] && ops[selOpId]) {
         const op = ops[selOpId];
         const t = TIPOS[op.tipo] || TIPOS.otro;
-        gmMarkers[selOpId].setIcon(nivelIcon(n, t.emoji, false, false, op.recursosSummary));
+        gmMarkers[selOpId].content = nivelIcon(n, t.emoji, false, false, op.recursosSummary);
       }
     };
 
@@ -1430,8 +1408,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         // Actualizar marcador del mapa si cambiaron coordenadas
         if (editPickedCoords && gmMarkers[selOpId]) {
           const tipo = TIPOS[updates.tipo] || TIPOS.otro;
-          gmMarkers[selOpId].setPosition(editPickedCoords);
-          gmMarkers[selOpId].setIcon(nivelIcon(ops[selOpId].nivel, tipo.emoji));
+          gmMarkers[selOpId].position = editPickedCoords;
+          gmMarkers[selOpId].content = nivelIcon(ops[selOpId].nivel, tipo.emoji, false, false, ops[selOpId].recursosSummary);
         }
 
         mostrarToast('Operación actualizada.');
@@ -3296,6 +3274,129 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       opacity: 1;
       transform: translateX(-50%) translateY(0);
     }
+
+    /* CUSTOM ADVANCED MARKERS */
+    .custom-marker {
+      position: relative;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .marker-main {
+      position: relative;
+      width: 70px;
+      height: 36px;
+      background: #fff;
+      border: 2.5px solid var(--nivel-color);
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .marker-main::after {
+      content: '';
+      position: absolute;
+      bottom: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 8px solid transparent;
+      border-right: 8px solid transparent;
+      border-top: 12px solid var(--nivel-color);
+    }
+
+    .marker-cross {
+      position: absolute;
+      left: 10px;
+      width: 16px;
+      height: 16px;
+      background: #cc0000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 900;
+      font-size: 14px;
+      border-radius: 2px;
+    }
+
+    .marker-emoji {
+      font-size: 20px;
+      margin-left: 16px;
+    }
+
+    .marker-badges {
+      position: absolute;
+      top: 44px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 6px;
+      pointer-events: none;
+    }
+
+    .badge-item {
+      position: relative;
+      width: 28px;
+      height: 28px;
+      background: #fff;
+      border: 1.5px solid #555;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+
+    .badge-img {
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
+    }
+
+    .badge-count {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      background: #e74c3c;
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      width: 17px;
+      height: 17px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid #fff;
+    }
+
+    .marker-new-glow {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      border-radius: 18px;
+      box-shadow: 0 0 15px #e74c3c;
+      animation: markerGlow 1.5s infinite;
+      pointer-events: none;
+    }
+
+    @keyframes markerGlow {
+      0% {
+        box-shadow: 0 0 0px #e74c3c;
+        opacity: 0.8;
+      }
+
+      100% {
+        box-shadow: 0 0 20px #e74c3c;
+        opacity: 0;
+      }
+    }
   </style>
 </head>
 
@@ -3386,7 +3487,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.6.4
+          Versión V.2.7.0
         </div>
       </div>
       </footer>
