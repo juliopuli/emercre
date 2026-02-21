@@ -371,9 +371,9 @@
       // Renderizar iconos de recursos si existen
       let recursosHtml = '';
       if (recursosSummary) {
-        let offsetX = 5;
-        const iconSize = 18;
-        const spacing = 4;
+        let offsetX = 2; // Empezamos un poco a la izquierda para centrar el bloque bajo el pin
+        const iconSize = 26; // Mucho más grande, similar al de la burbuja
+        const spacing = 6;
 
         const types = [
           { key: 'camiones', emoji: '🚛' },
@@ -387,20 +387,20 @@
           if (count > 0) {
             recursosHtml += `
               <g transform="translate(${offsetX}, 48)">
-                <rect width="${iconSize}" height="${iconSize}" rx="4" fill="white" stroke="${color}" stroke-width="1"/>
-                <text x="${iconSize / 2}" y="${iconSize / 2 + 5}" text-anchor="middle" font-size="12">${t.emoji}</text>
+                <rect width="${iconSize}" height="${iconSize}" rx="4" fill="white" stroke="${color}" stroke-width="1.5"/>
+                <text x="${iconSize / 2}" y="${iconSize / 2 + 7}" text-anchor="middle" font-size="18">${t.emoji}</text>
                 ${count > 1 ? `
-                  <circle cx="${iconSize}" cy="0" r="7" fill="${color}"/>
-                  <text x="${iconSize}" y="3" text-anchor="middle" font-size="8" fill="white" font-weight="700">${count}</text>`
+                  <circle cx="${iconSize}" cy="0" r="9" fill="${color}"/>
+                  <text x="${iconSize}" y="3" text-anchor="middle" font-size="10" fill="white" font-weight="700">${count}</text>`
                 : ''}
               </g>`;
-            offsetX += iconSize + spacing + (count > 1 ? 5 : 0);
+            offsetX += iconSize + spacing + (count > 1 ? 8 : 0);
           }
         });
       }
 
       const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="75" viewBox="0 0 100 75">
+    <svg xmlns="http://www.w3.org/2000/svg" width="130" height="90" viewBox="0 0 130 90">
       <defs>
         <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
           <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.3"/>
@@ -419,7 +419,7 @@
     </svg>`;
       return {
         url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
-        scaledSize: new google.maps.Size(100, 75),
+        scaledSize: new google.maps.Size(130, 90),
         anchor: new google.maps.Point(35, 45)
       };
     }
