@@ -55,6 +55,7 @@
     let tempGmMarker = null;
     let unsubOps = null;
     let unsubAcciones = null;
+    let unsubRecursos = null;
     let ops = {};
     let editingUserId = null;
     // Edit op state
@@ -235,6 +236,7 @@
     function detenerListeners() {
       if (unsubOps) { unsubOps(); unsubOps = null; }
       if (unsubAcciones) { unsubAcciones(); unsubAcciones = null; }
+      if (unsubRecursos) { unsubRecursos(); unsubRecursos = null; }
       ops = {};
     }
 
@@ -583,6 +585,7 @@
         gmap.setZoom(13);
       }
       suscribirAcciones(id);
+      suscribirRecursos(id);
     };
 
     window.cerrarDetalle = () => {
@@ -590,6 +593,7 @@
       if (gmap && mapReady) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
       selOpId = null;
       if (unsubAcciones) { unsubAcciones(); unsubAcciones = null; }
+      if (unsubRecursos) { unsubRecursos(); unsubRecursos = null; }
       renderSidebar();
     };
 
@@ -604,6 +608,120 @@
       });
     }
 
+    function suscribirRecursos(opId) {
+      if (unsubRecursos) unsubRecursos();
+      const q = query(collection(db, 'operaciones', opId, 'recursos'), orderBy('asignadoEn', 'desc'));
+      unsubRecursos = onSnapshot(q, snap => {
+        const recursos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        renderRecursosOp(recursos, ops[opId]);
+      });
+    }
+
+    let opcionesRecursosCache = { vehiculos: [] };
+
+    window.cargarOpcionesRecursos = async () => {
+      const cat = document.getElementById('r-cat').value;
+      const sel = document.getElementById('r-item');
+      sel.innerHTML = '<option value="">Selecciona recurso...</option>';
+      if (!cat) return;
+
+      if (cat === 'vehiculos') {
+        const snap = await getDocs(collection(db, 'vehiculos'));
+        opcionesRecursosCache.vehiculos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        opcionesRecursosCache.vehiculos.forEach(v => {
+          sel.innerHTML += `<option value="${v.id}">${v.indicativo} - ${v.tipo} (${v.matricula})</option>`;
+        });
+      }
+    };
+
+    window.asignarRecurso = async () => {
+      if (!selOpId) return;
+      const cat = document.getElementById('r-cat').value;
+      const itemId = document.getElementById('r-item').value;
+      if (!cat || !itemId) return;
+
+      const btn = document.getElementById('btn-add-recurso');
+      btn.disabled = true; btn.textContent = '...';
+
+      try {
+        let recursoDesc = '';
+        if (cat === 'vehiculos') {
+          const v = opcionesRecursosCache.vehiculos.find(x => x.id === itemId);
+          if (v) recursoDesc = `🚗 ${v.indicativo} - ${v.tipo} (${v.matricula})`;
+        }
+
+        if (recursoDesc) {
+          await setDoc(doc(db, 'operaciones', selOpId, 'recursos', itemId), {
+            id: itemId,
+            categoria: cat,
+            recursoId: itemId,
+            descripcion: recursoDesc,
+            asignadoEn: serverTimestamp(),
+            asignadoPor: currentUser.uid
+          });
+
+          const autorNombre = currentUserDoc.nombre || currentUser.email;
+          await addDoc(collection(db, 'operaciones', selOpId, 'acciones'), {
+            texto: `Se ha asignado el recurso: ${recursoDesc}`,
+            prioridad: 'Baja',
+            autor: autorNombre,
+            uid: currentUser.uid,
+            timestamp: serverTimestamp()
+          });
+
+          try {
+            await updateDoc(doc(db, 'operaciones', selOpId), { actualizadoEn: serverTimestamp() });
+          } catch (e) { }
+        }
+        document.getElementById('r-cat').value = '';
+        document.getElementById('r-item').innerHTML = '<option value="">Selecciona recurso...</option>';
+      } catch (e) { alert('Error asignando recurso: ' + e.message); }
+      btn.disabled = false; btn.textContent = 'Añadir';
+    };
+
+    window.desasignarRecurso = async (id, desc) => {
+      if (!selOpId) return;
+      if (!confirm('¿Retirar este recurso de la operación?')) return;
+      try {
+        await deleteDoc(doc(db, 'operaciones', selOpId, 'recursos', id));
+        const autorNombre = currentUserDoc.nombre || currentUser.email;
+        await addDoc(collection(db, 'operaciones', selOpId, 'acciones'), {
+          texto: `Se ha retirado el recurso: ${desc}`,
+          prioridad: 'Baja',
+          autor: autorNombre,
+          uid: currentUser.uid,
+          timestamp: serverTimestamp()
+        });
+        try {
+          await updateDoc(doc(db, 'operaciones', selOpId), { actualizadoEn: serverTimestamp() });
+        } catch (e) { }
+      } catch (e) { alert('Error: ' + e.message); }
+    };
+
+    function renderRecursosOp(recursos, op) {
+      const list = document.getElementById('dp-recursos-list');
+      const form = document.getElementById('dp-recursos-form');
+      const isFinalizada = op?.estado === 'finalizada';
+      const isAdmin = currentRole === 'admin' || currentRole === 'super_admin';
+
+      if (form) form.style.display = isFinalizada ? 'none' : 'block';
+      if (!list) return;
+
+      if (!recursos.length) {
+        list.innerHTML = '<div style="font-size:11px;color:var(--text-4);">No hay recursos asignados.</div>';
+        return;
+      }
+
+      list.innerHTML = recursos.map(r => {
+        const btnDelete = (!isFinalizada && isAdmin) ? `<button onclick="desasignarRecurso('${r.id}', '${r.descripcion}')" style="background:none;border:none;color:var(--crit-1);cursor:pointer;font-size:14px;line-height:1;" title="Retirar">✕</button>` : '';
+        return `
+        <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-2); padding:5px 10px; border:1px solid var(--border-mid); border-radius:2px; font-size:11px;">
+          <span style="font-weight:600;">${r.descripcion}</span>
+          ${btnDelete}
+        </div>`;
+      }).join('');
+    }
+
     function renderDetalle(op) {
       const t = TIPOS[op.tipo] || TIPOS.otro;
       const isAdmin = currentRole === 'admin' || currentRole === 'super_admin';
@@ -611,9 +729,9 @@
 
       document.getElementById('dp-id').textContent = op.id.substring(0, 8).toUpperCase();
       document.getElementById('dp-name').textContent = op.nombre;
-      document.getElementById('dp-loc').innerHTML = op.loc ? `📍 ${op.loc}` : (op.coords ? `📍 ${op.coords.lat.toFixed(4)}, ${op.coords.lng.toFixed(4)}` : '');
+      document.getElementById('dp-loc').innerHTML = op.loc ? `📍 ${op.loc} ` : (op.coords ? `📍 ${op.coords.lat.toFixed(4)}, ${op.coords.lng.toFixed(4)} ` : '');
       document.getElementById('dp-type-tag').innerHTML =
-        `<span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${TIPOS[op.tipo] ? t.label : op.tipo}</span>`;
+        `< span class="card-type-tag" style = "color:${t.color};border-color:${t.color}30;background:${t.color}12" > ${t.emoji} ${TIPOS[op.tipo] ? t.label : op.tipo}</span > `;
 
       document.querySelectorAll('.nsel-opt').forEach(b => {
         b.classList.toggle('on', parseInt(b.dataset.n) === op.nivel);
@@ -625,10 +743,10 @@
         ? op.creadoEn.toDate().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
         : '—';
       ir.innerHTML = '';
-      if (op.dir) ir.innerHTML += `<div class="dp-info-item"><strong>${op.dir}</strong>Jefe de Operaciones</div>`;
-      if (op.org) ir.innerHTML += `<div class="dp-info-item"><strong>${op.org}</strong>Solicitado por</div>`;
-      if (op.creadoPorNombre) ir.innerHTML += `<div class="dp-info-item"><strong>${op.creadoPorNombre}</strong>Creado por</div>`;
-      ir.innerHTML += `<div class="dp-info-item"><strong>${ts}</strong>Inicio</div>`;
+      if (op.dir) ir.innerHTML += `< div class="dp-info-item" > <strong>${op.dir}</strong>Jefe de Operaciones</div > `;
+      if (op.org) ir.innerHTML += `< div class="dp-info-item" > <strong>${op.org}</strong>Solicitado por</div > `;
+      if (op.creadoPorNombre) ir.innerHTML += `< div class="dp-info-item" > <strong>${op.creadoPorNombre}</strong>Creado por</div > `;
+      ir.innerHTML += `< div class="dp-info-item" > <strong>${ts}</strong>Inicio</div > `;
 
       // Campo autor readonly
       document.getElementById('a-autor').value = currentUserDoc.nombre || currentUser.email;
@@ -667,10 +785,10 @@
         const isAdmin = currentRole === 'admin' || currentRole === 'super_admin';
         const isFinalizada = op?.estado === 'finalizada';
         const editBtn = (isAdmin && !isFinalizada)
-          ? `<button class="btn-cancel-m" style="padding: 2px 8px; font-size: 11px; margin-left: auto;" onclick="abrirModalEditAccion('${a.id}')">✏️ Editar</button>`
+          ? `< button class="btn-cancel-m" style = "padding: 2px 8px; font-size: 11px; margin-left: auto;" onclick = "abrirModalEditAccion('${a.id}')" >✏️ Editar</button > `
           : '';
 
-        return `<div class="tl-entry">
+        return `< div class="tl-entry" >
       <div class="tl-node tl-node-${nivel}">${t.emoji}</div>
       <div class="tl-body">
         <div class="tl-meta" style="display:flex; align-items:center;">
@@ -681,7 +799,7 @@
         <div class="tl-text">${a.texto}</div>
         <div class="tl-author">— ${a.autor || '—'}</div>
       </div>
-    </div>`;
+    </div > `;
       }).join('');
     }
 
@@ -709,7 +827,7 @@
         const dd = String(d.getDate()).padStart(2, '0');
         const hh = String(d.getHours()).padStart(2, '0');
         const mn = String(d.getMinutes()).padStart(2, '0');
-        document.getElementById('ea-fecha').value = `${yy}-${mm}-${dd}T${hh}:${mn}`;
+        document.getElementById('ea-fecha').value = `${yy} -${mm} -${dd}T${hh}:${mn} `;
       } else {
         document.getElementById('ea-fecha').value = '';
       }
@@ -847,9 +965,9 @@
       try {
         // 1. Recopilamos datos básicos
         const t = TIPOS[op.tipo] || TIPOS.otro;
-        let dataContext = `Nombre operación: ${op.nombre}\n`;
-        dataContext += `Tipo: ${t.label}\nUbicación: ${op.loc || 'N/A'}\n`;
-        dataContext += `Jefe de Operaciones: ${op.dir || 'N/A'}\nSolicitado por: ${op.org || 'N/A'}\n\n`;
+        let dataContext = `Nombre operación: ${op.nombre} \n`;
+        dataContext += `Tipo: ${t.label} \nUbicación: ${op.loc || 'N/A'} \n`;
+        dataContext += `Jefe de Operaciones: ${op.dir || 'N/A'} \nSolicitado por: ${op.org || 'N/A'} \n\n`;
         dataContext += `================ HILO CRONOLÓGICO DE ACCIONES ================\n`;
 
         // 2. Traer todas las acciones/novedades ordenadas
@@ -860,8 +978,8 @@
           snap.forEach(doc => {
             const a = doc.data();
             const dateStr = a.timestamp?.toDate ? a.timestamp.toDate().toLocaleString('es-ES') : 'Fecha desconocida';
-            dataContext += `[${dateStr}] - Prioridad: ${a.prioridad} - Autor: ${a.autor}\n`;
-            dataContext += `Novedad: ${a.texto}\n`;
+            dataContext += `[${dateStr}]- Prioridad: ${a.prioridad} - Autor: ${a.autor} \n`;
+            dataContext += `Novedad: ${a.texto} \n`;
             dataContext += `----------------------------------------------------------\n`;
           });
         }
@@ -871,20 +989,20 @@
 Eres un analista experto en gestión de emergencias y catástrofes de la plataforma SIGECA.
 El usuario ha solicitado generar un informe final ejecutivo y bien estructurado que resuma esta intervención finalizada.
 
-INSTRUCCIONES:
-1. Lee todos los datos base y el hilo cronológico de acciones.
+          INSTRUCCIONES:
+        1. Lee todos los datos base y el hilo cronológico de acciones.
 2. Genera un resumen ejecutivo en español, profesional, claro y neutro. 
-3. Estructura el informe usando etiquetas HTML simples compatibles (<h1>, <h2>, <p>, <ul>, <li>, <strong>) para poder renderizarlo en la web directamente. No envuelvas el resultado en \`\`\`html.
-4. El informe debe contener estas secciones principales:
-   - Resumen Ejecutivo (situación general y desenlace)
-   - Recursos y Organización (organismos y directores involucrados)
-   - Cronología Destacada (los hitos más relevantes resumidos)
-   - Conclusión Final (estado actual, sin inventar datos que no estén)
-Si faltan datos, indícalo de forma elegante.
+3. Estructura el informe usando etiquetas HTML simples compatibles(<h1>, <h2>, <p>, <ul>, <li>, <strong>) para poder renderizarlo en la web directamente. No envuelvas el resultado en \`\`\`html.
+          4. El informe debe contener estas secciones principales:
+          - Resumen Ejecutivo (situación general y desenlace)
+          - Recursos y Organización (organismos y directores involucrados)
+          - Cronología Destacada (los hitos más relevantes resumidos)
+          - Conclusión Final (estado actual, sin inventar datos que no estén)
+          Si faltan datos, indícalo de forma elegante.
 
-DATOS DE LA INTERVENCIÓN:
-${dataContext}
-`;
+          DATOS DE LA INTERVENCIÓN:
+          ${dataContext}
+          `;
 
         // 4. Llamada a la API de Gemini
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
@@ -1222,16 +1340,16 @@ ${dataContext}
         const u = d.data();
         const tr = document.createElement('tr');
         tr.innerHTML = `
-      <td>${u.nombre || '—'}</td>
-      <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${u.email}</td>
-      <td><span class="rol-badge rol-${u.role}">${ROL_LABELS[u.role] || u.role}</span></td>
-      <td><span class="activo-badge ${u.activo !== false ? 'activo' : 'inactivo'}">${u.activo !== false ? 'Activo' : 'Inactivo'}</span></td>
-      <td>
-        <button class="tbl-btn" onclick="editarUsuario('${d.id}')">Editar</button>
-        ${d.id !== currentUser.uid
+          <td>${u.nombre || '—'}</td>
+          <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${u.email}</td>
+          <td><span class="rol-badge rol-${u.role}">${ROL_LABELS[u.role] || u.role}</span></td>
+          <td><span class="activo-badge ${u.activo !== false ? 'activo' : 'inactivo'}">${u.activo !== false ? 'Activo' : 'Inactivo'}</span></td>
+          <td>
+            <button class="tbl-btn" onclick="editarUsuario('${d.id}')">Editar</button>
+            ${d.id !== currentUser.uid
             ? `<button class="tbl-btn danger" onclick="borrarUsuario('${d.id}')">Desactivar</button>`
             : '<span style="font-size:11px;color:var(--text-4)">(tú)</span>'}
-      </td>`;
+          </td>`;
         tbody.appendChild(tr);
       });
     }
@@ -1333,13 +1451,13 @@ ${dataContext}
         const v = d.data();
         const tr = document.createElement('tr');
         tr.innerHTML = `
-      <td><strong>${v.indicativo || '—'}</strong></td>
-      <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${v.matricula || '—'}</td>
-      <td>${v.tipo || '—'}</td>
-      <td>
-        <button class="tbl-btn" onclick="editarVehiculo('${d.id}')">Editar</button>
-        <button class="tbl-btn danger" onclick="borrarVehiculo('${d.id}')">Eliminar</button>
-      </td>`;
+          <td><strong>${v.indicativo || '—'}</strong></td>
+          <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${v.matricula || '—'}</td>
+          <td>${v.tipo || '—'}</td>
+          <td>
+            <button class="tbl-btn" onclick="editarVehiculo('${d.id}')">Editar</button>
+            <button class="tbl-btn danger" onclick="borrarVehiculo('${d.id}')">Eliminar</button>
+          </td>`;
         tbody.appendChild(tr);
       });
     }
@@ -2331,6 +2449,13 @@ ${dataContext}
       font-weight: 500;
     }
 
+    .dp-recursos {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+      background: var(--bg-1);
+    }
+
     .dp-timeline {
       flex: 1;
       overflow-y: auto;
@@ -3088,7 +3213,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.3.0
+          Versión V.2.4.0
         </div>
       </div>
 
@@ -3123,6 +3248,28 @@ ${dataContext}
             </div>
           </div>
           <div class="dp-info-row" id="dp-info-row"></div>
+
+          <!-- RECURSOS ASIGNADOS -->
+          <div class="dp-recursos" id="dp-recursos-wrapper">
+            <div class="section-label">Recursos asignados</div>
+            <div id="dp-recursos-list" style="display:flex; flex-direction:column; gap:4px; margin-bottom:10px;"></div>
+
+            <div id="dp-recursos-form"
+              style="background:var(--bg-2); padding:8px; border:1px solid var(--border); border-radius:2px;">
+              <div class="field-row" style="margin-bottom:6px;">
+                <select class="f-input f-select" id="r-cat" style="flex:1;" onchange="cargarOpcionesRecursos()">
+                  <option value="">Categoría...</option>
+                  <option value="vehiculos">Vehículos</option>
+                </select>
+                <select class="f-input f-select" id="r-item" style="flex:2;">
+                  <option value="">Selecciona recurso...</option>
+                </select>
+              </div>
+              <button class="btn-create-m" id="btn-add-recurso" onclick="asignarRecurso()"
+                style="width:100%; padding:6px; font-size: 11px;">Añadir</button>
+            </div>
+          </div>
+
           <div class="dp-timeline" id="dp-timeline"></div>
           <div class="dp-addaction" id="dp-addaction-wrapper">
             <div class="section-label">Registrar novedad</div>
