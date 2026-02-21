@@ -707,6 +707,9 @@
       if (form) form.style.display = isFinalizada ? 'none' : 'block';
       if (!list) return;
 
+      const summary = document.getElementById('dp-recursos-summary');
+      if (summary) summary.textContent = `Recursos asignados (${recursos.length})`;
+
       if (!recursos.length) {
         list.innerHTML = '<div style="font-size:11px;color:var(--text-4);">No hay recursos asignados.</div>';
         return;
@@ -3251,8 +3254,9 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
           <!-- RECURSOS ASIGNADOS -->
           <details class="dp-recursos" id="dp-recursos-wrapper">
-            <summary class="section-label" style="cursor:pointer; outline:none; font-size:10px; margin-bottom:6px;">
-              Recursos asignados</summary>
+            <summary class="section-label" id="dp-recursos-summary"
+              style="cursor:pointer; outline:none; font-size:10px; margin-bottom:6px;">
+              Recursos asignados (0)</summary>
             <div id="dp-recursos-list" style="display:flex; flex-direction:column; gap:4px; margin-bottom:8px;"></div>
 
             <div id="dp-recursos-form"
