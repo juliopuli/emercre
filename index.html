@@ -731,7 +731,7 @@
       document.getElementById('dp-name').textContent = op.nombre;
       document.getElementById('dp-loc').innerHTML = op.loc ? `📍 ${op.loc} ` : (op.coords ? `📍 ${op.coords.lat.toFixed(4)}, ${op.coords.lng.toFixed(4)} ` : '');
       document.getElementById('dp-type-tag').innerHTML =
-        `< span class="card-type-tag" style = "color:${t.color};border-color:${t.color}30;background:${t.color}12" > ${t.emoji} ${TIPOS[op.tipo] ? t.label : op.tipo}</span > `;
+        `<span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${TIPOS[op.tipo] ? t.label : op.tipo}</span>`;
 
       document.querySelectorAll('.nsel-opt').forEach(b => {
         b.classList.toggle('on', parseInt(b.dataset.n) === op.nivel);
@@ -743,10 +743,10 @@
         ? op.creadoEn.toDate().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
         : '—';
       ir.innerHTML = '';
-      if (op.dir) ir.innerHTML += `< div class="dp-info-item" > <strong>${op.dir}</strong>Jefe de Operaciones</div > `;
-      if (op.org) ir.innerHTML += `< div class="dp-info-item" > <strong>${op.org}</strong>Solicitado por</div > `;
-      if (op.creadoPorNombre) ir.innerHTML += `< div class="dp-info-item" > <strong>${op.creadoPorNombre}</strong>Creado por</div > `;
-      ir.innerHTML += `< div class="dp-info-item" > <strong>${ts}</strong>Inicio</div > `;
+      if (op.dir) ir.innerHTML += `<div class="dp-info-item"><strong>${op.dir}</strong>Jefe de Operaciones</div>`;
+      if (op.org) ir.innerHTML += `<div class="dp-info-item"><strong>${op.org}</strong>Solicitado por</div>`;
+      if (op.creadoPorNombre) ir.innerHTML += `<div class="dp-info-item"><strong>${op.creadoPorNombre}</strong>Creado por</div>`;
+      ir.innerHTML += `<div class="dp-info-item"><strong>${ts}</strong>Inicio</div>`;
 
       // Campo autor readonly
       document.getElementById('a-autor').value = currentUserDoc.nombre || currentUser.email;
@@ -785,10 +785,10 @@
         const isAdmin = currentRole === 'admin' || currentRole === 'super_admin';
         const isFinalizada = op?.estado === 'finalizada';
         const editBtn = (isAdmin && !isFinalizada)
-          ? `< button class="btn-cancel-m" style = "padding: 2px 8px; font-size: 11px; margin-left: auto;" onclick = "abrirModalEditAccion('${a.id}')" >✏️ Editar</button > `
+          ? `<button class="btn-cancel-m" style="padding: 2px 8px; font-size: 11px; margin-left: auto;" onclick="abrirModalEditAccion('${a.id}')">✏️ Editar</button>`
           : '';
 
-        return `< div class="tl-entry" >
+        return `<div class="tl-entry">
       <div class="tl-node tl-node-${nivel}">${t.emoji}</div>
       <div class="tl-body">
         <div class="tl-meta" style="display:flex; align-items:center;">
