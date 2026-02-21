@@ -464,7 +464,11 @@
 
       let visible = Object.values(ops);
       if (filtro !== 'all') visible = visible.filter(o => String(o.nivel) === filtro);
-      visible.sort((a, b) => a.nivel - b.nivel);
+      visible.sort((a, b) => {
+        const ta = a.actualizadoEn?.toMillis ? a.actualizadoEn.toMillis() : 0;
+        const tb = b.actualizadoEn?.toMillis ? b.actualizadoEn.toMillis() : 0;
+        return tb - ta;
+      });
 
       if (!visible.length) { empty.classList.add('show'); return; }
       empty.classList.remove('show');
