@@ -740,6 +740,23 @@
       btn.disabled = false; btn.textContent = 'Guardar novedad →';
     };
 
+    window.eliminarAccion = async () => {
+      if (!selOpId || !editAccionId) return;
+      if (!confirm('¿Seguro que deseas eliminar esta novedad? Esta acción no se puede deshacer.')) return;
+
+      const btn = document.getElementById('btn-guardar-edit-accion');
+      btn.disabled = true; btn.textContent = 'Eliminando…';
+
+      try {
+        await deleteDoc(doc(db, 'operaciones', selOpId, 'acciones', editAccionId));
+        cerrarModalEditAccion();
+        mostrarToast('Novedad eliminada.');
+      } catch (e) {
+        alert('Error al eliminar: ' + e.message);
+      }
+      btn.disabled = false; btn.textContent = 'Guardar novedad →';
+    };
+
     // ── AÑADIR ACCIÓN ──────────────────────────────────────────────────
     window.addAccion = async () => {
       if (!selOpId) return;
@@ -2954,7 +2971,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.1.1
+          Versión V.2.2.0
         </div>
       </div>
 
@@ -3232,10 +3249,14 @@ ${dataContext}
           <textarea class="f-input" id="ea-texto" style="resize:vertical;min-height:80px;"></textarea>
         </div>
       </div>
-      <div class="modal-foot">
-        <button class="btn-cancel-m" onclick="cerrarModalEditAccion()">Cancelar</button>
-        <button class="btn-create-m" id="btn-guardar-edit-accion" onclick="guardarEditAccion()">Guardar novedad
-          →</button>
+      <div class="modal-foot" style="justify-content: space-between;">
+        <button class="btn-cancel-m" style="color:var(--crit-1);border-color:var(--crit-1);background:var(--crit-1-bg);"
+          onclick="eliminarAccion()">🗑️ Eliminar</button>
+        <div style="display:flex;gap:8px;">
+          <button class="btn-cancel-m" onclick="cerrarModalEditAccion()">Cancelar</button>
+          <button class="btn-create-m" id="btn-guardar-edit-accion" onclick="guardarEditAccion()">Guardar novedad
+            →</button>
+        </div>
       </div>
     </div>
   </div>
