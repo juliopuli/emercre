@@ -2318,7 +2318,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     }
 
     .dp-header {
-      padding: 14px 16px 10px;
+      padding: 10px 16px 6px;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
     }
@@ -2429,7 +2429,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     }
 
     .dp-info-row {
-      padding: 8px 16px;
+      padding: 4px 16px;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
       display: flex;
@@ -2450,7 +2450,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     }
 
     .dp-recursos {
-      padding: 10px 16px;
+      padding: 6px 16px 8px;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
       background: var(--bg-1);
@@ -3250,25 +3250,27 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <div class="dp-info-row" id="dp-info-row"></div>
 
           <!-- RECURSOS ASIGNADOS -->
-          <div class="dp-recursos" id="dp-recursos-wrapper">
-            <div class="section-label">Recursos asignados</div>
-            <div id="dp-recursos-list" style="display:flex; flex-direction:column; gap:4px; margin-bottom:10px;"></div>
+          <details class="dp-recursos" id="dp-recursos-wrapper" open>
+            <summary class="section-label" style="cursor:pointer; outline:none; font-size:10px; margin-bottom:6px;">
+              Recursos asignados</summary>
+            <div id="dp-recursos-list" style="display:flex; flex-direction:column; gap:4px; margin-bottom:8px;"></div>
 
             <div id="dp-recursos-form"
-              style="background:var(--bg-2); padding:8px; border:1px solid var(--border); border-radius:2px;">
-              <div class="field-row" style="margin-bottom:6px;">
-                <select class="f-input f-select" id="r-cat" style="flex:1;" onchange="cargarOpcionesRecursos()">
+              style="background:var(--bg-2); padding:6px; border:1px solid var(--border); border-radius:2px;">
+              <div style="display:flex; gap:6px; align-items:center;">
+                <select class="f-input f-select" id="r-cat" style="flex:1; padding:4px; font-size:11px;"
+                  onchange="cargarOpcionesRecursos()">
                   <option value="">Categoría...</option>
                   <option value="vehiculos">Vehículos</option>
                 </select>
-                <select class="f-input f-select" id="r-item" style="flex:2;">
-                  <option value="">Selecciona recurso...</option>
+                <select class="f-input f-select" id="r-item" style="flex:2; padding:4px; font-size:11px;">
+                  <option value="">Recurso...</option>
                 </select>
+                <button class="btn-create-m" id="btn-add-recurso" onclick="asignarRecurso()"
+                  style="padding:5px 8px; font-size: 11px; white-space:nowrap;">Añadir</button>
               </div>
-              <button class="btn-create-m" id="btn-add-recurso" onclick="asignarRecurso()"
-                style="width:100%; padding:6px; font-size: 11px;">Añadir</button>
             </div>
-          </div>
+          </details>
 
           <div class="dp-timeline" id="dp-timeline"></div>
           <div class="dp-addaction" id="dp-addaction-wrapper">
@@ -3284,7 +3286,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
               <input class="f-input" id="a-autor" placeholder="Usuario conectado" style="flex:1;" readonly>
             </div>
             <textarea class="f-input" id="a-texto" placeholder="Describe la novedad, acción o decisión…"
-              style="resize:vertical;min-height:58px;margin-bottom:4px;"></textarea>
+              style="resize:vertical;min-height:45px;margin-bottom:4px;"></textarea>
             <button class="btn-reg" id="btn-reg-accion" onclick="addAccion()">Registrar novedad</button>
           </div>
           <!-- Botones admin -->
