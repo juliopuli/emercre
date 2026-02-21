@@ -103,6 +103,10 @@
         zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM }
       });
 
+      gmap.addListener('click', () => {
+        if (!picking && !editPickMode) window.cerrarDetalle();
+      });
+
       // Autocomplete — modal nueva operación
       const input = document.getElementById('f-lugar');
       autocomplete = new google.maps.places.Autocomplete(input, {
@@ -511,7 +515,13 @@
           <span class="nivel-pill pill-${op.nivel}">N${op.nivel} ${NIVEL_LABELS[op.nivel]}</span>
         </div>
       </div>`;
-        card.addEventListener('click', () => window.abrirDetalle(op.id));
+        card.addEventListener('click', () => {
+          if (selOpId === op.id && document.getElementById('detail-panel').classList.contains('open')) {
+            window.cerrarDetalle();
+          } else {
+            window.abrirDetalle(op.id);
+          }
+        });
         list.appendChild(card);
       });
     }
