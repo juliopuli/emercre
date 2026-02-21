@@ -376,9 +376,9 @@
         const spacing = 6;
 
         const types = [
-          { key: 'camiones', emoji: '🚛' },
+          { key: 'camiones', emoji: '🚒' }, // Camión rojo (estilo bomberos/emergencias)
           { key: 'ambulancias', emoji: '🚑' },
-          { key: 'offroad', emoji: '🚜' },
+          { key: 'offroad', emoji: '🚙' }, // SUV/Todoterreno azul/gris
           { key: 'van', emoji: '🚐' }
         ];
 
@@ -387,10 +387,10 @@
           if (count > 0) {
             recursosHtml += `
               <g transform="translate(${offsetX}, 48)">
-                <rect width="${iconSize}" height="${iconSize}" rx="4" fill="white" stroke="${color}" stroke-width="1.5"/>
+                <rect width="${iconSize}" height="${iconSize}" rx="4" fill="white" stroke="#555" stroke-width="1"/>
                 <text x="${iconSize / 2}" y="${iconSize / 2 + 7}" text-anchor="middle" font-size="18">${t.emoji}</text>
                 ${count > 1 ? `
-                  <circle cx="${iconSize}" cy="0" r="9" fill="${color}"/>
+                  <circle cx="${iconSize}" cy="0" r="9" fill="#e74c3c"/>
                   <text x="${iconSize}" y="3" text-anchor="middle" font-size="10" fill="white" font-weight="700">${count}</text>`
                 : ''}
               </g>`;
@@ -3386,7 +3386,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.6.3
+          Versión V.2.6.4
         </div>
       </div>
       </footer>
