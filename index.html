@@ -220,7 +220,13 @@
       document.getElementById('hdr-role').textContent = ROL_LABELS[currentRole] || currentRole;
       const isAdmin = currentRole === 'admin' || currentRole === 'super_admin';
       document.getElementById('btn-nueva-op').style.display = isAdmin ? 'flex' : 'none';
-      document.getElementById('nav-usuarios').style.display = currentRole === 'super_admin' ? 'flex' : 'none';
+
+      const isSA = currentRole === 'super_admin';
+      document.getElementById('nav-usuarios').style.display = isSA ? 'flex' : 'none';
+      if (document.getElementById('nav-tablas')) {
+        document.getElementById('nav-tablas').style.display = isSA ? 'flex' : 'none';
+      }
+
       suscribirOps();
       showSection('operaciones');
       if (gmap && mapReady) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
@@ -1192,12 +1198,19 @@ ${dataContext}
       btn.disabled = false; btn.textContent = 'Guardar cambios →';
     };
 
-    // ── USUARIOS ───────────────────────────────────────────────────────
+    // ── SECTIONS ───────────────────────────────────────────────────────
     window.showSection = sec => {
       document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
       document.getElementById('section-operaciones').style.display = sec === 'operaciones' ? 'flex' : 'none';
       document.getElementById('section-usuarios').style.display = sec === 'usuarios' ? 'flex' : 'none';
+      if (document.getElementById('section-tablas')) {
+        document.getElementById('section-tablas').style.display = sec === 'tablas' ? 'flex' : 'none';
+      }
+
       if (sec === 'usuarios') cargarUsuarios();
+      if (sec === 'tablas' && typeof window.showTablaMaestra === 'function') {
+        window.showTablaMaestra('vehiculos');
+      }
       if (sec === 'operaciones' && gmap) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
     };
 
@@ -1297,6 +1310,106 @@ ${dataContext}
       cargarUsuarios();
     };
 
+    // ── TABLAS MAESTRAS ────────────────────────────────────────────────
+    window.showTablaMaestra = (tabla) => {
+      document.querySelectorAll('#tablas-subnav .ftab').forEach(b => b.classList.remove('on'));
+      const activeBtn = document.getElementById(`subnav-${tabla}`);
+      if (activeBtn) activeBtn.classList.add('on');
+
+      const contVeh = document.getElementById('tabla-vehiculos-container');
+      if (contVeh) contVeh.style.display = tabla === 'vehiculos' ? 'flex' : 'none';
+
+      if (tabla === 'vehiculos') cargarVehiculos();
+    };
+
+    let editingVehiculoId = null;
+
+    async function cargarVehiculos() {
+      const snap = await getDocs(collection(db, 'vehiculos'));
+      const tbody = document.getElementById('vehiculos-tbody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      snap.forEach(d => {
+        const v = d.data();
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+      <td><strong>${v.indicativo || '—'}</strong></td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${v.matricula || '—'}</td>
+      <td>${v.tipo || '—'}</td>
+      <td>
+        <button class="tbl-btn" onclick="editarVehiculo('${d.id}')">Editar</button>
+        <button class="tbl-btn danger" onclick="borrarVehiculo('${d.id}')">Eliminar</button>
+      </td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    window.abrirModalVehiculo = () => {
+      editingVehiculoId = null;
+      document.getElementById('modal-vehiculo-title').textContent = 'Nuevo vehículo';
+      ['v-indicativo', 'v-matricula'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+      });
+      document.getElementById('v-tipo').value = 'Camión';
+      document.getElementById('overlay-vehiculo').classList.add('open');
+      setTimeout(() => document.getElementById('v-indicativo').focus(), 100);
+    };
+
+    window.editarVehiculo = async id => {
+      const snap = await getDoc(doc(db, 'vehiculos', id));
+      if (!snap.exists()) return;
+      const v = snap.data();
+      editingVehiculoId = id;
+      document.getElementById('modal-vehiculo-title').textContent = 'Editar vehículo';
+      document.getElementById('v-indicativo').value = v.indicativo || '';
+      document.getElementById('v-matricula').value = v.matricula || '';
+      document.getElementById('v-tipo').value = v.tipo || 'Camión';
+      document.getElementById('overlay-vehiculo').classList.add('open');
+      setTimeout(() => document.getElementById('v-indicativo').focus(), 100);
+    };
+
+    window.cerrarModalVehiculo = () => {
+      document.getElementById('overlay-vehiculo').classList.remove('open');
+      editingVehiculoId = null;
+    };
+
+    window.guardarVehiculo = async () => {
+      const indicativo = document.getElementById('v-indicativo').value.trim();
+      const matricula = document.getElementById('v-matricula').value.trim();
+      const tipo = document.getElementById('v-tipo').value;
+      if (!indicativo || !matricula) { alert('Indicativo y matrícula son obligatorios.'); return; }
+
+      const btn = document.getElementById('btn-guardar-vehiculo');
+      btn.disabled = true; btn.textContent = 'Guardando…';
+      try {
+        if (editingVehiculoId) {
+          await updateDoc(doc(db, 'vehiculos', editingVehiculoId), { indicativo, matricula, tipo, actualizadoEn: serverTimestamp() });
+          mostrarToast('Vehículo actualizado.');
+        } else {
+          await addDoc(collection(db, 'vehiculos'), {
+            indicativo, matricula, tipo,
+            creadoPor: currentUser.uid,
+            creadoEn: serverTimestamp(),
+            actualizadoEn: serverTimestamp()
+          });
+          mostrarToast('Vehículo creado.');
+        }
+        cerrarModalVehiculo();
+        cargarVehiculos();
+      } catch (e) { alert('Error: ' + e.message); }
+      btn.disabled = false; btn.textContent = 'Guardar';
+    };
+
+    window.borrarVehiculo = async id => {
+      if (!confirm('¿Eliminar este vehículo de forma permanente?')) return;
+      try {
+        await deleteDoc(doc(db, 'vehiculos', id));
+        mostrarToast('Vehículo eliminado.');
+        cargarVehiculos();
+      } catch (e) { alert('Error al eliminar: ' + e.message); }
+    };
+
     // ── TOAST ──────────────────────────────────────────────────────────
     function mostrarToast(msg) {
       const t = document.getElementById('toast');
@@ -1325,6 +1438,7 @@ ${dataContext}
         window.cerrarModalEditOp();
         window.cerrarDetalle();
         window.cerrarModalUsuario();
+        if (window.cerrarModalVehiculo) window.cerrarModalVehiculo();
         if (picking) stopPick();
         if (editPickMode) stopEditPick();
       }
@@ -1751,7 +1865,8 @@ ${dataContext}
       display: flex;
     }
 
-    #section-usuarios {
+    #section-usuarios,
+    #section-tablas {
       flex: 1;
       overflow: hidden;
       display: none;
@@ -2948,6 +3063,8 @@ ${dataContext}
       <button class="nav-item on" data-sec="operaciones" onclick="showSection('operaciones')">🗺 Operaciones</button>
       <button class="nav-item" id="nav-usuarios" data-sec="usuarios" onclick="showSection('usuarios')"
         style="display:none">👥 Usuarios</button>
+      <button class="nav-item" id="nav-tablas" data-sec="tablas" onclick="showSection('tablas')" style="display:none">🗂
+        Tablas maestras</button>
     </nav>
 
     <!-- OPERACIONES -->
@@ -3063,6 +3180,44 @@ ${dataContext}
         </table>
       </div>
     </div>
+
+    <!-- TABLAS MAESTRAS -->
+    <div id="section-tablas">
+      <div class="users-toolbar"
+        style="margin-bottom: 8px; flex-direction: column; align-items: flex-start; gap: 16px;">
+        <div>
+          <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;">Tablas maestras</div>
+          <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Gestión de catálogos y dispositivos
+            estructurales.</div>
+        </div>
+        <div class="filter-tabs" id="tablas-subnav" style="width: 100%; max-width: 400px; display: flex;">
+          <button class="ftab on" id="subnav-vehiculos" onclick="showTablaMaestra('vehiculos')"
+            style="flex:1;">Vehículos</button>
+          <!-- Se pueden añadir más pestañas aquí en el futuro -->
+        </div>
+      </div>
+
+      <!-- Contenedor Vehículos -->
+      <div id="tabla-vehiculos-container" style="display:flex; flex-direction:column; flex:1; gap:16px;">
+        <div style="display:flex; justify-content:flex-end;">
+          <button class="btn-nueva" onclick="abrirModalVehiculo()">+ Nuevo vehículo</button>
+        </div>
+        <div class="users-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Indicativo</th>
+                <th>Matrícula</th>
+                <th>Tipo de vehículo</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="vehiculos-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <!-- MODAL NUEVA OPERACIÓN -->
@@ -3302,6 +3457,40 @@ ${dataContext}
       <div class="modal-foot">
         <button class="btn-cancel-m" onclick="cerrarModalUsuario()">Cancelar</button>
         <button class="btn-create-m" id="btn-guardar-user" onclick="guardarUsuario()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL VEHÍCULO -->
+  <div class="overlay" id="overlay-vehiculo">
+    <div class="modal" style="width:420px;">
+      <div class="modal-head">
+        <div class="modal-title" id="modal-vehiculo-title">Nuevo vehículo</div>
+        <button class="btn-close-dp" onclick="cerrarModalVehiculo()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <div class="field-lbl">Indicativo *</div>
+          <input class="f-input" id="v-indicativo" placeholder="Ej: A-10">
+        </div>
+        <div class="field">
+          <div class="field-lbl">Matrícula *</div>
+          <input class="f-input" id="v-matricula" placeholder="Ej: 1234 ABC">
+        </div>
+        <div class="field">
+          <div class="field-lbl">Tipo de vehículo *</div>
+          <select class="f-input f-select" id="v-tipo" style="width:100%">
+            <option value="Camión">Camión</option>
+            <option value="Vehículo transporte personal">Vehículo transporte personal</option>
+            <option value="Vehículo de transporte mixto">Vehículo de transporte mixto</option>
+            <option value="Ambulancia">Ambulancia</option>
+            <option value="Vehículo Todo terreno">Vehículo Todo terreno</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel-m" onclick="cerrarModalVehiculo()">Cancelar</button>
+        <button class="btn-create-m" id="btn-guardar-vehiculo" onclick="guardarVehiculo()">Guardar</button>
       </div>
     </div>
   </div>
