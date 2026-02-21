@@ -756,7 +756,15 @@
             const opSnap = await getDoc(opRef);
             const rSum = opSnap.data().recursosSummary || {};
 
-            const keyMap = { 'Camión': 'camiones', 'Ambulancia': 'ambulancias', 'Todo Terreno': 'offroad', 'Furgoneta': 'van' };
+            const keyMap = {
+              'Camión': 'camiones',
+              'Ambulancia': 'ambulancias',
+              'Vehículo Todo terreno': 'offroad',
+              'Todo Terreno': 'offroad',
+              'Vehículo transporte personal': 'van',
+              'Vehículo de transporte mixto': 'van',
+              'Furgoneta': 'van'
+            };
             const v = opcionesRecursosCache.vehiculos.find(x => x.id === itemId);
             const key = keyMap[v.tipo] || 'otros';
             rSum[key] = (rSum[key] || 0) + 1;
@@ -796,8 +804,8 @@
           if (desc.includes('🚗')) { // Asumimos que los vehiculos empiezan con emoji
             if (desc.includes('Camión')) key = 'camiones';
             else if (desc.includes('Ambulancia')) key = 'ambulancias';
-            else if (desc.includes('Todo Terreno')) key = 'offroad';
-            else if (desc.includes('Furgoneta')) key = 'van';
+            else if (desc.includes('Todo terreno') || desc.includes('Todo Terreno')) key = 'offroad';
+            else if (desc.includes('Vehículo transporte personal') || desc.includes('Vehículo de transporte mixto') || desc.includes('Furgoneta')) key = 'van';
           }
 
           if (rSum[key] > 0) rSum[key]--;
@@ -3378,7 +3386,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.6.2
+          Versión V.2.6.3
         </div>
       </div>
       </footer>
