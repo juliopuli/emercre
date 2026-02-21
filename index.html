@@ -355,23 +355,49 @@
     }
 
     // ── MAPA ───────────────────────────────────────────────────────────
-    function nivelIcon(nivel, emoji, isNew, hasUpdate) {
+    function nivelIcon(nivel, emoji, isNew, hasUpdate, recursosSummary) {
       const color = NIVEL_COLORS[nivel] || '#888';
       let badge = '';
       if (isNew) {
-        // Globo rojo pulsante para incidente NUEVO (esquina super. der.)
         badge = `<circle cx="64" cy="6" r="12" fill="#e74c3c" />
                   <circle cx="64" cy="6" r="12" fill="#e74c3c" opacity="0.5">
                     <animate attributeName="r" values="12;22" dur="1s" repeatCount="indefinite"/>
                     <animate attributeName="opacity" values="0.5;0" dur="1s" repeatCount="indefinite"/>
                   </circle>`;
       } else if (hasUpdate) {
-        // Globo azul para incidente MODIFICADO (esquina super. izq.)
         badge = `<circle cx="6" cy="6" r="10" fill="#2980b9" />`;
       }
 
+      // Renderizar iconos de recursos si existen
+      let recursosHtml = '';
+      if (recursosSummary) {
+        let offsetX = 5;
+        const iconSize = 18;
+        const spacing = 4;
+
+        const types = [
+          { key: 'camiones', emoji: '🚛' },
+          { key: 'ambulancias', emoji: '🚑' },
+          { key: 'offroad', emoji: '🚜' },
+          { key: 'van', emoji: '🚐' }
+        ];
+
+        types.forEach(t => {
+          const count = recursosSummary[t.key] || 0;
+          if (count > 0) {
+            recursosHtml += `
+              <g transform="translate(${offsetX}, 36)">
+                <rect width="${iconSize}" height="${iconSize}" rx="2" fill="white" stroke="${color}" stroke-width="1"/>
+                <text x="${iconSize / 2}" y="${iconSize / 2 + 5}" text-anchor="middle" font-size="12">${t.emoji}</text>
+                ${count > 1 ? `<circle cx="${iconSize}" cy="0" r="6" fill="${color}"/><text x="${iconSize}" y="3" text-anchor="middle" font-size="7" fill="white" font-weight="700">${count}</text>` : ''}
+              </g>`;
+            offsetX += iconSize + spacing;
+          }
+        });
+      }
+
       const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="70" height="50" viewBox="0 0 70 50">
+    <svg xmlns="http://www.w3.org/2000/svg" width="100" height="60" viewBox="0 0 100 60">
       <defs>
         <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
           <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.3"/>
@@ -383,16 +409,14 @@
         <path d="M 27 33 L 35 45 L 43 33" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
         <line x1="29" y1="33.5" x2="41" y2="33.5" stroke="white" stroke-width="3.5"/>
       </g>
-      <!-- Cruz Roja -->
       <path d="M 12 15 h 5 v -5 h 6 v 5 h 5 v 6 h -5 v 5 h -6 v -5 h -5 z" fill="#cc0000"/>
-      <!-- Emoji -->
       <text x="48" y="25" text-anchor="middle" font-size="18">${emoji}</text>
-      <!-- Badges -->
       ${badge}
+      ${recursosHtml}
     </svg>`;
       return {
         url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
-        scaledSize: new google.maps.Size(70, 50),
+        scaledSize: new google.maps.Size(100, 60),
         anchor: new google.maps.Point(35, 48)
       };
     }
@@ -415,7 +439,7 @@
         bounds.extend(pos);
         hasValidCoords = true;
 
-        const icon = nivelIcon(op.nivel, t.emoji, op._isNew, op._hasUpdate);
+        const icon = nivelIcon(op.nivel, t.emoji, op._isNew, op._hasUpdate, op.recursosSummary);
         if (gmMarkers[op.id]) {
           gmMarkers[op.id].setPosition(pos);
           gmMarkers[op.id].setIcon(icon);
@@ -627,7 +651,7 @@
         // Re-renderizamos en mapa y lista para quitar la notificación visual
         if (gmMarkers[id]) {
           const t = TIPOS[op.tipo] || TIPOS.otro;
-          gmMarkers[id].setIcon(nivelIcon(op.nivel, t.emoji, false, false));
+          gmMarkers[id].setIcon(nivelIcon(op.nivel, t.emoji, false, false, op.recursosSummary));
         }
       }
 
@@ -725,8 +749,20 @@
           });
 
           try {
-            await updateDoc(doc(db, 'operaciones', selOpId), { actualizadoEn: serverTimestamp() });
-          } catch (e) { }
+            const opRef = doc(db, 'operaciones', selOpId);
+            const opSnap = await getDoc(opRef);
+            const rSum = opSnap.data().recursosSummary || {};
+
+            const keyMap = { 'Camión': 'camiones', 'Ambulancia': 'ambulancias', 'Todo Terreno': 'offroad', 'Furgoneta': 'van' };
+            const v = opcionesRecursosCache.vehiculos.find(x => x.id === itemId);
+            const key = keyMap[v.tipo] || 'otros';
+            rSum[key] = (rSum[key] || 0) + 1;
+
+            await updateDoc(opRef, {
+              recursosSummary: rSum,
+              actualizadoEn: serverTimestamp()
+            });
+          } catch (e) { console.error("Error updating recursosSummary:", e); }
         }
         document.getElementById('r-cat').value = '';
         document.getElementById('r-item').innerHTML = '<option value="">Selecciona recurso...</option>';
@@ -748,8 +784,26 @@
           timestamp: serverTimestamp()
         });
         try {
-          await updateDoc(doc(db, 'operaciones', selOpId), { actualizadoEn: serverTimestamp() });
-        } catch (e) { }
+          const opRef = doc(db, 'operaciones', selOpId);
+          const opSnap = await getDoc(opRef);
+          const rSum = opSnap.data().recursosSummary || {};
+
+          // Inferir tipo de la descripción (esto es un poco frágil pero funciona con el desc generado)
+          let key = 'otros';
+          if (desc.includes('🚗')) { // Asumimos que los vehiculos empiezan con emoji
+            if (desc.includes('Camión')) key = 'camiones';
+            else if (desc.includes('Ambulancia')) key = 'ambulancias';
+            else if (desc.includes('Todo Terreno')) key = 'offroad';
+            else if (desc.includes('Furgoneta')) key = 'van';
+          }
+
+          if (rSum[key] > 0) rSum[key]--;
+
+          await updateDoc(opRef, {
+            recursosSummary: rSum,
+            actualizadoEn: serverTimestamp()
+          });
+        } catch (e) { console.error("Error updating recursosSummary:", e); }
       } catch (e) { alert('Error: ' + e.message); }
     };
 
@@ -866,8 +920,9 @@
       if (!selOpId) return;
       await updateDoc(doc(db, 'operaciones', selOpId), { nivel: n, actualizadoEn: serverTimestamp() });
       if (gmMarkers[selOpId] && ops[selOpId]) {
-        const t = TIPOS[ops[selOpId].tipo] || TIPOS.otro;
-        gmMarkers[selOpId].setIcon(nivelIcon(n, t.emoji));
+        const op = ops[selOpId];
+        const t = TIPOS[op.tipo] || TIPOS.otro;
+        gmMarkers[selOpId].setIcon(nivelIcon(n, t.emoji, false, false, op.recursosSummary));
       }
     };
 
@@ -3320,7 +3375,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.5.1
+          Versión V.2.6.0
         </div>
       </div>
       </footer>
