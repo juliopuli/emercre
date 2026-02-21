@@ -80,6 +80,7 @@
       accidente: { label: 'Accidente', emoji: '🚛', color: '#d35400' },
       quimico: { label: 'Inc. Químico', emoji: '☣️', color: '#c0392b' },
       sanitaria: { label: 'Emerg. Sanitaria', emoji: '🦠', color: '#e74c3c' },
+      logistica: { label: 'Op. Logística', emoji: '📦', color: '#8e44ad' },
       otro: { label: 'Otro', emoji: '📋', color: '#7f8c8d' }
     };
     const NIVEL_LABELS = { 1: 'Emergencia Mayor', 2: 'Emergencia', 3: 'Alerta', 4: 'Seguimiento' };
@@ -506,7 +507,7 @@
           <div class="card-name" style="padding-right:16px;">${op.nombre}</div>
         </div>
         ${badgeHtml}
-        <span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${t.label}</span>
+        <span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${TIPOS[op.tipo] ? t.label : op.tipo}</span>
       </div>
       <div class="card-meta">
         <span class="card-loc">📍 ${op.loc || 'Sin ubicación'}</span>
@@ -587,7 +588,7 @@
       document.getElementById('dp-name').textContent = op.nombre;
       document.getElementById('dp-loc').innerHTML = op.loc ? `📍 ${op.loc}` : (op.coords ? `📍 ${op.coords.lat.toFixed(4)}, ${op.coords.lng.toFixed(4)}` : '');
       document.getElementById('dp-type-tag').innerHTML =
-        `<span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${t.label}</span>`;
+        `<span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${TIPOS[op.tipo] ? t.label : op.tipo}</span>`;
 
       document.querySelectorAll('.nsel-opt').forEach(b => {
         b.classList.toggle('on', parseInt(b.dataset.n) === op.nivel);
@@ -886,7 +887,16 @@ ${dataContext}
       document.getElementById('overlay-ai-report').classList.remove('open');
     };
 
-    // ── HELPERS SELECTORES SOLICITUD ───────────────────────────────────
+    // ── HELPERS SELECTORES SOLICITUD Y TIPO ────────────────────────────
+    window.handleTipoChange = (prefix) => {
+      const select = document.getElementById(`${prefix}-tipo`);
+      const input = document.getElementById(`${prefix}-tipo-otro`);
+      if (select && input) {
+        input.style.display = select.value === 'otro' ? 'block' : 'none';
+        if (select.value !== 'otro') input.value = '';
+      }
+    };
+
     window.handleSolicitadoChange = (prefix) => {
       const orgSelect = document.getElementById(`${prefix}-org`);
       const subContainer = document.getElementById(`${prefix}-org-sub`);
@@ -908,6 +918,10 @@ ${dataContext}
             subInput.placeholder = "Indica quién dentro de Cruz Roja...";
             subInput.style.display = 'block';
             break;
+          case 'Otro':
+            subInput.placeholder = "Indica el organismo o persona...";
+            subInput.style.display = 'block';
+            break;
           case 'Jefe de Operaciones':
             subSelect.style.display = 'block';
             break;
@@ -924,10 +938,22 @@ ${dataContext}
 
       if (mainVal === 'Jefe de Operaciones') {
         return `Jefe de Operaciones - ${document.getElementById(`${prefix}-org-sub-select`).value}`;
+      } else if (mainVal === 'Otro') {
+        const sub = document.getElementById(`${prefix}-org-sub-input`).value.trim();
+        return sub ? `Otro - ${sub}` : mainVal;
       } else {
         const sub = document.getElementById(`${prefix}-org-sub-input`).value.trim();
         return sub ? `${mainVal} - ${sub}` : mainVal;
       }
+    }
+
+    window.parseTipoData = (prefix) => {
+      const mainVal = document.getElementById(`${prefix}-tipo`).value;
+      if (mainVal === 'otro') {
+        const subVal = document.getElementById(`${prefix}-tipo-otro`).value.trim();
+        return subVal ? subVal : 'otro';
+      }
+      return mainVal;
     }
 
     // ── MODAL NUEVA OPERACIÓN ──────────────────────────────────────────
@@ -943,11 +969,12 @@ ${dataContext}
       pickedCoords = null;
       pickedAddress = '';
       if (tempGmMarker) { tempGmMarker.setMap(null); tempGmMarker = null; }
-      ['f-nombre', 'f-desc', 'f-loc', 'f-org-sub-input', 'f-lugar'].forEach(id => {
+      ['f-nombre', 'f-desc', 'f-loc', 'f-org-sub-input', 'f-lugar', 'f-tipo-otro'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
       });
       document.getElementById('f-tipo').value = 'inundacion';
+      handleTipoChange('f');
       document.getElementById('f-nivel').value = '3';
       document.getElementById('f-dir').value = 'Julio Pulido Morilla';
       document.getElementById('f-org').value = '112';
@@ -966,10 +993,11 @@ ${dataContext}
         const autorNombre = currentUserDoc.nombre || currentUser.email;
 
         const orgFinal = parseSolicitadoData('f');
+        const tipoFinal = parseTipoData('f');
 
         const ref = await addDoc(collection(db, 'operaciones'), {
           nombre,
-          tipo: document.getElementById('f-tipo').value,
+          tipo: tipoFinal,
           nivel,
           loc: locVal,
           dir: document.getElementById('f-dir').value,
@@ -1004,7 +1032,18 @@ ${dataContext}
 
       // Poblar campos con datos actuales
       document.getElementById('fe-nombre').value = op.nombre || '';
-      document.getElementById('fe-tipo').value = op.tipo || 'inundacion';
+
+      const selectTipo = document.getElementById('fe-tipo');
+      const opsTipo = Array.from(selectTipo.options).map(o => o.value);
+      if (opsTipo.includes(op.tipo)) {
+        selectTipo.value = op.tipo;
+        document.getElementById('fe-tipo-otro').value = '';
+      } else {
+        selectTipo.value = 'otro';
+        document.getElementById('fe-tipo-otro').value = op.tipo || '';
+      }
+      handleTipoChange('fe');
+
       document.getElementById('fe-lugar').value = op.loc || '';
 
       if (op.creadoEn?.toDate) {
@@ -1086,10 +1125,11 @@ ${dataContext}
 
         const valFecha = document.getElementById('fe-fecha').value;
         const tsCreado = valFecha ? new Date(valFecha) : new Date();
+        const tipoFinal = parseTipoData('fe');
 
         const updates = {
           nombre,
-          tipo: document.getElementById('fe-tipo').value,
+          tipo: tipoFinal,
           loc: locVal,
           dir: document.getElementById('fe-dir').value,
           org: orgFinal,
@@ -3002,7 +3042,7 @@ ${dataContext}
         <div class="field-row">
           <div class="field" style="flex:1;">
             <div class="field-lbl">Tipo de catástrofe</div>
-            <select class="f-input f-select" id="f-tipo" style="width:100%">
+            <select class="f-input f-select" id="f-tipo" style="width:100%" onchange="handleTipoChange('f')">
               <option value="inundacion">🌊 Inundación / DANA</option>
               <option value="incendio">🔥 Incendio forestal</option>
               <option value="seismo">🌍 Seísmo / Terremoto</option>
@@ -3010,8 +3050,11 @@ ${dataContext}
               <option value="accidente">🚛 Accidente grave</option>
               <option value="quimico">☣️ Incidente químico</option>
               <option value="sanitaria">🦠 Emergencia sanitaria</option>
+              <option value="logistica">📦 Operación Logística</option>
               <option value="otro">📋 Otro</option>
             </select>
+            <input class="f-input" id="f-tipo-otro" placeholder="Especificar..."
+              style="display:none; margin-top:8px; width:100%;">
           </div>
           <div class="field" style="flex:1;">
             <div class="field-lbl">Nivel de activación</div>
@@ -3043,6 +3086,7 @@ ${dataContext}
               <option value="061">061</option>
               <option value="Ayuntamiento">Ayuntamiento</option>
               <option value="Cruz Roja">Cruz Roja</option>
+              <option value="Otro">Otro</option>
               <option value="Jefe de Operaciones">Jefe de Operaciones</option>
             </select>
             <div id="f-org-sub" style="display:none; margin-top:8px;">
@@ -3091,7 +3135,7 @@ ${dataContext}
           </div>
           <div class="field" style="flex:1;">
             <div class="field-lbl">Tipo de catástrofe</div>
-            <select class="f-input f-select" id="fe-tipo" style="width:100%">
+            <select class="f-input f-select" id="fe-tipo" style="width:100%" onchange="handleTipoChange('fe')">
               <option value="inundacion">🌊 Inundación / DANA</option>
               <option value="incendio">🔥 Incendio forestal</option>
               <option value="seismo">🌍 Seísmo / Terremoto</option>
@@ -3099,8 +3143,11 @@ ${dataContext}
               <option value="accidente">🚛 Accidente grave</option>
               <option value="quimico">☣️ Incidente químico</option>
               <option value="sanitaria">🦠 Emergencia sanitaria</option>
+              <option value="logistica">📦 Operación Logística</option>
               <option value="otro">📋 Otro</option>
             </select>
+            <input class="f-input" id="fe-tipo-otro" placeholder="Especificar..."
+              style="display:none; margin-top:8px; width:100%;">
           </div>
         </div>
         <div class="field-row">
@@ -3118,6 +3165,7 @@ ${dataContext}
               <option value="061">061</option>
               <option value="Ayuntamiento">Ayuntamiento</option>
               <option value="Cruz Roja">Cruz Roja</option>
+              <option value="Otro">Otro</option>
               <option value="Jefe de Operaciones">Jefe de Operaciones</option>
             </select>
             <div id="fe-org-sub" style="display:none; margin-top:8px;">
