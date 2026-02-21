@@ -197,8 +197,12 @@
     // ── AUTH STATE ─────────────────────────────────────────────────────
     onAuthStateChanged(auth, async user => {
       if (user) {
-        const snap = await getDoc(doc(db, 'users', user.uid));
-        if (!snap.exists() || snap.data().activo === false) {
+        let snap;
+        try {
+          snap = await getDoc(doc(db, 'users', user.uid));
+        } catch (e) { console.error("Error fetching user doc:", e); }
+
+        if (!snap || !snap.exists() || snap.data().activo === false) {
           await signOut(auth);
           mostrarLoginErr('Usuario no autorizado o desactivado.');
           return;
@@ -207,15 +211,17 @@
         currentUserDoc = snap.data();
         currentRole = currentUserDoc.role;
 
-        // Registrar entrada y marcar online
-        await updateDoc(doc(db, 'users', user.uid), {
-          enLinea: true,
-          ultimaActividad: serverTimestamp()
-        });
-        await addDoc(collection(db, 'users', user.uid, 'sessions'), {
-          tipo: 'entrada',
-          timestamp: serverTimestamp()
-        });
+        // Registrar entrada y marcar online (No bloqueante)
+        try {
+          updateDoc(doc(db, 'users', user.uid), {
+            enLinea: true,
+            ultimaActividad: serverTimestamp()
+          });
+          addDoc(collection(db, 'users', user.uid, 'sessions'), {
+            tipo: 'entrada',
+            timestamp: serverTimestamp()
+          });
+        } catch (e) { console.warn("Presencia no registrada (posible falta de reglas):", e); }
 
         mostrarApp();
         initApp();
@@ -225,6 +231,17 @@
         detenerListeners();
       }
     });
+
+    // Cargar Google Maps dinámicamente para asegurar que los callbacks estén listos
+    function cargarGoogleMaps() {
+      const script = document.createElement('script');
+      const apiKey = "__GOOGLE_MAPS_API_KEY__";
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initGoogleMap&language=es`;
+      script.async = true;
+      script.defer = true;
+      document.head.appendChild(script);
+    }
+    cargarGoogleMaps();
 
     // ── LOGIN / LOGOUT ─────────────────────────────────────────────────
     window.doLogin = async () => {
@@ -1661,10 +1678,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     });
   </script>
 
-  <!-- Google Maps + Places -->
-  <script
-    src="https://maps.googleapis.com/maps/api/js?key=__GOOGLE_MAPS_API_KEY__&libraries=places&callback=initGoogleMap&language=es"
-    async defer></script>
+  <!-- Google Maps se carga dinámicamente desde el script superior -->
 
   <style>
     :root {
@@ -3306,7 +3320,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.5.0
+          Versión V.2.5.1
         </div>
       </div>
       </footer>
