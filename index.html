@@ -1007,6 +1007,18 @@ ${dataContext}
       document.getElementById('fe-tipo').value = op.tipo || 'inundacion';
       document.getElementById('fe-lugar').value = op.loc || '';
 
+      if (op.creadoEn?.toDate) {
+        const d = op.creadoEn.toDate();
+        const yy = d.getFullYear();
+        const mm = String(d.getMonth() + 1).padStart(2, '0');
+        const dd = String(d.getDate()).padStart(2, '0');
+        const hh = String(d.getHours()).padStart(2, '0');
+        const mn = String(d.getMinutes()).padStart(2, '0');
+        document.getElementById('fe-fecha').value = `${yy}-${mm}-${dd}T${hh}:${mn}`;
+      } else {
+        document.getElementById('fe-fecha').value = '';
+      }
+
       // Jefe de operaciones
       const optionsDir = Array.from(document.getElementById('fe-dir').options).map(o => o.value);
       if (optionsDir.includes(op.dir)) {
@@ -1072,12 +1084,16 @@ ${dataContext}
         const locVal = document.getElementById('fe-lugar').value.trim();
         const orgFinal = parseSolicitadoData('fe');
 
+        const valFecha = document.getElementById('fe-fecha').value;
+        const tsCreado = valFecha ? new Date(valFecha) : new Date();
+
         const updates = {
           nombre,
           tipo: document.getElementById('fe-tipo').value,
           loc: locVal,
           dir: document.getElementById('fe-dir').value,
           org: orgFinal,
+          creadoEn: tsCreado,
           actualizadoEn: serverTimestamp()
         };
         // Solo actualizar coords si el usuario eligió una nueva ubicación
@@ -3064,18 +3080,24 @@ ${dataContext}
           <div class="field-lbl">Nombre de la operación *</div>
           <input class="f-input" id="fe-nombre" placeholder="Ej: Inundaciones Cuenca del Ebro">
         </div>
-        <div class="field">
-          <div class="field-lbl">Tipo de catástrofe</div>
-          <select class="f-input f-select" id="fe-tipo" style="width:100%">
-            <option value="inundacion">🌊 Inundación / DANA</option>
-            <option value="incendio">🔥 Incendio forestal</option>
-            <option value="seismo">🌍 Seísmo / Terremoto</option>
-            <option value="temporal">🌪 Temporal / Viento</option>
-            <option value="accidente">🚛 Accidente grave</option>
-            <option value="quimico">☣️ Incidente químico</option>
-            <option value="sanitaria">🦠 Emergencia sanitaria</option>
-            <option value="otro">📋 Otro</option>
-          </select>
+        <div class="field-row">
+          <div class="field" style="flex:1;">
+            <div class="field-lbl">Fecha y hora de inicio</div>
+            <input type="datetime-local" class="f-input" id="fe-fecha" style="width:100%">
+          </div>
+          <div class="field" style="flex:1;">
+            <div class="field-lbl">Tipo de catástrofe</div>
+            <select class="f-input f-select" id="fe-tipo" style="width:100%">
+              <option value="inundacion">🌊 Inundación / DANA</option>
+              <option value="incendio">🔥 Incendio forestal</option>
+              <option value="seismo">🌍 Seísmo / Terremoto</option>
+              <option value="temporal">🌪 Temporal / Viento</option>
+              <option value="accidente">🚛 Accidente grave</option>
+              <option value="quimico">☣️ Incidente químico</option>
+              <option value="sanitaria">🦠 Emergencia sanitaria</option>
+              <option value="otro">📋 Otro</option>
+            </select>
+          </div>
         </div>
         <div class="field-row">
           <div class="field" style="flex:1;">
