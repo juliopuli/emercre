@@ -800,9 +800,9 @@
       const list = document.getElementById('dp-recursos-list');
       const form = document.getElementById('dp-recursos-form');
       const isFinalizada = op?.estado === 'finalizada';
-      const isAdmin = currentRole === 'admin' || currentRole === 'super_admin';
+      const canModify = !isFinalizada && (currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'usuario');
 
-      if (form) form.style.display = isFinalizada ? 'none' : 'block';
+      if (form) form.style.display = canModify ? 'block' : 'none';
       if (!list) return;
 
       const summary = document.getElementById('dp-recursos-summary');
@@ -814,10 +814,21 @@
       }
 
       list.innerHTML = recursos.map(r => {
-        const btnDelete = (!isFinalizada && isAdmin) ? `<button onclick="desasignarRecurso('${r.id}', '${r.descripcion}')" style="background:none;border:none;color:var(--crit-1);cursor:pointer;font-size:14px;line-height:1;" title="Retirar">✕</button>` : '';
+        const desc = r.descripcion || '';
+        let iconUrl = '';
+        if (desc.includes('Camión')) iconUrl = 'assets/icons/truck.png';
+        else if (desc.includes('Ambulancia')) iconUrl = 'assets/icons/ambulance.png';
+        else if (desc.includes('Todo terreno') || desc.includes('Todo Terreno')) iconUrl = 'assets/icons/offroad.png';
+        else if (desc.includes('Vehículo transporte personal') || desc.includes('Vehículo de transporte mixto') || desc.includes('Furgoneta')) iconUrl = 'assets/icons/van.png';
+
+        const iconHtml = iconUrl ? `<img src="${iconUrl}" style="width:16px; height:16px; margin-right:6px; vertical-align:middle;">` : '';
+        const btnDelete = canModify ? `<button onclick="desasignarRecurso('${r.id}', '${r.descripcion}')" style="background:none;border:none;color:var(--crit-1);cursor:pointer;font-size:14px;line-height:1;" title="Retirar">✕</button>` : '';
         return `
         <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-2); padding:5px 10px; border:1px solid var(--border-mid); border-radius:2px; font-size:11px;">
-          <span style="font-weight:600;">${r.descripcion}</span>
+          <div style="display:flex; align-items:center;">
+            ${iconHtml}
+            <span style="font-weight:600;">${desc}</span>
+          </div>
           ${btnDelete}
         </div>`;
       }).join('');
