@@ -228,39 +228,40 @@
           if (ch.type === 'removed') {
             delete ops[dId];
           } else {
+            const oldOp = ops[dId];
             ops[dId] = { id: dId, ...d };
 
-            // Detectar si es una operación *totalmente nueva* respecto a nuestro historial local
-            if (ch.type === 'added' && !initialLoad && d.creadoPor !== currentUser.uid) {
-              // Chequear si su timestamp es posterior al inicio de esta sesión
-              hasNewOp = true;
-              ops[dId]._isNew = true; // Flag temporal visual
+            if (oldOp) {
+              ops[dId]._isNew = oldOp._isNew;
+              ops[dId]._hasUpdate = oldOp._hasUpdate;
             }
 
-            // Detectar si hay actualización reciente (potencial nuevo mensaje/novedad)
-            if (ch.type === 'modified' && dId !== selOpId && d.actualizadoEn) {
-              // Si la fecha de actualización cambia y no la estamos viendo
-              const tsOld = opsTimestamps[dId] || 0;
-              const tsNew = d.actualizadoEn.toMillis ? d.actualizadoEn.toMillis() : Date.now();
+            if (ch.type === 'added' && !initialLoad && d.creadoPor !== currentUser.uid) {
+              hasNewOp = true;
+              ops[dId]._isNew = true;
+            }
+
+            if (ch.type === 'modified' && dId !== selOpId) {
+              const tsOld = oldOp && oldOp.actualizadoEn?.toMillis ? oldOp.actualizadoEn.toMillis() : 0;
+              const tsNew = d.actualizadoEn?.toMillis ? d.actualizadoEn.toMillis() : 0;
               if (tsOld > 0 && tsNew > tsOld) {
-                ops[dId]._hasUpdate = true; // Flag visual de "hay novedad"
+                ops[dId]._hasUpdate = true;
               }
-              opsTimestamps[dId] = tsNew;
-            } else if (ch.type === 'added') {
-              opsTimestamps[dId] = d.actualizadoEn?.toMillis ? d.actualizadoEn.toMillis() : Date.now();
             }
           }
         });
 
         initialLoad = false;
         if (hasNewOp) {
-          alertSound.play().catch(e => console.log('Autoplay audio blocked:', e));
+          alertSound.play().catch(e => console.log('Ignored auto-play:', e));
         }
 
         renderSidebar();
         renderMapa();
         actualizarContadores();
         if (selOpId && ops[selOpId]) renderDetalle(ops[selOpId]);
+      }, err => {
+        console.error("Ops listener error:", err);
       });
     }
 
@@ -269,15 +270,15 @@
       const color = NIVEL_COLORS[nivel] || '#888';
       let badge = '';
       if (isNew) {
-        // Globo rojo pulsante para incidente NUEVO
-        badge = `<circle cx="62" cy="8" r="8" fill="#e74c3c" />
-                  <circle cx="62" cy="8" r="8" fill="#e74c3c" opacity="0.5">
-                    <animate attributeName="r" values="8;16" dur="1s" repeatCount="indefinite"/>
+        // Globo rojo pulsante para incidente NUEVO (esquina super. der.)
+        badge = `<circle cx="64" cy="6" r="12" fill="#e74c3c" />
+                  <circle cx="64" cy="6" r="12" fill="#e74c3c" opacity="0.5">
+                    <animate attributeName="r" values="12;22" dur="1s" repeatCount="indefinite"/>
                     <animate attributeName="opacity" values="0.5;0" dur="1s" repeatCount="indefinite"/>
                   </circle>`;
       } else if (hasUpdate) {
-        // Globo azul para incidente MODIFICADO (nuevo mensaje)
-        badge = `<circle cx="62" cy="8" r="7" fill="#2980b9" />`;
+        // Globo azul para incidente MODIFICADO (esquina super. izq.)
+        badge = `<circle cx="6" cy="6" r="10" fill="#2980b9" />`;
       }
 
       const svg = `
@@ -471,7 +472,10 @@
       visible.forEach(op => {
         const t = TIPOS[op.tipo] || TIPOS.otro;
         const card = document.createElement('div');
-        card.className = 'op-card' + (selOpId === op.id ? ' sel' : '');
+        let classes = 'op-card';
+        if (selOpId === op.id) classes += ' sel';
+        if (op._isNew) classes += ' is-new';
+        card.className = classes;
         card.dataset.nivel = op.nivel;
 
         let badgeHtml = '';
@@ -712,7 +716,13 @@
           uid: currentUser.uid,
           timestamp: serverTimestamp()
         });
-        await updateDoc(doc(db, 'operaciones', selOpId), { actualizadoEn: serverTimestamp() });
+
+        try {
+          await updateDoc(doc(db, 'operaciones', selOpId), { actualizadoEn: serverTimestamp() });
+        } catch (updateErr) {
+          console.warn("Usuario sin permisos para actualizar la operación principal, pero novedad añadida.");
+        }
+
         document.getElementById('a-texto').value = '';
       } catch (e) { alert('Error: ' + e.message); }
       btn.disabled = false;
@@ -1813,22 +1823,29 @@ ${dataContext}
 
     .card-badge {
       position: absolute;
-      top: 0;
-      right: 48px;
-      width: 10px;
-      height: 10px;
+      width: 16px;
+      height: 16px;
       border-radius: 50%;
       border: 2px solid var(--bg-1);
     }
 
     .new-badge {
+      top: -8px;
+      right: -8px;
       background: #e74c3c;
       box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.4);
       animation: pulseAlert 1.5s infinite;
     }
 
     .update-badge {
+      top: -8px;
+      left: -8px;
       background: #2980b9;
+    }
+
+    .op-card.is-new {
+      background: #fffafa;
+      border-color: #e8b4b0;
     }
 
     @keyframes pulseAlert {
@@ -1847,7 +1864,6 @@ ${dataContext}
 
     .card-meta {
       display: flex;
-      align-items: center;
       justify-content: space-between;
       font-size: 11px;
       color: var(--text-3);
