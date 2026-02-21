@@ -66,6 +66,11 @@
     let currentAcciones = {};
     let editAccionId = null;
 
+    // ── NOTIFICACIONES ──────────────────────────────────────────────────
+    let lastSeenOps = {}; // Para saber qué ops hemos visto (tracking nuevo op)
+    let opsTimestamps = {}; // Para saber último timestamp y compararlo con nuestro "visto"
+    let alertSound = new Audio('./assets/alert.mp3');
+
     // ── TIPO / NIVEL ───────────────────────────────────────────────────
     const TIPOS = {
       inundacion: { label: 'Inundación', emoji: '🌊', color: '#2980b9' },
@@ -211,11 +216,47 @@
     function suscribirOps() {
       if (unsubOps) unsubOps();
       const q = query(collection(db, 'operaciones'), orderBy('creadoEn', 'desc'));
+      let initialLoad = true;
+
       unsubOps = onSnapshot(q, snap => {
+        let hasNewOp = false;
+
         snap.docChanges().forEach(ch => {
-          if (ch.type === 'removed') delete ops[ch.doc.id];
-          else ops[ch.doc.id] = { id: ch.doc.id, ...ch.doc.data() };
+          const d = ch.doc.data();
+          const dId = ch.doc.id;
+
+          if (ch.type === 'removed') {
+            delete ops[dId];
+          } else {
+            ops[dId] = { id: dId, ...d };
+
+            // Detectar si es una operación *totalmente nueva* respecto a nuestro historial local
+            if (ch.type === 'added' && !initialLoad && d.creadoPor !== currentUser.uid) {
+              // Chequear si su timestamp es posterior al inicio de esta sesión
+              hasNewOp = true;
+              ops[dId]._isNew = true; // Flag temporal visual
+            }
+
+            // Detectar si hay actualización reciente (potencial nuevo mensaje/novedad)
+            if (ch.type === 'modified' && dId !== selOpId && d.actualizadoEn) {
+              // Si la fecha de actualización cambia y no la estamos viendo
+              const tsOld = opsTimestamps[dId] || 0;
+              const tsNew = d.actualizadoEn.toMillis ? d.actualizadoEn.toMillis() : Date.now();
+              if (tsOld > 0 && tsNew > tsOld) {
+                ops[dId]._hasUpdate = true; // Flag visual de "hay novedad"
+              }
+              opsTimestamps[dId] = tsNew;
+            } else if (ch.type === 'added') {
+              opsTimestamps[dId] = d.actualizadoEn?.toMillis ? d.actualizadoEn.toMillis() : Date.now();
+            }
+          }
         });
+
+        initialLoad = false;
+        if (hasNewOp) {
+          alertSound.play().catch(e => console.log('Autoplay audio blocked:', e));
+        }
+
         renderSidebar();
         renderMapa();
         actualizarContadores();
@@ -224,8 +265,21 @@
     }
 
     // ── MAPA ───────────────────────────────────────────────────────────
-    function nivelIcon(nivel, emoji) {
+    function nivelIcon(nivel, emoji, isNew, hasUpdate) {
       const color = NIVEL_COLORS[nivel] || '#888';
+      let badge = '';
+      if (isNew) {
+        // Globo rojo pulsante para incidente NUEVO
+        badge = `<circle cx="62" cy="8" r="8" fill="#e74c3c" />
+                  <circle cx="62" cy="8" r="8" fill="#e74c3c" opacity="0.5">
+                    <animate attributeName="r" values="8;16" dur="1s" repeatCount="indefinite"/>
+                    <animate attributeName="opacity" values="0.5;0" dur="1s" repeatCount="indefinite"/>
+                  </circle>`;
+      } else if (hasUpdate) {
+        // Globo azul para incidente MODIFICADO (nuevo mensaje)
+        badge = `<circle cx="62" cy="8" r="7" fill="#2980b9" />`;
+      }
+
       const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="70" height="50" viewBox="0 0 70 50">
       <defs>
@@ -243,6 +297,8 @@
       <path d="M 12 15 h 5 v -5 h 6 v 5 h 5 v 6 h -5 v 5 h -6 v -5 h -5 z" fill="#cc0000"/>
       <!-- Emoji -->
       <text x="48" y="25" text-anchor="middle" font-size="18">${emoji}</text>
+      <!-- Badges -->
+      ${badge}
     </svg>`;
       return {
         url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
@@ -269,7 +325,7 @@
         bounds.extend(pos);
         hasValidCoords = true;
 
-        const icon = nivelIcon(op.nivel, t.emoji);
+        const icon = nivelIcon(op.nivel, t.emoji, op._isNew, op._hasUpdate);
         if (gmMarkers[op.id]) {
           gmMarkers[op.id].setPosition(pos);
           gmMarkers[op.id].setIcon(icon);
@@ -417,12 +473,21 @@
         const card = document.createElement('div');
         card.className = 'op-card' + (selOpId === op.id ? ' sel' : '');
         card.dataset.nivel = op.nivel;
+
+        let badgeHtml = '';
+        if (op._isNew) {
+          badgeHtml = `<div class="card-badge new-badge" title="Nueva operación"></div>`;
+        } else if (op._hasUpdate) {
+          badgeHtml = `<div class="card-badge update-badge" title="Nuevos mensajes"></div>`;
+        }
+
         card.innerHTML = `
-      <div class="card-top">
+      <div class="card-top" style="position:relative;">
         <div>
           <div class="card-id">${op.id.substring(0, 8).toUpperCase()}</div>
-          <div class="card-name">${op.nombre}</div>
+          <div class="card-name" style="padding-right:16px;">${op.nombre}</div>
         </div>
+        ${badgeHtml}
         <span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${t.label}</span>
       </div>
       <div class="card-meta">
@@ -449,6 +514,18 @@
       selOpId = id;
       const op = ops[id];
       if (!op) return;
+
+      // Limpiar badges por visualización
+      if (op._isNew || op._hasUpdate) {
+        op._isNew = false;
+        op._hasUpdate = false;
+        // Re-renderizamos en mapa y lista para quitar la notificación visual
+        if (gmMarkers[id]) {
+          const t = TIPOS[op.tipo] || TIPOS.otro;
+          gmMarkers[id].setIcon(nivelIcon(op.nivel, t.emoji, false, false));
+        }
+      }
+
       document.getElementById('detail-panel').classList.add('open');
       renderDetalle(op);
       renderSidebar();
@@ -1732,6 +1809,40 @@ ${dataContext}
       white-space: nowrap;
       flex-shrink: 0;
       border: 1px solid;
+    }
+
+    .card-badge {
+      position: absolute;
+      top: 0;
+      right: 48px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 2px solid var(--bg-1);
+    }
+
+    .new-badge {
+      background: #e74c3c;
+      box-shadow: 0 0 0 2px rgba(231, 76, 60, 0.4);
+      animation: pulseAlert 1.5s infinite;
+    }
+
+    .update-badge {
+      background: #2980b9;
+    }
+
+    @keyframes pulseAlert {
+      0% {
+        box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.7);
+      }
+
+      70% {
+        box-shadow: 0 0 0 6px rgba(231, 76, 60, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(231, 76, 60, 0);
+      }
     }
 
     .card-meta {
