@@ -53,6 +53,8 @@
     let autocompleteEdit = null;
     let pickListener = null;
     let tempGmMarker = null;
+    let unsubOps = null;
+    let unsubAcciones = null;
     let unsubRecursos = null;
     let unsubJefes = null;
     let ops = {};
@@ -433,6 +435,8 @@
     }
 
     function detenerListeners() {
+      if (unsubOps) { unsubOps(); unsubOps = null; }
+      if (unsubAcciones) { unsubAcciones(); unsubAcciones = null; }
       if (unsubRecursos) { unsubRecursos(); unsubRecursos = null; }
       if (unsubJefes) { unsubJefes(); unsubJefes = null; }
       ops = {};
@@ -4383,8 +4387,6 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
               <select class="f-input f-select" id="f-org-sub-select" style="display:none; width:100%">
                 <!-- Se puebla dinámicamente -->
               </select>
-              <option value="Samuel Linares Cantero">Samuel Linares Cantero</option>
-              </select>
             </div>
           </div>
         </div>
@@ -4475,8 +4477,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             <div id="fe-org-sub" style="display:none; margin-top:8px;">
               <input class="f-input" id="fe-org-sub-input" style="display:none;">
               <select class="f-input f-select" id="fe-org-sub-select" style="display:none; width:100%">
-                <option value="Julio Pulido Morilla">Julio Pulido Morilla</option>
-                <option value="Samuel Linares Cantero">Samuel Linares Cantero</option>
+                <!-- Se puebla dinámicamente -->
               </select>
             </div>
           </div>
