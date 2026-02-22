@@ -221,6 +221,10 @@
         currentUserDoc = snap.data();
         currentRole = currentUserDoc.role;
 
+        // Limpiar estado de botón login por si estaba en "Accediendo..."
+        const btnLogin = document.getElementById('btn-login');
+        if (btnLogin) { btnLogin.disabled = false; btnLogin.textContent = 'Login'; }
+
         // Inicializar provincia seleccionada según perfil
         if (currentUserDoc.provincia && currentUserDoc.provincia !== 'Andalucía') {
           selectedProvincia = currentUserDoc.provincia;
@@ -270,8 +274,9 @@
       try {
         await signInWithEmailAndPassword(auth, email, pass);
       } catch (e) {
+        console.error("Login error:", e);
         mostrarLoginErr('Email o contraseña incorrectos.');
-        btn.disabled = false; btn.textContent = 'Acceder';
+        btn.disabled = false; btn.textContent = 'Login';
       }
     };
     window.doLogout = async () => {
@@ -1932,6 +1937,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     function mostrarLogin() {
       document.getElementById('screen-login').style.display = 'flex';
       document.getElementById('screen-app').style.display = 'none';
+      const btn = document.getElementById('btn-login');
+      if (btn) { btn.disabled = false; btn.textContent = 'Login'; }
     }
     function mostrarApp() {
       document.getElementById('screen-login').style.display = 'none';
