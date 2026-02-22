@@ -425,7 +425,7 @@
       const isAdmin = currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'autonomica' || currentRole === 'provincial' || currentRole === 'manager';
       document.getElementById('btn-nueva-op').style.display = isAdmin ? 'flex' : 'none';
 
-      const canManageGuardia = currentRole === 'super_admin' || currentRole === 'manager' || currentRole === 'admin';
+      const canManageGuardia = currentRole === 'super_admin' || currentRole === 'manager' || currentRole === 'admin' || currentRole === 'autonomica' || currentRole === 'provincial';
       document.getElementById('hdr-jefe-guardia-val').style.display = canManageGuardia ? 'none' : 'block';
       document.getElementById('hdr-jefe-guardia-sel').style.display = canManageGuardia ? 'block' : 'none';
 
@@ -4244,7 +4244,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.17.1
+          Versión V.2.17.2
         </div>
       </div>
       </footer>
