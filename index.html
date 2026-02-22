@@ -2197,6 +2197,9 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           // Mantener selección si existía
           if (currentVal && Array.from(sel.options).some(o => o.value === currentVal)) {
             sel.value = currentVal;
+          } else if (sid === 'hdr-jefe-guardia-sel' && jefeGuardiaActual) {
+            // Refuerzo: Si es el header y tenemos un jefe en Firebase, ponerlo
+            sel.value = jefeGuardiaActual;
           }
         });
       });
@@ -2224,7 +2227,13 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     }
 
     window.cambiarJefeGuardia = async (nombre) => {
-      if (!nombre) return;
+      // Solo cambiar si hay un nombre válido (evitar reset accidental con "Seleccionar...")
+      if (!nombre) {
+        // Restaurar el valor anterior si se selecciona el placeholder por error
+        const sel = document.getElementById('hdr-jefe-guardia-sel');
+        if (sel) sel.value = jefeGuardiaActual || '';
+        return;
+      }
       try {
         await setDoc(doc(db, 'config_guardia', selectedProvincia), {
           jefeNombre: nombre,
@@ -4244,7 +4253,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.17.2
+          Versión V.2.17.3
         </div>
       </div>
       </footer>
