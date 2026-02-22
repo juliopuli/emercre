@@ -4572,6 +4572,34 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         max-width: 100% !important;
         box-sizing: border-box !important;
       }
+
+      .filter-tabs {
+        flex-wrap: wrap !important;
+        gap: 4px !important;
+      }
+
+      .ftab {
+        font-size: 10px !important;
+        padding: 6px 2px !important;
+      }
+
+      table {
+        display: block;
+        width: 100% !important;
+        overflow-x: auto;
+      }
+
+      /* Suppression of dynamic overflow sources */
+      *[style*="BESbswy"],
+      [style*="font-size: 300px"],
+      [style*="font-size:300px"] {
+        display: none !important;
+        visibility: hidden !important;
+        opacity: 0 !important;
+        width: 0 !important;
+        height: 0 !important;
+        overflow: hidden !important;
+      }
     }
   </style>
 </head>
@@ -4742,7 +4770,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.3.0.5
+          Versión V.3.0.7
         </div>
       </div>
       <div id="mobile-menu-overlay" class="mobile-menu-overlay" onclick="toggleMobileMenu()">
