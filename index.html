@@ -1619,7 +1619,10 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             <button class="tbl-btn" onclick="editarUsuario('${d.id}')">Editar</button>
             <button class="tbl-btn" onclick="abrirLogUsuario('${d.id}', '${u.nombre || u.email}')">Log</button>
             ${d.id !== currentUser.uid
-              ? `<button class="tbl-btn danger" onclick="borrarUsuario('${d.id}')">Desactivar</button>`
+              ? (currentRole === 'super_admin'
+                ? `<button class="tbl-btn danger" onclick="borrarUsuario('${d.id}')" title="Eliminar de la DB">Borrar</button>
+                   <button class="tbl-btn" onclick="desactivarUsuario('${d.id}')">Desactivar</button>`
+                : `<button class="tbl-btn danger" onclick="desactivarUsuario('${d.id}')">Desactivar</button>`)
               : '<span style="font-size:11px;color:var(--text-4)">(tú)</span>'}
           </td>`;
           tbody.appendChild(tr);
@@ -1780,10 +1783,20 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       btn.disabled = false; btn.textContent = 'Guardar';
     };
 
-    window.borrarUsuario = async uid => {
-      if (!confirm('¿Desactivar este usuario?')) return;
+    window.desactivarUsuario = async uid => {
+      if (!confirm('¿Desactivar este usuario? El acceso quedará revocado.')) return;
       await updateDoc(doc(db, 'users', uid), { activo: false });
       mostrarToast('Usuario desactivado.');
+    };
+
+    window.borrarUsuario = async uid => {
+      if (!confirm('¿ELIMINAR PERMANENTEMENTE este usuario? Esta acción es irreversible.')) return;
+      try {
+        await deleteDoc(doc(db, 'users', uid));
+        mostrarToast('Usuario eliminado permanentemente.');
+      } catch (e) {
+        alert('Error: No se pudo eliminar el documento de usuario. ' + e.message);
+      }
     };
 
     // ── TABLAS MAESTRAS ────────────────────────────────────────────────
