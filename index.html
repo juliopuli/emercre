@@ -407,6 +407,7 @@
       let html = `
         <div class="marker-main">
           ${isNew ? '<div class="marker-new-glow"></div>' : ''}
+          ${nivel == 4 ? '<div class="marker-crit-badge">!</div>' : ''}
           <div class="marker-cross">+</div>
           <div class="marker-emoji">${emoji}</div>
         </div>
@@ -616,6 +617,10 @@
       }
 
       visible.sort((a, b) => {
+        // Prioridad Crítica (N4) siempre arriba
+        if (a.nivel == 4 && b.nivel != 4) return -1;
+        if (a.nivel != 4 && b.nivel == 4) return 1;
+
         const ta = a.actualizadoEn?.toMillis ? a.actualizadoEn.toMillis() : 0;
         const tb = b.actualizadoEn?.toMillis ? b.actualizadoEn.toMillis() : 0;
         return tb - ta;
@@ -3540,6 +3545,26 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       justify-content: center;
     }
 
+    .marker-crit-badge {
+      position: absolute;
+      top: -15px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 22px;
+      height: 22px;
+      background: #c0392b;
+      color: #fff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 900;
+      font-size: 14px;
+      border: 2px solid #fff;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      z-index: 10;
+    }
+
     .marker-main::after {
       content: '';
       position: absolute;
@@ -3744,7 +3769,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.12.0
+          Versión V.2.13.0
         </div>
       </div>
       </footer>
