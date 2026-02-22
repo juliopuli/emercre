@@ -1667,7 +1667,6 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           mostrarToast('Usuario creado.');
         }
         cerrarModalUsuario();
-        cargarUsuarios();
       } catch (e) { alert('Error: ' + e.message); }
       btn.disabled = false; btn.textContent = 'Guardar';
     };
@@ -1676,7 +1675,6 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       if (!confirm('¿Desactivar este usuario?')) return;
       await updateDoc(doc(db, 'users', uid), { activo: false });
       mostrarToast('Usuario desactivado.');
-      // cargarUsuarios(); // This function is not defined, assuming it was meant to be suscribirUsuarios() or similar
     };
 
     // ── TABLAS MAESTRAS ────────────────────────────────────────────────
