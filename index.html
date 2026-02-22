@@ -2019,41 +2019,65 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       align-items: center;
       justify-content: center;
       height: 100vh;
-      background: var(--bg);
+      background: #f4f7fa;
+      /* Slightly bluer background for the container */
     }
 
     .login-card {
       background: var(--bg-1);
       border: 1px solid var(--border-dark);
-      border-radius: 4px;
-      padding: 40px;
-      width: 380px;
+      border-radius: 8px;
+      width: 780px;
+      /* Wider for split layout */
+      max-width: 90vw;
       box-shadow: var(--shadow-lg);
       display: flex;
+      overflow: hidden;
+      /* For border radius */
+      animation: modalIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .login-visual {
+      flex: 1;
+      background: var(--bg-2);
+      display: flex;
       flex-direction: column;
-      gap: 18px;
+      align-items: center;
+      justify-content: center;
+      padding: 40px;
+      border-right: 1px solid var(--border);
+    }
+
+    .login-form-side {
+      flex: 1;
+      padding: 50px 60px;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
     }
 
     .login-logo {
       display: flex;
+      flex-direction: column;
       align-items: center;
+      text-align: center;
       gap: 16px;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
 
     .login-title {
       font-family: 'Fraunces', serif;
-      font-size: 28px;
+      font-size: 32px;
       font-weight: 900;
       color: var(--accent);
       line-height: 1;
-      margin-bottom: 2px;
+      margin-bottom: 4px;
     }
 
     .login-sub {
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 700;
-      letter-spacing: 0.16em;
+      letter-spacing: 0.18em;
       text-transform: uppercase;
       color: var(--text-3);
     }
@@ -2061,35 +2085,36 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     .login-field {
       display: flex;
       flex-direction: column;
-      gap: 5px;
+      gap: 6px;
     }
 
     .login-lbl {
       font-size: 10px;
-      font-weight: 600;
+      font-weight: 700;
       letter-spacing: 0.1em;
       text-transform: uppercase;
       color: var(--text-3);
     }
 
     .login-input {
-      background: var(--bg-2);
+      background: var(--bg-1);
       border: 1px solid var(--border-mid);
       color: var(--text-1);
-      padding: 9px 12px;
+      padding: 12px 14px;
       font-family: 'IBM Plex Sans', sans-serif;
       font-size: 14px;
       outline: none;
-      border-radius: 2px;
-      transition: border-color 0.12s;
+      border-radius: 4px;
+      transition: all 0.2s;
     }
 
     .login-input:focus {
       border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-lt);
     }
 
     .btn-login {
-      padding: 11px;
+      padding: 14px;
       background: var(--accent);
       border: none;
       color: #fff;
@@ -2097,27 +2122,58 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       font-family: 'IBM Plex Sans', sans-serif;
       font-size: 14px;
       font-weight: 600;
-      border-radius: 2px;
-      transition: background 0.12s;
+      border-radius: 4px;
+      transition: all 0.2s;
+      margin-top: 10px;
     }
 
     .btn-login:hover {
       background: #253d6e;
+      transform: translateY(-1px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .btn-login:active {
+      transform: translateY(0);
     }
 
     .btn-login:disabled {
       background: var(--text-4);
       cursor: not-allowed;
+      transform: none;
     }
 
     .login-err {
       font-size: 12px;
-      color: var(--crit-1);
-      background: var(--crit-1-bg);
-      border: 1px solid var(--crit-1-border);
-      padding: 8px 12px;
-      border-radius: 2px;
+      color: var(--crit-4);
+      background: var(--crit-4-bg);
+      border: 1px solid var(--crit-4-border);
+      padding: 10px 14px;
+      border-radius: 4px;
       display: none;
+    }
+
+    @media (max-width: 768px) {
+      .login-card {
+        flex-direction: column;
+        width: 380px;
+        margin: 20px;
+      }
+
+      .login-visual {
+        padding: 30px;
+        border-right: none;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .login-visual img {
+        width: 120px !important;
+        height: 120px !important;
+      }
+
+      .login-form-side {
+        padding: 30px;
+      }
     }
 
     /* APP */
@@ -3655,23 +3711,27 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
   <!-- LOGIN -->
   <div id="screen-login">
     <div class="login-card">
-      <div class="login-logo">
-        <img src="assets/logo_emercre.png" alt="EmerCRE Logo" style="width: 72px; height: 72px; object-fit: contain;">
-        <div>
+      <div class="login-visual">
+        <img src="assets/logo_emercre.png" alt="EmerCRE Logo"
+          style="width: 180px; height: 180px; object-fit: contain; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.1));">
+      </div>
+      <div class="login-form-side">
+        <div class="login-logo">
           <div class="login-title">EmerCRE</div>
           <div class="login-sub">Gestión de Emergencias</div>
         </div>
+        <div class="login-field">
+          <div class="login-lbl">Email</div>
+          <input class="login-input" id="l-email" type="email" placeholder="usuario@organismo.es"
+            autocomplete="username">
+        </div>
+        <div class="login-field">
+          <div class="login-lbl">Contraseña</div>
+          <input class="login-input" id="l-pass" type="password" placeholder="••••••••" autocomplete="current-password">
+        </div>
+        <div class="login-err" id="err-login"></div>
+        <button class="btn-login" id="btn-login" onclick="doLogin()">Acceder</button>
       </div>
-      <div class="login-field">
-        <div class="login-lbl">Email</div>
-        <input class="login-input" id="l-email" type="email" placeholder="usuario@organismo.es" autocomplete="username">
-      </div>
-      <div class="login-field">
-        <div class="login-lbl">Contraseña</div>
-        <input class="login-input" id="l-pass" type="password" placeholder="••••••••" autocomplete="current-password">
-      </div>
-      <div class="login-err" id="err-login"></div>
-      <button class="btn-login" id="btn-login" onclick="doLogin()">Acceder</button>
     </div>
   </div>
 
