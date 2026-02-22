@@ -2339,12 +2339,18 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       // Actualizar visual en el drawer
       document.querySelectorAll('.drawer-item').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
 
-      // Si cambiamos a otra sección que no sea operaciones, ocultamos el mapa mobile si estaba on
+      // Resetear estado del mapa al cambiar de sección
+      const mapZone = document.querySelector('.map-zone');
+      const toggleBtn = document.getElementById('btn-mobile-map-toggle');
+
       if (sec !== 'operaciones') {
-        document.querySelector('.map-zone').classList.remove('mobile-on');
-        document.getElementById('btn-mobile-map-toggle').style.display = 'none';
+        if (mapZone) mapZone.classList.remove('mobile-on');
+        if (toggleBtn) {
+          toggleBtn.style.display = 'none';
+          toggleBtn.textContent = 'Ver Mapa 🗺'; // Reset text
+        }
       } else {
-        document.getElementById('btn-mobile-map-toggle').style.display = 'block';
+        if (toggleBtn) toggleBtn.style.display = 'block';
       }
     };
 
@@ -2441,7 +2447,9 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       height: 100vh;
       background: #0f172a;
       position: relative;
-      overflow: hidden;
+      overflow-y: auto;
+      /* Allow scroll on small screens */
+      padding: 20px 0;
     }
 
     .login-hero {
@@ -2884,7 +2892,10 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     #section-usuarios,
     #section-tablas {
       flex: 1;
-      overflow: hidden;
+      height: 100%;
+      /* Ensure they take full height */
+      overflow-y: auto;
+      /* Enable internal scrolling */
       display: none;
       flex-direction: column;
       padding: 24px;
@@ -4348,8 +4359,12 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       }
 
       #hdr-office-title {
-        font-size: 12px;
+        font-size: 11px;
         text-align: right;
+        max-width: 120px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .hdr-right {
@@ -4658,7 +4673,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.3.0.2
+          Versión V.3.0.3
         </div>
       </div>
       <div id="mobile-menu-overlay" class="mobile-menu-overlay" onclick="toggleMobileMenu()">
