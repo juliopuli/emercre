@@ -742,12 +742,20 @@
       const cat = document.getElementById('r-cat').value;
       const sel = document.getElementById('r-item');
       sel.innerHTML = '<option value="">Selecciona recurso...</option>';
-      if (!cat) return;
+      if (!cat || !selOpId) return;
+
+      const currentOp = ops[selOpId];
+      if (!currentOp) return;
 
       if (cat === 'vehiculos') {
         const snap = await getDocs(collection(db, 'vehiculos'));
         opcionesRecursosCache.vehiculos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        opcionesRecursosCache.vehiculos.forEach(v => {
+        // Filtrar vehículos por el ámbito de la operación
+        const filtered = opcionesRecursosCache.vehiculos.filter(v => {
+          const prov = v.provincia || 'Málaga';
+          return prov === currentOp.provincia;
+        });
+        filtered.forEach(v => {
           sel.innerHTML += `<option value="${v.id}">${v.indicativo} - ${v.tipo} (${v.matricula})</option>`;
         });
       }
@@ -1711,16 +1719,24 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       const tbody = document.getElementById('vehiculos-tbody');
       if (!tbody) return;
       tbody.innerHTML = '';
-      snap.forEach(d => {
-        const v = d.data();
+
+      const allVehs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      // Filtrado por ámbito (con fallback a Málaga)
+      const visible = allVehs.filter(v => {
+        const prov = v.provincia || 'Málaga';
+        return selectedProvincia === 'Andalucía' || prov === selectedProvincia;
+      });
+
+      visible.forEach(v => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td><strong>${v.indicativo || '—'}</strong></td>
           <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${v.matricula || '—'}</td>
           <td>${v.tipo || '—'}</td>
+          <td style="font-size:11px; color:var(--text-3);">${v.provincia || 'Málaga'}</td>
           <td>
-            <button class="tbl-btn" onclick="editarVehiculo('${d.id}')">Editar</button>
-            <button class="tbl-btn danger" onclick="borrarVehiculo('${d.id}')">Eliminar</button>
+            <button class="tbl-btn" onclick="editarVehiculo('${v.id}')">Editar</button>
+            <button class="tbl-btn danger" onclick="borrarVehiculo('${v.id}')">Eliminar</button>
           </td>`;
         tbody.appendChild(tr);
       });
@@ -1734,6 +1750,17 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         if (el) el.value = '';
       });
       document.getElementById('v-tipo').value = 'Camión';
+
+      const provRow = document.getElementById('v-prov-row');
+      const provSel = document.getElementById('v-provincia');
+      if (currentUserDoc.provincia && currentUserDoc.provincia !== 'Andalucía') {
+        provRow.style.display = 'none';
+        provSel.value = currentUserDoc.provincia;
+      } else {
+        provRow.style.display = 'block';
+        provSel.value = selectedProvincia === 'Andalucía' ? 'Andalucía' : selectedProvincia;
+      }
+
       document.getElementById('overlay-vehiculo').classList.add('open');
       setTimeout(() => document.getElementById('v-indicativo').focus(), 100);
     };
@@ -1747,6 +1774,16 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       document.getElementById('v-indicativo').value = v.indicativo || '';
       document.getElementById('v-matricula').value = v.matricula || '';
       document.getElementById('v-tipo').value = v.tipo || 'Camión';
+
+      const provRow = document.getElementById('v-prov-row');
+      const provSel = document.getElementById('v-provincia');
+      provSel.value = v.provincia || 'Málaga';
+      if (currentUserDoc.provincia && currentUserDoc.provincia !== 'Andalucía') {
+        provRow.style.display = 'none';
+      } else {
+        provRow.style.display = 'block';
+      }
+
       document.getElementById('overlay-vehiculo').classList.add('open');
       setTimeout(() => document.getElementById('v-indicativo').focus(), 100);
     };
@@ -1765,12 +1802,15 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       const btn = document.getElementById('btn-guardar-vehiculo');
       btn.disabled = true; btn.textContent = 'Guardando…';
       try {
+        const provincia = document.getElementById('v-provincia').value;
         if (editingVehiculoId) {
-          await updateDoc(doc(db, 'vehiculos', editingVehiculoId), { indicativo, matricula, tipo, actualizadoEn: serverTimestamp() });
+          await updateDoc(doc(db, 'vehiculos', editingVehiculoId), {
+            indicativo, matricula, tipo, provincia, actualizadoEn: serverTimestamp()
+          });
           mostrarToast('Vehículo actualizado.');
         } else {
           await addDoc(collection(db, 'vehiculos'), {
-            indicativo, matricula, tipo,
+            indicativo, matricula, tipo, provincia,
             creadoPor: currentUser.uid,
             creadoEn: serverTimestamp(),
             actualizadoEn: serverTimestamp()
@@ -3619,7 +3659,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.8.1
+          Versión V.2.9.0
         </div>
       </div>
       </footer>
