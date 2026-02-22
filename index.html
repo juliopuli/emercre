@@ -89,8 +89,8 @@
       logistica: { label: 'Op. Logística', emoji: '📦', color: '#8e44ad' },
       otro: { label: 'Otro', emoji: '📋', color: '#7f8c8d' }
     };
-    const NIVEL_LABELS = { 1: 'Emergencia Mayor', 2: 'Emergencia', 3: 'Alerta', 4: 'Seguimiento' };
-    const NIVEL_COLORS = { 1: '#c0392b', 2: '#d35400', 3: '#c08c00', 4: '#1a7a4a' };
+    const NIVEL_LABELS = { 1: 'Baja', 2: 'Media', 3: 'Alta', 4: 'Crítica' };
+    const NIVEL_COLORS = { 1: '#1a7a4a', 2: '#c08c00', 3: '#d35400', 4: '#c0392b' };
     const ROL_LABELS = {
       super_admin: 'Super Admin',
       manager: 'Administrador',
@@ -917,7 +917,7 @@
 
       document.querySelectorAll('.nsel-opt').forEach(b => {
         b.classList.toggle('on', parseInt(b.dataset.n) === op.nivel);
-        b.disabled = !isAdmin;
+        b.disabled = false;
       });
 
       const ir = document.getElementById('dp-info-row');
@@ -947,7 +947,7 @@
 
       // Deshabilitar selector de nivel si está finalizada
       document.querySelectorAll('.nsel-opt').forEach(b => {
-        b.disabled = isFinalizada || !isAdmin;
+        b.disabled = isFinalizada;
       });
     }
 
@@ -988,11 +988,34 @@
     // ── CAMBIAR NIVEL ──────────────────────────────────────────────────
     window.cambiarNivel = async n => {
       if (!selOpId) return;
-      await updateDoc(doc(db, 'operaciones', selOpId), { nivel: n, actualizadoEn: serverTimestamp() });
-      if (gmMarkers[selOpId] && ops[selOpId]) {
-        const op = ops[selOpId];
-        const t = TIPOS[op.tipo] || TIPOS.otro;
-        gmMarkers[selOpId].content = nivelIcon(n, t.emoji, false, false, op.recursosSummary);
+      const op = ops[selOpId];
+      if (!op) return;
+
+      if (parseInt(op.nivel) === n) return;
+      const comment = prompt(`Vas a cambiar la prioridad a N${n} ${NIVEL_LABELS[n]}. Por favor, indica el motivo:`);
+      if (comment === null) return;
+      const finalComment = comment.trim() || "Sin comentario adicional";
+
+      try {
+        await updateDoc(doc(db, 'operaciones', selOpId), { nivel: n, actualizadoEn: serverTimestamp() });
+
+        // Registrar en el log como una novedad
+        const autorNombre = currentUserDoc.nombre || currentUser.email;
+        await addDoc(collection(db, 'operaciones', selOpId, 'acciones'), {
+          texto: `Cambio de prioridad: N${op.nivel} ${NIVEL_LABELS[op.nivel] || op.nivel} ➔ N${n} ${NIVEL_LABELS[n]}. Motivo: ${finalComment}`,
+          prioridad: 'Baja',
+          autor: autorNombre,
+          uid: currentUser.uid,
+          timestamp: serverTimestamp()
+        });
+
+        if (gmMarkers[selOpId]) {
+          const t = TIPOS[op.tipo] || TIPOS.otro;
+          gmMarkers[selOpId].content = nivelIcon(n, t.emoji, false, false, op.recursosSummary);
+        }
+        mostrarToast('Prioridad actualizada y registrada.');
+      } catch (e) {
+        alert('Error al cambiar nivel: ' + e.message);
       }
     };
 
@@ -1949,18 +1972,18 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       --border: rgba(0, 0, 0, 0.08);
       --border-mid: rgba(0, 0, 0, 0.14);
       --border-dark: rgba(0, 0, 0, 0.22);
-      --crit-1: #c0392b;
-      --crit-1-bg: #fdf1f0;
-      --crit-1-border: #e8b4b0;
-      --crit-2: #d35400;
-      --crit-2-bg: #fef5ee;
-      --crit-2-border: #f0c8a0;
-      --crit-3: #c08c00;
-      --crit-3-bg: #fefbee;
-      --crit-3-border: #eadb94;
-      --crit-4: #1a7a4a;
-      --crit-4-bg: #f0faf4;
-      --crit-4-border: #a8d8bc;
+      --crit-1: #1a7a4a;
+      --crit-1-bg: #f0faf4;
+      --crit-1-border: #a8d8bc;
+      --crit-2: #c08c00;
+      --crit-2-bg: #fefbee;
+      --crit-2-border: #eadb94;
+      --crit-3: #d35400;
+      --crit-3-bg: #fef5ee;
+      --crit-3-border: #f0c8a0;
+      --crit-4: #c0392b;
+      --crit-4-bg: #fdf1f0;
+      --crit-4-border: #e8b4b0;
       --accent: #1a3a6e;
       --accent-lt: #eaf0fb;
       --shadow-sm: 0 1px 4px rgba(0, 0, 0, 0.08);
@@ -2497,6 +2520,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
     .op-card[data-nivel="4"] {
       border-left-color: var(--crit-4);
+      background: var(--crit-4-bg);
     }
 
     .card-top {
@@ -3720,7 +3744,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.11.1
+          Versión V.2.12.0
         </div>
       </div>
       </footer>
@@ -3749,10 +3773,10 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             <span
               style="font-size:10px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;">Nivel:</span>
             <div class="nivel-selector">
-              <button class="nsel-opt" data-n="1" onclick="cambiarNivel(1)">N1 Mayor</button>
-              <button class="nsel-opt" data-n="2" onclick="cambiarNivel(2)">N2 Emerg.</button>
-              <button class="nsel-opt" data-n="3" onclick="cambiarNivel(3)">N3 Alerta</button>
-              <button class="nsel-opt" data-n="4" onclick="cambiarNivel(4)">N4 Seg.</button>
+              <button class="nsel-opt" data-n="1" onclick="cambiarNivel(1)">N1 Baja</button>
+              <button class="nsel-opt" data-n="2" onclick="cambiarNivel(2)">N2 Media</button>
+              <button class="nsel-opt" data-n="3" onclick="cambiarNivel(3)">N3 Alta</button>
+              <button class="nsel-opt" data-n="4" onclick="cambiarNivel(4)">N4 Crítica</button>
             </div>
           </div>
           <div class="dp-info-row" id="dp-info-row"></div>
