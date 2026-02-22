@@ -314,6 +314,7 @@
             provSelector.appendChild(opt);
           });
         }
+        provSelector.options[0].textContent = "Oficina Autonómica de Andalucía";
         provSelector.value = selectedProvincia;
       }
 
@@ -643,6 +644,9 @@
         card.innerHTML = `
       <div class="card-top" style="position:relative;">
         <div>
+          <div class="card-scope" style="font-size:9px; font-weight:700; color:var(--accent); text-transform:uppercase; margin-bottom:2px; opacity:0.8;">
+            ${op.provincia === 'Andalucía' ? 'Oficina Autonómica de Andalucía' : `Oficina Provincial de ${op.provincia}`}
+          </div>
           <div class="card-id">${op.id.substring(0, 8).toUpperCase()}</div>
           <div class="card-name" style="padding-right:16px;">${op.nombre}</div>
         </div>
@@ -3577,7 +3581,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             <span style="font-size:10px; color:var(--text-3); font-weight:600; text-transform:uppercase;">Ver:</span>
             <select id="hdr-prov-selector" class="f-select" style="padding:2px 4px; font-size:11px;"
               onchange="changeProvincia(this.value)">
-              <option value="Andalucía">Toda Andalucía</option>
+              <option value="Andalucía">Oficina Autonómica de Andalucía</option>
             </select>
           </div>
         </div>
