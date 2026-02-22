@@ -2350,7 +2350,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           toggleBtn.textContent = 'Ver Mapa 🗺'; // Reset text
         }
       } else {
-        if (toggleBtn) toggleBtn.style.display = 'block';
+        // En PC, btn-mobile-map-toggle ya tiene display none por CSS
+        if (toggleBtn && window.innerWidth <= 900) toggleBtn.style.display = 'block';
       }
     };
 
@@ -2453,16 +2454,13 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     }
 
     .login-hero {
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      height: 300px;
-      padding: 60px;
+      position: relative;
+      padding: 40px 20px;
       display: flex;
       justify-content: center;
-      align-items: flex-start;
+      align-items: center;
       z-index: 1;
+      flex-shrink: 0;
     }
 
     .hero-content {
@@ -2509,7 +2507,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       display: flex;
       overflow: hidden;
       z-index: 2;
-      margin-top: 100px;
+      margin-top: 20px;
+      margin-bottom: 40px;
       animation: modalIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
@@ -4673,7 +4672,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.3.0.3
+          Versión V.3.0.4
         </div>
       </div>
       <div id="mobile-menu-overlay" class="mobile-menu-overlay" onclick="toggleMobileMenu()">
@@ -4696,178 +4695,177 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
       </div>
       <button id="btn-mobile-map-toggle" class="btn-mobile-map-toggle" onclick="toggleMobileMap()">Ver Mapa 🗺</button>
-      </footer>
-    </div>
-    <div class="map-zone">
-      <div class="pick-banner" id="pick-banner">📍 Haz clic en el mapa para fijar la ubicación</div>
-      <div id="map"></div>
-    </div>
+      <div class="map-zone">
+        <div class="pick-banner" id="pick-banner">📍 Haz clic en el mapa para fijar la ubicación</div>
+        <div id="map"></div>
+      </div>
 
-    <!-- PANEL DETALLE -->
-    <div class="detail-panel" id="detail-panel">
-      <div class="dp-header">
-        <div class="dp-scope-title" id="dp-scope-title"></div>
-        <div class="dp-top-row">
-          <div>
-            <div class="dp-id" id="dp-id"></div>
-            <div class="dp-name" id="dp-name"></div>
+      <!-- PANEL DETALLE -->
+      <div class="detail-panel" id="detail-panel">
+        <div class="dp-header">
+          <div class="dp-scope-title" id="dp-scope-title"></div>
+          <div class="dp-top-row">
+            <div>
+              <div class="dp-id" id="dp-id"></div>
+              <div class="dp-name" id="dp-name"></div>
+            </div>
+            <button class="btn-close-dp" onclick="cerrarDetalle()">✕</button>
           </div>
-          <button class="btn-close-dp" onclick="cerrarDetalle()">✕</button>
-        </div>
-        <div class="dp-chips">
-          <div id="dp-type-tag"></div>
-          <div class="dp-loc" id="dp-loc"></div>
-        </div>
-      </div>
-      <div
-        style="padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:8px;">
-        <span
-          style="font-size:10px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;">Nivel:</span>
-        <div class="nivel-selector">
-          <button class="nsel-opt" data-n="1" onclick="cambiarNivel(1)">N1 Baja</button>
-          <button class="nsel-opt" data-n="2" onclick="cambiarNivel(2)">N2 Media</button>
-          <button class="nsel-opt" data-n="3" onclick="cambiarNivel(3)">N3 Alta</button>
-          <button class="nsel-opt" data-n="4" onclick="cambiarNivel(4)">N4 Crítica</button>
-        </div>
-      </div>
-      <div class="dp-info-row" id="dp-info-row"></div>
-
-      <!-- RECURSOS ASIGNADOS -->
-      <details class="dp-recursos" id="dp-recursos-wrapper">
-        <summary class="section-label" id="dp-recursos-summary"
-          style="cursor:pointer; outline:none; font-size:10px; margin-bottom:6px;">
-          Recursos asignados (0)</summary>
-        <div id="dp-recursos-list" style="display:flex; flex-direction:column; gap:4px; margin-bottom:8px;"></div>
-
-        <div id="dp-recursos-form"
-          style="background:var(--bg-2); padding:6px; border:1px solid var(--border); border-radius:2px;">
-          <div style="display:flex; gap:6px; align-items:center;">
-            <select class="f-input f-select" id="r-cat" style="flex:1; padding:4px; font-size:11px;"
-              onchange="cargarOpcionesRecursos()">
-              <option value="">Categoría...</option>
-              <option value="vehiculos">Vehículos</option>
-            </select>
-            <select class="f-input f-select" id="r-item" style="flex:2; padding:4px; font-size:11px;">
-              <option value="">Recurso...</option>
-            </select>
-            <button class="btn-create-m" id="btn-add-recurso" onclick="asignarRecurso()"
-              style="padding:5px 8px; font-size: 11px; white-space:nowrap;">Añadir</button>
+          <div class="dp-chips">
+            <div id="dp-type-tag"></div>
+            <div class="dp-loc" id="dp-loc"></div>
           </div>
         </div>
-      </details>
-
-      <div class="dp-timeline" id="dp-timeline"></div>
-      <div class="dp-addaction" id="dp-addaction-wrapper">
-        <div style="display:flex; gap:6px; margin-bottom:6px;">
-          <select class="f-select" id="a-prio" style="padding:4px; font-size:11px; width:95px;">
-            <option value="Crítica">🔴 Crítica</option>
-            <option value="Alta">🟠 Alta</option>
-            <option value="Media" selected>🟡 Media</option>
-            <option value="Baja">🟢 Baja</option>
-          </select>
-          <!-- Campo autor: readonly, siempre muestra el usuario conectado -->
-          <input class="f-input" id="a-autor" placeholder="Usuario" style="flex:1; padding:4px; font-size:11px;"
-            readonly>
+        <div
+          style="padding:8px 16px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+          <span
+            style="font-size:10px;color:var(--text-3);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;">Nivel:</span>
+          <div class="nivel-selector">
+            <button class="nsel-opt" data-n="1" onclick="cambiarNivel(1)">N1 Baja</button>
+            <button class="nsel-opt" data-n="2" onclick="cambiarNivel(2)">N2 Media</button>
+            <button class="nsel-opt" data-n="3" onclick="cambiarNivel(3)">N3 Alta</button>
+            <button class="nsel-opt" data-n="4" onclick="cambiarNivel(4)">N4 Crítica</button>
+          </div>
         </div>
-        <textarea class="f-input" id="a-texto" placeholder="Describe la novedad, acción o decisión…"
-          style="resize:vertical;min-height:45px;margin-bottom:4px;"></textarea>
-        <button class="btn-reg" id="btn-reg-accion" onclick="addAccion()">Registrar novedad</button>
-      </div>
-      <!-- Botones admin -->
-      <div
-        style="padding:8px 16px;border-top:1px solid var(--border);flex-shrink:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-        <button id="dp-edit-btn" class="btn-edit-op" onclick="abrirModalEditOp()">✏️ Editar</button>
-        <button id="dp-fin-btn" class="btn-edit-op" onclick="finalizarOp()">Finalizar operación</button>
-        <button id="dp-ai-btn" class="btn-ai" onclick="abrirModalInformeIA()">✨ Emitir informe (IA)</button>
-        <div class="dp-admin-btns" id="dp-admin-btns" style="padding:0;border:none;display:none;">
-          <button id="dp-reabrir-btn" class="btn-edit-op" onclick="reabrirOp()" style="display:none;">Abrir</button>
-          <button class="btn-danger" onclick="borrarOp()">🗑 Borrar</button>
+        <div class="dp-info-row" id="dp-info-row"></div>
+
+        <!-- RECURSOS ASIGNADOS -->
+        <details class="dp-recursos" id="dp-recursos-wrapper">
+          <summary class="section-label" id="dp-recursos-summary"
+            style="cursor:pointer; outline:none; font-size:10px; margin-bottom:6px;">
+            Recursos asignados (0)</summary>
+          <div id="dp-recursos-list" style="display:flex; flex-direction:column; gap:4px; margin-bottom:8px;"></div>
+
+          <div id="dp-recursos-form"
+            style="background:var(--bg-2); padding:6px; border:1px solid var(--border); border-radius:2px;">
+            <div style="display:flex; gap:6px; align-items:center;">
+              <select class="f-input f-select" id="r-cat" style="flex:1; padding:4px; font-size:11px;"
+                onchange="cargarOpcionesRecursos()">
+                <option value="">Categoría...</option>
+                <option value="vehiculos">Vehículos</option>
+              </select>
+              <select class="f-input f-select" id="r-item" style="flex:2; padding:4px; font-size:11px;">
+                <option value="">Recurso...</option>
+              </select>
+              <button class="btn-create-m" id="btn-add-recurso" onclick="asignarRecurso()"
+                style="padding:5px 8px; font-size: 11px; white-space:nowrap;">Añadir</button>
+            </div>
+          </div>
+        </details>
+
+        <div class="dp-timeline" id="dp-timeline"></div>
+        <div class="dp-addaction" id="dp-addaction-wrapper">
+          <div style="display:flex; gap:6px; margin-bottom:6px;">
+            <select class="f-select" id="a-prio" style="padding:4px; font-size:11px; width:95px;">
+              <option value="Crítica">🔴 Crítica</option>
+              <option value="Alta">🟠 Alta</option>
+              <option value="Media" selected>🟡 Media</option>
+              <option value="Baja">🟢 Baja</option>
+            </select>
+            <!-- Campo autor: readonly, siempre muestra el usuario conectado -->
+            <input class="f-input" id="a-autor" placeholder="Usuario" style="flex:1; padding:4px; font-size:11px;"
+              readonly>
+          </div>
+          <textarea class="f-input" id="a-texto" placeholder="Describe la novedad, acción o decisión…"
+            style="resize:vertical;min-height:45px;margin-bottom:4px;"></textarea>
+          <button class="btn-reg" id="btn-reg-accion" onclick="addAccion()">Registrar novedad</button>
+        </div>
+        <!-- Botones admin -->
+        <div
+          style="padding:8px 16px;border-top:1px solid var(--border);flex-shrink:0;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+          <button id="dp-edit-btn" class="btn-edit-op" onclick="abrirModalEditOp()">✏️ Editar</button>
+          <button id="dp-fin-btn" class="btn-edit-op" onclick="finalizarOp()">Finalizar operación</button>
+          <button id="dp-ai-btn" class="btn-ai" onclick="abrirModalInformeIA()">✨ Emitir informe (IA)</button>
+          <div class="dp-admin-btns" id="dp-admin-btns" style="padding:0;border:none;display:none;">
+            <button id="dp-reabrir-btn" class="btn-edit-op" onclick="reabrirOp()" style="display:none;">Abrir</button>
+            <button class="btn-danger" onclick="borrarOp()">🗑 Borrar</button>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- USUARIOS -->
-  <div id="section-usuarios">
-    <div class="users-toolbar">
-      <div>
-        <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;">Gestión de usuarios</div>
-        <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Solo el Super Admin puede crear, editar y
-          desactivar usuarios.</div>
-      </div>
-      <button class="btn-nueva" onclick="abrirModalUsuario()">+ Nuevo usuario</button>
-    </div>
-    <div class="users-table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Nombre</th>
-            <th>Email</th>
-            <th>Rol</th>
-            <th>Estado</th>
-            <th>Acciones</th>
-          </tr>
-        </thead>
-        <tbody id="users-tbody"></tbody>
-      </table>
-    </div>
-  </div>
-
-  <!-- TABLAS MAESTRAS -->
-  <div id="section-tablas">
-    <div class="users-toolbar" style="margin-bottom: 8px; flex-direction: column; align-items: flex-start; gap: 16px;">
-      <div>
-        <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;">Tablas maestras</div>
-        <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Gestión de catálogos y dispositivos
-          estructurales.</div>
-      </div>
-      <div class="filter-tabs" id="tablas-subnav" style="width: 100%; max-width: 400px; display: flex;">
-        <button class="ftab on" id="subnav-vehiculos" onclick="showTablaMaestra('vehiculos')"
-          style="flex:1;">Vehículos</button>
-        <button class="ftab" id="subnav-jefes" onclick="showTablaMaestra('jefes')" style="flex:1;">Jefes de
-          Operaciones</button>
-      </div>
-    </div>
-
-    <!-- Contenedor Vehículos -->
-    <div id="tabla-vehiculos-container" style="display:flex; flex-direction:column; flex:1; gap:16px;">
-      <div style="display:flex; justify-content:flex-end;">
-        <button class="btn-nueva" onclick="abrirModalVehiculo()">+ Nuevo vehículo</button>
-      </div>
-      <div class="users-table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Indicativo</th>
-              <th>Matrícula</th>
-              <th>Tipo de vehículo</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody id="vehiculos-tbody"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Contenedor Jefes de Operaciones -->
-    <div id="tabla-jefes-container" style="display:none; flex-direction:column; flex:1; gap:16px;">
-      <div style="display:flex; justify-content:flex-end;">
-        <button class="btn-nueva" onclick="abrirModalJefe()">+ Añadir Jefe de Operaciones</button>
+    <!-- USUARIOS -->
+    <div id="section-usuarios">
+      <div class="users-toolbar">
+        <div>
+          <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;">Gestión de usuarios</div>
+          <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Solo el Super Admin puede crear, editar y
+            desactivar usuarios.</div>
+        </div>
+        <button class="btn-nueva" onclick="abrirModalUsuario()">+ Nuevo usuario</button>
       </div>
       <div class="users-table-wrap">
         <table>
           <thead>
             <tr>
               <th>Nombre</th>
-              <th>Provincia</th>
+              <th>Email</th>
+              <th>Rol</th>
+              <th>Estado</th>
               <th>Acciones</th>
             </tr>
           </thead>
-          <tbody id="jefes-tbody"></tbody>
+          <tbody id="users-tbody"></tbody>
         </table>
       </div>
     </div>
-  </div>
+
+    <!-- TABLAS MAESTRAS -->
+    <div id="section-tablas">
+      <div class="users-toolbar"
+        style="margin-bottom: 8px; flex-direction: column; align-items: flex-start; gap: 16px;">
+        <div>
+          <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;">Tablas maestras</div>
+          <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Gestión de catálogos y dispositivos
+            estructurales.</div>
+        </div>
+        <div class="filter-tabs" id="tablas-subnav" style="width: 100%; max-width: 400px; display: flex;">
+          <button class="ftab on" id="subnav-vehiculos" onclick="showTablaMaestra('vehiculos')"
+            style="flex:1;">Vehículos</button>
+          <button class="ftab" id="subnav-jefes" onclick="showTablaMaestra('jefes')" style="flex:1;">Jefes de
+            Operaciones</button>
+        </div>
+      </div>
+
+      <!-- Contenedor Vehículos -->
+      <div id="tabla-vehiculos-container" style="display:flex; flex-direction:column; flex:1; gap:16px;">
+        <div style="display:flex; justify-content:flex-end;">
+          <button class="btn-nueva" onclick="abrirModalVehiculo()">+ Nuevo vehículo</button>
+        </div>
+        <div class="users-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Indicativo</th>
+                <th>Matrícula</th>
+                <th>Tipo de vehículo</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="vehiculos-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Contenedor Jefes de Operaciones -->
+      <div id="tabla-jefes-container" style="display:none; flex-direction:column; flex:1; gap:16px;">
+        <div style="display:flex; justify-content:flex-end;">
+          <button class="btn-nueva" onclick="abrirModalJefe()">+ Añadir Jefe de Operaciones</button>
+        </div>
+        <div class="users-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Provincia</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="jefes-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
 
   </div>
 
