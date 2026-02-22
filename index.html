@@ -13,7 +13,7 @@
   <!-- Firebase SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, confirmPasswordReset, updatePassword }
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, confirmPasswordReset, updatePassword, EmailAuthProvider, reauthenticateWithCredential }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
     import {
       getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
@@ -310,25 +310,33 @@
     };
     window.cerrarModalChangePass = () => {
       document.getElementById('overlay-change-pass').classList.remove('open');
+      document.getElementById('curr-pass').value = '';
       document.getElementById('new-pass').value = '';
       document.getElementById('new-pass-conf').value = '';
     };
     window.confirmChangePassword = async () => {
+      const p0 = document.getElementById('curr-pass').value;
       const p1 = document.getElementById('new-pass').value;
       const p2 = document.getElementById('new-pass-conf').value;
-      if (!p1 || p1.length < 6) return alert('La contraseña debe tener al menos 6 caracteres.');
-      if (p1 !== p2) return alert('Las contraseñas no coinciden.');
+      if (!p0) return alert('Debes introducir tu contraseña actual.');
+      if (!p1 || p1.length < 6) return alert('La nueva contraseña debe tener al menos 6 caracteres.');
+      if (p1 !== p2) return alert('Las nuevas contraseñas no coinciden.');
 
       const btn = document.getElementById('btn-confirm-change');
-      btn.disabled = true; btn.textContent = 'Cambiando...';
+      btn.disabled = true; btn.textContent = 'Verificando...';
       try {
+        // Re-autenticación obligatoria para mayor seguridad
+        const credential = EmailAuthProvider.credential(auth.currentUser.email, p0);
+        await reauthenticateWithCredential(auth.currentUser, credential);
+
+        btn.textContent = 'Cambiando...';
         await updatePassword(auth.currentUser, p1);
         alert('Contraseña actualizada correctamente.');
         cerrarModalChangePass();
       } catch (e) {
         console.error("Error changing password:", e);
-        if (e.code === 'auth/requires-recent-login') {
-          alert('Por seguridad, debes haber iniciado sesión recientemente para cambiar tu contraseña. Cierra sesión e intenta de nuevo.');
+        if (e.code === 'auth/wrong-password') {
+          alert('La contraseña actual es incorrecta.');
         } else {
           alert('Error al cambiar contraseña: ' + e.message);
         }
@@ -3945,11 +3953,10 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div class="hdr-div"></div>
         <button onclick="abrirModalChangePass()"
-          style="background: var(--bg-2); border: 1px solid var(--border-mid); color: var(--text-2); padding: 4px 10px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-family: 'IBM Plex Sans', sans-serif; font-size: 11px; font-weight: 500; transition: all 0.2s;"
+          style="background: var(--bg-2); border: 1px solid var(--border-mid); color: var(--text-2); width: 32px; height: 32px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; padding: 0;"
           onmouseover="this.style.background='var(--bg-3)'" onmouseout="this.style.background='var(--bg-2)'"
           title="Cambiar contraseña">
-          <span style="font-size: 14px;">🔑</span>
-          <span>Cambiar contraseña</span>
+          <span style="font-size: 16px;">🔑</span>
         </button>
         <div class="hdr-div"></div>
         <div style="display:flex; flex-direction:column; align-items:flex-end;">
@@ -4558,12 +4565,16 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       </div>
       <div class="modal-body">
         <div class="field">
+          <div class="field-lbl">Contraseña actual</div>
+          <input class="f-input" id="curr-pass" type="password" placeholder="Tu contraseña actual">
+        </div>
+        <div class="field">
           <div class="field-lbl">Nueva contraseña</div>
           <input class="f-input" id="new-pass" type="password" placeholder="Mínimo 6 caracteres">
         </div>
         <div class="field">
           <div class="field-lbl">Confirmar nueva contraseña</div>
-          <input class="f-input" id="new-pass-conf" type="password" placeholder="Repite la contraseña">
+          <input class="f-input" id="new-pass-conf" type="password" placeholder="Repite la nueva contraseña">
         </div>
       </div>
       <div class="modal-foot">
