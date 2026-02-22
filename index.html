@@ -4294,7 +4294,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.17.5
+          Versión V.2.18.0
         </div>
       </div>
       </footer>
@@ -4754,19 +4754,19 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
   <!-- MODAL VEHÍCULO -->
   <!-- Modal Jefe de Operaciones -->
   <div class="overlay" id="overlay-jefe">
-    <div class="modal" style="max-width:400px;">
-      <div class="modal-hdr">
+    <div class="modal" style="width:420px;">
+      <div class="modal-head">
         <div class="modal-title" id="modal-jefe-title">Añadir Jefe de Operaciones</div>
-        <button class="modal-close" onclick="cerrarModalJefe()">&times;</button>
+        <button class="btn-close-dp" onclick="cerrarModalJefe()">✕</button>
       </div>
-      <div class="modal-body" style="padding:24px;">
+      <div class="modal-body">
         <div class="field">
           <div class="field-lbl">Usuario</div>
           <select class="f-input f-select" id="j-user" style="width:100%">
             <!-- Se puebla dinámicamente -->
           </select>
-          <div style="font-size:11px; color:var(--text-3); margin-top:4px;">
-            Selecciona un usuario para designarlo como Jefe de Operaciones.
+          <div style="font-size:11px; color:var(--text-3); margin-top:8px; line-height: 1.4;">
+            Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
         </div>
         <div class="field" id="j-prov-row">
@@ -4783,9 +4783,10 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             <option value="Sevilla">Oficina Provincial de Sevilla</option>
           </select>
         </div>
-        <button class="btn-crear" id="btn-guardar-jefe" onclick="guardarJefe()" style="width:100%;margin-top:16px;">
-          Añadir Jefe
-        </button>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel-m" onclick="cerrarModalJefe()">Cancelar</button>
+        <button class="btn-create-m" id="btn-guardar-jefe" onclick="guardarJefe()">Guardar cambios</button>
       </div>
     </div>
   </div>
@@ -4815,7 +4816,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             <option value="Vehículo Todo terreno">Vehículo Todo terreno</option>
           </select>
         </div>
-        <div class="field" id="v-prov-row">
+        <div class="field" id="v-prov-row" style="margin-bottom: 0;">
           <div class="field-lbl">Oficina / Provincia *</div>
           <select class="f-input f-select" id="v-provincia" style="width:100%">
             <option value="Andalucía">Oficina Autonómica de Andalucía</option>
