@@ -3939,10 +3939,18 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       <div class="hdr-right">
         <div class="live-dot"></div>
         <div class="clock" id="clock">--:--:--</div>
-        <div class="hdr-user-info" style="cursor: pointer;" onclick="abrirModalChangePass()" title="Cambiar contraseña">
+        <div class="hdr-user-info">
           <div class="hdr-user-name" id="hdr-user"></div>
           <div class="hdr-user-role" id="hdr-role"></div>
         </div>
+        <div class="hdr-div"></div>
+        <button onclick="abrirModalChangePass()"
+          style="background: var(--bg-2); border: 1px solid var(--border-mid); color: var(--text-2); padding: 4px 10px; border-radius: 4px; cursor: pointer; display: flex; align-items: center; gap: 6px; font-family: 'IBM Plex Sans', sans-serif; font-size: 11px; font-weight: 500; transition: all 0.2s;"
+          onmouseover="this.style.background='var(--bg-3)'" onmouseout="this.style.background='var(--bg-2)'"
+          title="Cambiar contraseña">
+          <span style="font-size: 14px;">🔑</span>
+          <span>Cambiar contraseña</span>
+        </button>
         <div class="hdr-div"></div>
         <div style="display:flex; flex-direction:column; align-items:flex-end;">
           <div id="hdr-office-title"
