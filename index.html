@@ -1459,17 +1459,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         provSel.value = selectedProvincia; // Por defecto la que tiene filtrada en el header
       }
 
-      // Default jefe de guardia
-      if (jefeGuardiaActual) {
-        document.getElementById('f-dir').value = jefeGuardiaActual;
-        const orgSelect = document.getElementById('f-org');
-        orgSelect.value = 'Jefe de Operaciones';
-        handleSolicitadoChange('f');
-        const orgSubSelect = document.getElementById('f-org-sub-select');
-        setTimeout(() => {
-          if (orgSubSelect) orgSubSelect.value = jefeGuardiaActual;
-        }, 100);
-      }
+      // Default jefe de guardia (según provincia del modal)
+      actualizarJefePorProvincia(provSel.value, 'f');
     };
 
     window.cerrarModalOp = () => {
@@ -2165,50 +2156,95 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     };
 
     // Mantener sincronizados los select de Jefes de Operaciones en los formularios
+    let todosLosJefesGlobal = []; // Para poder repoblar selects sin reconectar
+
     // Mantener sincronizados los select de Jefes de Operaciones en los formularios y cabecera
     function suscribirJefesSelect() {
       if (unsubJefes) unsubJefes();
       unsubJefes = onSnapshot(collection(db, 'jefes_operaciones'), snap => {
-        const jefes = snap.docs.map(d => d.data());
-        const selects = ['f-dir', 'fe-dir', 'f-org-sub-select', 'fe-org-sub-select', 'hdr-jefe-guardia-sel'];
-
-        selects.forEach(sid => {
-          const sel = document.getElementById(sid);
-          if (!sel) return;
-          const currentVal = sel.value;
-          sel.innerHTML = '';
-
-          if (sid === 'hdr-jefe-guardia-sel') {
-            const optNone = document.createElement('option');
-            optNone.value = "";
-            optNone.textContent = "Seleccionar...";
-            sel.appendChild(optNone);
-          }
-
-          // Ordenar alfabéticamente
-          jefes.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
-
-          jefes.forEach(j => {
-            // Filtrado por provincia si no es vista Autonómica
-            const jProv = j.provincia || 'Andalucía';
-            if (selectedProvincia !== 'Andalucía' && jProv !== selectedProvincia) return;
-
-            const opt = document.createElement('option');
-            opt.value = j.nombre;
-            opt.textContent = j.nombre;
-            sel.appendChild(opt);
-          });
-
-          // Mantener selección si existía
-          if (currentVal && Array.from(sel.options).some(o => o.value === currentVal)) {
-            sel.value = currentVal;
-          } else if (sid === 'hdr-jefe-guardia-sel' && jefeGuardiaActual) {
-            // Refuerzo: Si es el header y tenemos un jefe en Firebase, ponerlo
-            sel.value = jefeGuardiaActual;
-          }
-        });
+        todosLosJefesGlobal = snap.docs.map(d => d.data());
+        refrescarTodosLosSelectsJefes();
       });
     }
+
+    function refrescarTodosLosSelectsJefes() {
+      const selects = ['f-dir', 'fe-dir', 'f-org-sub-select', 'fe-org-sub-select', 'hdr-jefe-guardia-sel'];
+      selects.forEach(sid => {
+        const sel = document.getElementById(sid);
+        if (!sel) return;
+
+        let provAFiltro = selectedProvincia;
+        // Si es un modal, puede que la provincia seleccionada en el modal sea distinta a la del header
+        if (sid.startsWith('f-') && document.getElementById('f-provincia')) {
+          provAFiltro = document.getElementById('f-provincia').value;
+        } else if (sid.startsWith('fe-') && document.getElementById('fe-provincia')) {
+          provAFiltro = document.getElementById('fe-provincia').value;
+        }
+
+        rellenarUnSelectJefe(sid, provAFiltro);
+      });
+    }
+
+    function rellenarUnSelectJefe(sid, provFiltro) {
+      const sel = document.getElementById(sid);
+      if (!sel) return;
+      const currentVal = sel.value;
+      sel.innerHTML = '';
+
+      if (sid === 'hdr-jefe-guardia-sel') {
+        const optNone = document.createElement('option');
+        optNone.value = "";
+        optNone.textContent = "Seleccionar...";
+        sel.appendChild(optNone);
+      }
+
+      // Copia y Ordenar
+      const jefes = [...todosLosJefesGlobal].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
+      jefes.forEach(j => {
+        const jProv = j.provincia || 'Andalucía';
+        if (provFiltro !== 'Andalucía' && jProv !== provFiltro) return;
+
+        const opt = document.createElement('option');
+        opt.value = j.nombre;
+        opt.textContent = j.nombre;
+        sel.appendChild(opt);
+      });
+
+      // Mantener selección si existía
+      if (currentVal && Array.from(sel.options).some(o => o.value === currentVal)) {
+        sel.value = currentVal;
+      } else if (sid === 'hdr-jefe-guardia-sel' && jefeGuardiaActual) {
+        sel.value = jefeGuardiaActual;
+      }
+    }
+
+    window.actualizarJefePorProvincia = async (prov, prefix) => {
+      // 1. Refrescar los select de este prefijo para la nueva provincia
+      const selectIds = [`${prefix}-dir`, `${prefix}-org-sub-select`].filter(id => document.getElementById(id));
+      selectIds.forEach(sid => rellenarUnSelectJefe(sid, prov));
+
+      // 2. Buscar quién está de guardia en esa provincia
+      try {
+        const docRef = doc(db, 'config_guardia', prov);
+        const d = await getDoc(docRef);
+        if (d.exists()) {
+          const jefeNombre = d.data().jefeNombre;
+          if (jefeNombre) {
+            document.getElementById(`${prefix}-dir`).value = jefeNombre;
+            const orgSelect = document.getElementById(`${prefix}-org`);
+            if (orgSelect) {
+              orgSelect.value = 'Jefe de Operaciones';
+              handleSolicitadoChange(prefix);
+              setTimeout(() => {
+                const sub = document.getElementById(`${prefix}-org-sub-select`);
+                if (sub) sub.value = jefeNombre;
+              }, 100);
+            }
+          }
+        }
+      } catch (e) { console.error("Error al actualizar jefe por provincia:", e); }
+    };
 
     function suscribirGuardia() {
       if (unsubGuardia) unsubGuardia();
@@ -4258,7 +4294,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.17.4
+          Versión V.2.17.5
         </div>
       </div>
       </footer>
@@ -4517,7 +4553,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div class="field" id="f-provincia-row">
           <div class="field-lbl">Provincia *</div>
-          <select class="f-input f-select" id="f-provincia" style="width:100%">
+          <select class="f-input f-select" id="f-provincia" onchange="actualizarJefePorProvincia(this.value, 'f')"
+            style="width:100%">
             <option value="Andalucía">Oficina Autonómica de Andalucía</option>
             <option value="Almería">Oficina Provincial de Almería</option>
             <option value="Cádiz">Oficina Provincial de Cádiz</option>
