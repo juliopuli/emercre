@@ -2019,41 +2019,42 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       align-items: center;
       justify-content: center;
       height: 100vh;
-      background: #f4f7fa;
-      /* Slightly bluer background for the container */
+      background: #0f172a;
+      /* Deep Navy Blue from mockup */
     }
 
     .login-card {
-      background: var(--bg-1);
-      border: 1px solid var(--border-dark);
-      border-radius: 8px;
-      width: 780px;
-      /* Wider for split layout */
+      background: #ffffff;
+      border: none;
+      border-radius: 12px;
+      width: 820px;
       max-width: 90vw;
-      box-shadow: var(--shadow-lg);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
       display: flex;
       overflow: hidden;
-      /* For border radius */
-      animation: modalIn 0.4s cubic-bezier(0.2, 0.8, 0.2, 1);
+      animation: modalIn 0.5s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     .login-visual {
-      flex: 1;
-      background: var(--bg-2);
+      flex: 1.1;
+      background: #ffffff;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 40px;
-      border-right: 1px solid var(--border);
+      padding: 60px;
+      position: relative;
     }
 
     .login-form-side {
       flex: 1;
-      padding: 50px 60px;
+      padding: 60px 70px;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      justify-content: center;
+      gap: 24px;
+      background: #ffffff;
+      border-left: 1px solid #f1f5f9;
     }
 
     .login-logo {
@@ -2061,76 +2062,78 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       flex-direction: column;
       align-items: center;
       text-align: center;
-      gap: 16px;
-      margin-bottom: 10px;
+      gap: 12px;
+      margin-bottom: 20px;
     }
 
     .login-title {
       font-family: 'Fraunces', serif;
-      font-size: 32px;
+      font-size: 42px;
       font-weight: 900;
-      color: var(--accent);
-      line-height: 1;
-      margin-bottom: 4px;
+      color: #1e293b;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
     }
 
     .login-sub {
       font-size: 11px;
-      font-weight: 700;
-      letter-spacing: 0.18em;
+      font-weight: 800;
+      letter-spacing: 0.3em;
       text-transform: uppercase;
-      color: var(--text-3);
+      color: #64748b;
     }
 
     .login-field {
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 8px;
     }
 
     .login-lbl {
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 700;
-      letter-spacing: 0.1em;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
-      color: var(--text-3);
+      color: #94a3b8;
     }
 
     .login-input {
-      background: var(--bg-1);
-      border: 1px solid var(--border-mid);
-      color: var(--text-1);
-      padding: 12px 14px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      color: #1e293b;
+      padding: 14px 16px;
       font-family: 'IBM Plex Sans', sans-serif;
-      font-size: 14px;
+      font-size: 15px;
       outline: none;
-      border-radius: 4px;
-      transition: all 0.2s;
+      border-radius: 8px;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .login-input:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px var(--accent-lt);
+      background: #ffffff;
+      border-color: #334155;
+      box-shadow: 0 0 0 4px rgba(51, 65, 85, 0.05);
     }
 
     .btn-login {
-      padding: 14px;
-      background: var(--accent);
+      padding: 16px;
+      background: #1e293b;
       border: none;
       color: #fff;
       cursor: pointer;
       font-family: 'IBM Plex Sans', sans-serif;
-      font-size: 14px;
-      font-weight: 600;
-      border-radius: 4px;
+      font-size: 15px;
+      font-weight: 700;
+      border-radius: 8px;
       transition: all 0.2s;
-      margin-top: 10px;
+      margin-top: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     }
 
     .btn-login:hover {
-      background: #253d6e;
-      transform: translateY(-1px);
-      box-shadow: var(--shadow-md);
+      background: #0f172a;
+      transform: translateY(-2px);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
     }
 
     .btn-login:active {
@@ -2144,35 +2147,42 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     }
 
     .login-err {
-      font-size: 12px;
-      color: var(--crit-4);
-      background: var(--crit-4-bg);
-      border: 1px solid var(--crit-4-border);
-      padding: 10px 14px;
-      border-radius: 4px;
+      font-size: 13px;
+      color: #ef4444;
+      background: #fef2f2;
+      border: 1px solid #fee2e2;
+      padding: 12px 16px;
+      border-radius: 8px;
       display: none;
+      text-align: center;
     }
 
-    @media (max-width: 768px) {
+    @media (max-width: 850px) {
       .login-card {
         flex-direction: column;
-        width: 380px;
-        margin: 20px;
+        width: 100%;
+        max-width: 420px;
+        margin: 24px;
       }
 
       .login-visual {
-        padding: 30px;
+        padding: 40px;
         border-right: none;
-        border-bottom: 1px solid var(--border);
+        border-bottom: 1px solid #f1f5f9;
       }
 
       .login-visual img {
-        width: 120px !important;
-        height: 120px !important;
+        width: 140px !important;
+        height: 140px !important;
       }
 
       .login-form-side {
-        padding: 30px;
+        padding: 40px;
+        border-left: none;
+      }
+
+      .login-title {
+        font-size: 36px;
       }
     }
 
@@ -3393,6 +3403,10 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       border-radius: 2px;
     }
 
+    .btn-cancel-m:hover {
+      background: var(--bg-3);
+    }
+
     .btn-create-m {
       padding: 8px 20px;
       background: var(--accent);
@@ -3712,8 +3726,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
   <div id="screen-login">
     <div class="login-card">
       <div class="login-visual">
-        <img src="assets/logo_emercre.png" alt="EmerCRE Logo"
-          style="width: 180px; height: 180px; object-fit: contain; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.1));">
+        <img src="assets/logo_emercre.png" alt="EmerCRE Logo" style="width: 240px; height: 240px; object-fit: contain;">
       </div>
       <div class="login-form-side">
         <div class="login-logo">
