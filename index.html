@@ -1710,6 +1710,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       renderSidebar();
       renderMapa();
       actualizarContadores();
+      if (typeof cargarVehiculos === 'function') cargarVehiculos();
     };
 
     let editingVehiculoId = null;
@@ -3659,7 +3660,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.9.1
+          Versión V.2.9.2
         </div>
       </div>
       </footer>
