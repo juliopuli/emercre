@@ -58,6 +58,10 @@
     let unsubRecursos = null;
     let ops = {};
     let editingUserId = null;
+
+    // ── ESTRUCTURA AUTONÓMICA ──────────────────────────────────────────
+    const PROVINCIAS = ['Almería', 'Cádiz', 'Córdoba', 'Granada', 'Jaén', 'Huelva', 'Málaga', 'Sevilla'];
+    let selectedProvincia = 'Andalucía'; // 'Andalucía' o una provincia concreta
     // Edit op state
     let editPickedCoords = null;
     let editPickedAddress = '';
@@ -87,7 +91,13 @@
     };
     const NIVEL_LABELS = { 1: 'Emergencia Mayor', 2: 'Emergencia', 3: 'Alerta', 4: 'Seguimiento' };
     const NIVEL_COLORS = { 1: '#c0392b', 2: '#d35400', 3: '#c08c00', 4: '#1a7a4a' };
-    const ROL_LABELS = { super_admin: 'Super Admin', admin: 'Administrador', usuario: 'Usuario' };
+    const ROL_LABELS = {
+      super_admin: 'Super Admin',
+      admin: 'Administrador',
+      usuario: 'Usuario',
+      autonomica: 'Oficina Autonómica',
+      provincial: 'Oficina Provincial'
+    };
 
     // ── GOOGLE MAPS INIT ──────────────────────────────────────────────
     window.initGoogleMap = function () {
@@ -212,6 +222,13 @@
         currentUserDoc = snap.data();
         currentRole = currentUserDoc.role;
 
+        // Inicializar provincia seleccionada según perfil
+        if (currentUserDoc.provincia && currentUserDoc.provincia !== 'Andalucía') {
+          selectedProvincia = currentUserDoc.provincia;
+        } else {
+          selectedProvincia = 'Andalucía';
+        }
+
         // Registrar entrada y marcar online (No bloqueante)
         try {
           updateDoc(doc(db, 'users', user.uid), {
@@ -275,7 +292,32 @@
     function initApp() {
       document.getElementById('hdr-user').textContent = currentUserDoc.nombre || currentUser.email;
       document.getElementById('hdr-role').textContent = ROL_LABELS[currentRole] || currentRole;
-      const isAdmin = currentRole === 'admin' || currentRole === 'super_admin';
+
+      // Actualizar título de oficina y selector de provincia
+      const officeTitle = document.getElementById('hdr-office-title');
+      const provSelectorWrap = document.getElementById('hdr-prov-selector-wrap');
+      const provSelector = document.getElementById('hdr-prov-selector');
+
+      if (currentUserDoc.provincia && currentUserDoc.provincia !== 'Andalucía') {
+        officeTitle.textContent = `Oficina Provincial de ${currentUserDoc.provincia}`;
+        provSelectorWrap.style.display = 'none';
+        selectedProvincia = currentUserDoc.provincia;
+      } else {
+        officeTitle.textContent = 'Oficina Autonómica de Andalucía';
+        provSelectorWrap.style.display = 'flex';
+        // Poblar selector si está vacío
+        if (provSelector.options.length <= 1) {
+          PROVINCIAS.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p;
+            opt.textContent = p;
+            provSelector.appendChild(opt);
+          });
+        }
+        provSelector.value = selectedProvincia;
+      }
+
+      const isAdmin = currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'autonomica' || currentRole === 'provincial';
       document.getElementById('btn-nueva-op').style.display = isAdmin ? 'flex' : 'none';
 
       const isSA = currentRole === 'super_admin';
@@ -408,6 +450,9 @@
       let hasValidCoords = false;
 
       Object.values(ops).forEach(op => {
+        // Filtrado por provincia
+        if (selectedProvincia !== 'Andalucía' && op.provincia !== selectedProvincia) return;
+
         if (!op.coords) return;
         const t = TIPOS[op.tipo] || TIPOS.otro;
         const pos = { lat: op.coords.lat, lng: op.coords.lng };
@@ -546,9 +591,13 @@
 
     // ── CONTADORES ─────────────────────────────────────────────────────
     function actualizarContadores() {
+      let visible = Object.values(ops);
+      if (selectedProvincia !== 'Andalucía') {
+        visible = visible.filter(o => o.provincia === selectedProvincia);
+      }
       [1, 2, 3, 4].forEach(n => {
         const el = document.getElementById('cnt' + n);
-        if (el) el.textContent = Object.values(ops).filter(o => o.nivel == n).length;
+        if (el) el.textContent = visible.filter(o => o.nivel == n).length;
       });
     }
 
@@ -560,6 +609,12 @@
 
       let visible = Object.values(ops);
       if (filtro !== 'all') visible = visible.filter(o => String(o.nivel) === filtro);
+
+      // Filtrado por provincia
+      if (selectedProvincia !== 'Andalucía') {
+        visible = visible.filter(o => o.provincia === selectedProvincia);
+      }
+
       visible.sort((a, b) => {
         const ta = a.actualizadoEn?.toMillis ? a.actualizadoEn.toMillis() : 0;
         const tb = b.actualizadoEn?.toMillis ? b.actualizadoEn.toMillis() : 0;
@@ -1236,6 +1291,17 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       setTimeout(() => document.getElementById('f-nombre').focus(), 100);
       mostrarCoordBox();
       handleSolicitadoChange('f');
+
+      // Lógica de provincia según usuario
+      const provRow = document.getElementById('f-provincia-row');
+      const provSel = document.getElementById('f-provincia');
+      if (currentUserDoc.provincia && currentUserDoc.provincia !== 'Andalucía') {
+        provRow.style.display = 'none';
+        provSel.value = currentUserDoc.provincia;
+      } else {
+        provRow.style.display = 'block';
+        provSel.value = selectedProvincia; // Por defecto la que tiene filtrada en el header
+      }
     };
 
     window.cerrarModalOp = () => {
@@ -1265,6 +1331,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         const desc = document.getElementById('f-desc').value.trim();
         const locVal = document.getElementById('f-lugar').value.trim() || document.getElementById('f-loc').value.trim();
         const autorNombre = currentUserDoc.nombre || currentUser.email;
+        const provincia = document.getElementById('f-provincia').value;
 
         const orgFinal = parseSolicitadoData('f');
         const tipoFinal = parseTipoData('f');
@@ -1274,6 +1341,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           tipo: tipoFinal,
           nivel,
           loc: locVal,
+          provincia,
           dir: document.getElementById('f-dir').value,
           org: orgFinal,
           coords: pickedCoords || null,
@@ -1307,6 +1375,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
       // Poblar campos con datos actuales
       document.getElementById('fe-nombre').value = op.nombre || '';
+      document.getElementById('fe-provincia').value = op.provincia || 'Andalucía';
 
       const selectTipo = document.getElementById('fe-tipo');
       const opsTipo = Array.from(selectTipo.options).map(o => o.value);
@@ -1378,6 +1447,14 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
       document.getElementById('overlay-edit-op').classList.add('open');
       setTimeout(() => document.getElementById('fe-nombre').focus(), 100);
+
+      // Lógica de provincia en edición
+      const provRow = document.getElementById('fe-provincia-row');
+      if (currentUserDoc.provincia && currentUserDoc.provincia !== 'Andalucía') {
+        provRow.style.display = 'none';
+      } else {
+        provRow.style.display = 'block';
+      }
     };
 
     window.cerrarModalEditOp = () => {
@@ -1408,6 +1485,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           loc: locVal,
           dir: document.getElementById('fe-dir').value,
           org: orgFinal,
+          provincia: document.getElementById('fe-provincia').value,
           creadoEn: tsCreado,
           actualizadoEn: serverTimestamp()
         };
@@ -1470,7 +1548,12 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             </div>
           </td>
           <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${u.email}</td>
-          <td><span class="rol-badge rol-${u.role}">${ROL_LABELS[u.role] || u.role}</span></td>
+          <td>
+            <div style="display:flex; flex-direction:column; gap:2px;">
+              <span class="rol-badge rol-${u.role}">${ROL_LABELS[u.role] || u.role}</span>
+              <span style="font-size:10px; color:var(--text-3); font-weight:600;">${u.provincia || '—'}</span>
+            </div>
+          </td>
           <td><span class="activo-badge ${u.activo !== false ? 'activo' : 'inactivo'}">${u.activo !== false ? 'Activo' : 'Inactivo'}</span></td>
           <td>
             <button class="tbl-btn" onclick="editarUsuario('${d.id}')">Editar</button>
@@ -1489,6 +1572,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       document.getElementById('modal-user-title').textContent = 'Nuevo usuario';
       ['u-nombre', 'u-email', 'u-pass'].forEach(id => document.getElementById(id).value = '');
       document.getElementById('u-role').value = 'usuario';
+      document.getElementById('u-provincia').value = 'Andalucía';
       document.getElementById('u-activo').value = 'true';
       document.getElementById('u-pass-row').style.display = 'flex';
       document.getElementById('overlay-user').classList.add('open');
@@ -1539,6 +1623,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       document.getElementById('u-nombre').value = u.nombre || '';
       document.getElementById('u-email').value = u.email || '';
       document.getElementById('u-role').value = u.role || 'usuario';
+      document.getElementById('u-provincia').value = u.provincia || 'Andalucía';
       document.getElementById('u-activo').value = u.activo === false ? 'false' : 'true';
       document.getElementById('u-pass-row').style.display = 'none';
       document.getElementById('overlay-user').classList.add('open');
@@ -1554,13 +1639,14 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       const email = document.getElementById('u-email').value.trim();
       const pass = document.getElementById('u-pass').value;
       const role = document.getElementById('u-role').value;
+      const provincia = document.getElementById('u-provincia').value;
       const activo = document.getElementById('u-activo').value === 'true';
       if (!nombre || !email) { alert('Nombre y email son obligatorios.'); return; }
       const btn = document.getElementById('btn-guardar-user');
       btn.disabled = true; btn.textContent = 'Guardando…';
       try {
         if (editingUserId) {
-          await updateDoc(doc(db, 'users', editingUserId), { nombre, role, activo });
+          await updateDoc(doc(db, 'users', editingUserId), { nombre, role, provincia, activo });
           mostrarToast('Usuario actualizado.');
         } else {
           if (!pass || pass.length < 6) { alert('La contraseña debe tener al menos 6 caracteres.'); btn.disabled = false; btn.textContent = 'Guardar'; return; }
@@ -1574,7 +1660,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           const data = await res.json();
           if (data.error) throw new Error(data.error.message);
           await setDoc(doc(db, 'users', data.localId), {
-            nombre, email, role, activo,
+            nombre, email, role, provincia, activo,
             creadoPor: currentUser.uid,
             creadoEn: serverTimestamp()
           });
@@ -1590,7 +1676,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       if (!confirm('¿Desactivar este usuario?')) return;
       await updateDoc(doc(db, 'users', uid), { activo: false });
       mostrarToast('Usuario desactivado.');
-      cargarUsuarios();
+      // cargarUsuarios(); // This function is not defined, assuming it was meant to be suscribirUsuarios() or similar
     };
 
     // ── TABLAS MAESTRAS ────────────────────────────────────────────────
@@ -1603,6 +1689,13 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       if (contVeh) contVeh.style.display = tabla === 'vehiculos' ? 'flex' : 'none';
 
       if (tabla === 'vehiculos') cargarVehiculos();
+    };
+
+    window.changeProvincia = (val) => {
+      selectedProvincia = val;
+      renderSidebar();
+      renderMapa();
+      actualizarContadores();
     };
 
     let editingVehiculoId = null;
@@ -3464,6 +3557,18 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <div class="hdr-user-name" id="hdr-user"></div>
           <div class="hdr-user-role" id="hdr-role"></div>
         </div>
+        <div class="hdr-div"></div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end;">
+          <div id="hdr-office-title"
+            style="font-family:'Fraunces',serif; font-size:14px; font-weight:700; color:var(--accent);"></div>
+          <div id="hdr-prov-selector-wrap" style="display:none; align-items:center; gap:6px; margin-top:2px;">
+            <span style="font-size:10px; color:var(--text-3); font-weight:600; text-transform:uppercase;">Ver:</span>
+            <select id="hdr-prov-selector" class="f-select" style="padding:2px 4px; font-size:11px;"
+              onchange="changeProvincia(this.value)">
+              <option value="Andalucía">Toda Andalucía</option>
+            </select>
+          </div>
+        </div>
         <button id="btn-nueva-op" class="btn-nueva" onclick="abrirModalOp()">+ Nueva operación</button>
         <button class="btn-logout" onclick="doLogout()">Salir</button>
       </div>
@@ -3736,6 +3841,20 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <div class="coord-box" id="coord-box"></div>
           <input type="hidden" id="f-loc">
         </div>
+        <div class="field" id="f-provincia-row">
+          <div class="field-lbl">Provincia *</div>
+          <select class="f-input f-select" id="f-provincia" style="width:100%">
+            <option value="Andalucía">Andalucía (Autonómica)</option>
+            <option value="Almería">Almería</option>
+            <option value="Cádiz">Cádiz</option>
+            <option value="Córdoba">Córdoba</option>
+            <option value="Granada">Granada</option>
+            <option value="Huelva">Huelva</option>
+            <option value="Jaén">Jaén</option>
+            <option value="Málaga">Málaga</option>
+            <option value="Sevilla">Sevilla</option>
+          </select>
+        </div>
       </div>
       <div class="modal-foot">
         <button class="btn-cancel-m" onclick="cerrarModalOp()">Cancelar</button>
@@ -3814,6 +3933,20 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           </div>
           <div class="coord-box" id="edit-coord-box"></div>
         </div>
+        <div class="field" id="fe-provincia-row">
+          <div class="field-lbl">Provincia *</div>
+          <select class="f-input f-select" id="fe-provincia" style="width:100%">
+            <option value="Andalucía">Andalucía (Autonómica)</option>
+            <option value="Almería">Almería</option>
+            <option value="Cádiz">Cádiz</option>
+            <option value="Córdoba">Córdoba</option>
+            <option value="Granada">Granada</option>
+            <option value="Huelva">Huelva</option>
+            <option value="Jaén">Jaén</option>
+            <option value="Málaga">Málaga</option>
+            <option value="Sevilla">Sevilla</option>
+          </select>
+        </div>
       </div>
       <div class="modal-foot">
         <button class="btn-cancel-m" onclick="cerrarModalEditOp()">Cancelar</button>
@@ -3878,15 +4011,31 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
               <option value="usuario">Usuario</option>
               <option value="admin">Administrador</option>
               <option value="super_admin">Super Admin</option>
+              <option value="autonomica">Oficina Autonómica</option>
+              <option value="provincial">Oficina Provincial</option>
             </select>
           </div>
           <div class="field" style="flex:1;">
-            <div class="field-lbl">Estado</div>
-            <select class="f-input f-select" id="u-activo" style="width:100%">
-              <option value="true">Activo</option>
-              <option value="false">Inactivo</option>
+            <div class="field-lbl">Perfil / Provincia</div>
+            <select class="f-input f-select" id="u-provincia" style="width:100%">
+              <option value="Andalucía">Regional Andalucía</option>
+              <option value="Almería">Almería</option>
+              <option value="Cádiz">Cádiz</option>
+              <option value="Córdoba">Córdoba</option>
+              <option value="Granada">Granada</option>
+              <option value="Huelva">Huelva</option>
+              <option value="Jaén">Jaén</option>
+              <option value="Málaga">Málaga</option>
+              <option value="Sevilla">Sevilla</option>
             </select>
           </div>
+        </div>
+        <div class="field">
+          <div class="field-lbl">Estado</div>
+          <select class="f-input f-select" id="u-activo" style="width:100%">
+            <option value="true">Activo</option>
+            <option value="false">Inactivo</option>
+          </select>
         </div>
       </div>
       <div class="modal-foot">
