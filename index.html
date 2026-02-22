@@ -95,9 +95,7 @@
       super_admin: 'Super Admin',
       manager: 'Administrador',
       admin: 'Responsable',
-      usuario: 'Usuario',
-      autonomica: 'Oficina Autonómica',
-      provincial: 'Oficina Provincial'
+      usuario: 'Usuario'
     };
 
     // ── GOOGLE MAPS INIT ──────────────────────────────────────────────
@@ -1608,9 +1606,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         { val: 'usuario', lab: ROL_LABELS.usuario },
         { val: 'admin', lab: ROL_LABELS.admin },
         { val: 'manager', lab: ROL_LABELS.manager },
-        { val: 'super_admin', lab: ROL_LABELS.super_admin },
-        { val: 'autonomica', lab: ROL_LABELS.autonomica },
-        { val: 'provincial', lab: ROL_LABELS.provincial }
+        { val: 'super_admin', lab: ROL_LABELS.super_admin }
       ];
 
       const lista = currentRole === 'super_admin' ? rolesCompletos : rolesParaAdmin;
@@ -3724,7 +3720,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.11.0
+          Versión V.2.11.1
         </div>
       </div>
       </footer>
