@@ -2189,6 +2189,10 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           jefes.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
 
           jefes.forEach(j => {
+            // Filtrado por provincia si no es vista Autonómica
+            const jProv = j.provincia || 'Andalucía';
+            if (selectedProvincia !== 'Andalucía' && jProv !== selectedProvincia) return;
+
             const opt = document.createElement('option');
             opt.value = j.nombre;
             opt.textContent = j.nombre;
