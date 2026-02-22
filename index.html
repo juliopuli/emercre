@@ -1549,8 +1549,14 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         const now = Date.now();
         const twoHours = 2 * 60 * 60 * 1000;
 
+        const adminProv = currentUserDoc.provincia || 'Andalucía';
+
         snap.forEach(d => {
           const u = d.data();
+
+          // Filtrado por ámbito del administrador
+          if (adminProv !== 'Andalucía' && u.provincia !== adminProv) return;
+
           const lastAct = u.ultimaActividad?.toMillis ? u.ultimaActividad.toMillis() : 0;
           const isRecentlyActive = (now - lastAct) < twoHours;
           const isOnline = u.enLinea === true && isRecentlyActive;
@@ -1588,7 +1594,18 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       document.getElementById('modal-user-title').textContent = 'Nuevo usuario';
       ['u-nombre', 'u-email', 'u-pass'].forEach(id => document.getElementById(id).value = '');
       document.getElementById('u-role').value = 'usuario';
-      document.getElementById('u-provincia').value = 'Andalucía';
+
+      const provSel = document.getElementById('u-provincia');
+      const adminProv = currentUserDoc.provincia || 'Andalucía';
+
+      if (adminProv !== 'Andalucía') {
+        provSel.value = adminProv;
+        provSel.disabled = true;
+      } else {
+        provSel.value = 'Andalucía';
+        provSel.disabled = false;
+      }
+
       document.getElementById('u-activo').value = 'true';
       document.getElementById('u-pass-row').style.display = 'flex';
       document.getElementById('overlay-user').classList.add('open');
@@ -1639,7 +1656,17 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       document.getElementById('u-nombre').value = u.nombre || '';
       document.getElementById('u-email').value = u.email || '';
       document.getElementById('u-role').value = u.role || 'usuario';
-      document.getElementById('u-provincia').value = u.provincia || 'Andalucía';
+
+      const provSel = document.getElementById('u-provincia');
+      const adminProv = currentUserDoc.provincia || 'Andalucía';
+      provSel.value = u.provincia || 'Andalucía';
+
+      if (adminProv !== 'Andalucía') {
+        provSel.disabled = true;
+      } else {
+        provSel.disabled = false;
+      }
+
       document.getElementById('u-activo').value = u.activo === false ? 'false' : 'true';
       document.getElementById('u-pass-row').style.display = 'none';
       document.getElementById('overlay-user').classList.add('open');
@@ -3660,7 +3687,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.9.2
+          Versión V.2.10.0
         </div>
       </div>
       </footer>
