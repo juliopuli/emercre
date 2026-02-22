@@ -310,7 +310,7 @@
           PROVINCIAS.forEach(p => {
             const opt = document.createElement('option');
             opt.value = p;
-            opt.textContent = p;
+            opt.textContent = `Oficina Provincial de ${p}`;
             provSelector.appendChild(opt);
           });
         }
@@ -895,6 +895,10 @@
       const isSA = currentRole === 'super_admin';
 
       document.getElementById('dp-id').textContent = op.id.substring(0, 8).toUpperCase();
+      const scopeTitle = document.getElementById('dp-scope-title');
+      if (scopeTitle) {
+        scopeTitle.textContent = op.provincia === 'Andalucía' ? 'Oficina Autonómica de Andalucía' : `Oficina Provincial de ${op.provincia}`;
+      }
       document.getElementById('dp-name').textContent = op.nombre;
       document.getElementById('dp-loc').innerHTML = op.loc ? `📍 ${op.loc} ` : (op.coords ? `📍 ${op.coords.lat.toFixed(4)}, ${op.coords.lng.toFixed(4)} ` : '');
       document.getElementById('dp-type-tag').innerHTML =
@@ -2576,6 +2580,16 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       flex-shrink: 0;
     }
 
+    .dp-scope-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 4px;
+      opacity: 0.8;
+    }
+
     .dp-top-row {
       display: flex;
       align-items: flex-start;
@@ -3612,6 +3626,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         <!-- PANEL DETALLE -->
         <div class="detail-panel" id="detail-panel">
           <div class="dp-header">
+            <div class="dp-scope-title" id="dp-scope-title"></div>
             <div class="dp-top-row">
               <div>
                 <div class="dp-id" id="dp-id"></div>
@@ -3842,15 +3857,15 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         <div class="field" id="f-provincia-row">
           <div class="field-lbl">Provincia *</div>
           <select class="f-input f-select" id="f-provincia" style="width:100%">
-            <option value="Andalucía">Andalucía (Autonómica)</option>
-            <option value="Almería">Almería</option>
-            <option value="Cádiz">Cádiz</option>
-            <option value="Córdoba">Córdoba</option>
-            <option value="Granada">Granada</option>
-            <option value="Huelva">Huelva</option>
-            <option value="Jaén">Jaén</option>
-            <option value="Málaga">Málaga</option>
-            <option value="Sevilla">Sevilla</option>
+            <option value="Andalucía">Oficina Autonómica de Andalucía</option>
+            <option value="Almería">Oficina Provincial de Almería</option>
+            <option value="Cádiz">Oficina Provincial de Cádiz</option>
+            <option value="Córdoba">Oficina Provincial de Córdoba</option>
+            <option value="Granada">Oficina Provincial de Granada</option>
+            <option value="Huelva">Oficina Provincial de Huelva</option>
+            <option value="Jaén">Oficina Provincial de Jaén</option>
+            <option value="Málaga">Oficina Provincial de Málaga</option>
+            <option value="Sevilla">Oficina Provincial de Sevilla</option>
           </select>
         </div>
       </div>
@@ -3934,15 +3949,15 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         <div class="field" id="fe-provincia-row">
           <div class="field-lbl">Provincia *</div>
           <select class="f-input f-select" id="fe-provincia" style="width:100%">
-            <option value="Andalucía">Andalucía (Autonómica)</option>
-            <option value="Almería">Almería</option>
-            <option value="Cádiz">Cádiz</option>
-            <option value="Córdoba">Córdoba</option>
-            <option value="Granada">Granada</option>
-            <option value="Huelva">Huelva</option>
-            <option value="Jaén">Jaén</option>
-            <option value="Málaga">Málaga</option>
-            <option value="Sevilla">Sevilla</option>
+            <option value="Andalucía">Oficina Autonómica de Andalucía</option>
+            <option value="Almería">Oficina Provincial de Almería</option>
+            <option value="Cádiz">Oficina Provincial de Cádiz</option>
+            <option value="Córdoba">Oficina Provincial de Córdoba</option>
+            <option value="Granada">Oficina Provincial de Granada</option>
+            <option value="Huelva">Oficina Provincial de Huelva</option>
+            <option value="Jaén">Oficina Provincial de Jaén</option>
+            <option value="Málaga">Oficina Provincial de Málaga</option>
+            <option value="Sevilla">Oficina Provincial de Sevilla</option>
           </select>
         </div>
       </div>
@@ -4016,15 +4031,15 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <div class="field" style="flex:1;">
             <div class="field-lbl">Perfil / Provincia</div>
             <select class="f-input f-select" id="u-provincia" style="width:100%">
-              <option value="Andalucía">Regional Andalucía</option>
-              <option value="Almería">Almería</option>
-              <option value="Cádiz">Cádiz</option>
-              <option value="Córdoba">Córdoba</option>
-              <option value="Granada">Granada</option>
-              <option value="Huelva">Huelva</option>
-              <option value="Jaén">Jaén</option>
-              <option value="Málaga">Málaga</option>
-              <option value="Sevilla">Sevilla</option>
+              <option value="Andalucía">Oficina Autonómica de Andalucía</option>
+              <option value="Almería">Oficina Provincial de Almería</option>
+              <option value="Cádiz">Oficina Provincial de Cádiz</option>
+              <option value="Córdoba">Oficina Provincial de Córdoba</option>
+              <option value="Granada">Oficina Provincial de Granada</option>
+              <option value="Huelva">Oficina Provincial de Huelva</option>
+              <option value="Jaén">Oficina Provincial de Jaén</option>
+              <option value="Málaga">Oficina Provincial de Málaga</option>
+              <option value="Sevilla">Oficina Provincial de Sevilla</option>
             </select>
           </div>
         </div>
