@@ -3211,13 +3211,12 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
     /* DETAIL PANEL */
     .detail-panel {
-      position: fixed;
-      top: 60px;
-      right: 0;
+      position: fixed !important;
+      top: 60px !important;
+      right: 0 !important;
       left: auto !important;
-      /* Force override any legacy left:0 */
-      bottom: 0;
-      width: 380px;
+      bottom: 0 !important;
+      width: 380px !important;
       background: var(--bg-1);
       border-left: 1px solid var(--border-mid);
       display: flex;
@@ -4222,8 +4221,11 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     }
 
     .mobile-menu-overlay {
-      position: fixed;
-      inset: 0;
+      position: fixed !important;
+      top: 0 !important;
+      left: 0 !important;
+      width: 100vw !important;
+      height: 100vh !important;
       background: rgba(0, 0, 0, 0.5);
       z-index: 5000;
       display: none;
@@ -4382,20 +4384,15 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       }
 
       .hdr-right {
+        display: flex !important;
         gap: 6px;
         flex: 1;
         justify-content: flex-end;
-        overflow: hidden;
+        overflow: hidden !important;
       }
 
-      header .btn-logout,
-      header .btn-nueva,
-      header button:not(.btn-menu-toggle) {
+      .hdr-right>*:not(#hdr-office-title) {
         display: none !important;
-      }
-
-      .hdr-right {
-        gap: 6px;
       }
 
       header .btn-logout,
@@ -4432,15 +4429,17 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       }
 
       .detail-panel {
-        width: 100%;
+        width: 100% !important;
+        left: 0 !important;
+        right: 0 !important;
         border-left: none;
         z-index: 700;
-        transform: translateY(100%);
-        top: 0;
+        transform: translateY(100%) !important;
+        top: 0 !important;
       }
 
       .detail-panel.open {
-        transform: translateY(0);
+        transform: translateY(0) !important;
       }
 
       .detail-panel .dp-name {
