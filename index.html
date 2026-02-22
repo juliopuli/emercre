@@ -13,7 +13,7 @@
   <!-- Firebase SDK -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+    import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, confirmPasswordReset, updatePassword }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
     import {
       getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
@@ -279,6 +279,95 @@
         btn.disabled = false; btn.textContent = 'Login';
       }
     };
+
+    // ── GESTIÓN DE CONTRASEÑAS ──────────────────────────────────────────
+    window.abrirModalForgot = () => {
+      document.getElementById('overlay-forgot').classList.add('open');
+      document.getElementById('f-email-reset').value = document.getElementById('l-email').value;
+    };
+    window.cerrarModalForgot = () => {
+      document.getElementById('overlay-forgot').classList.remove('open');
+    };
+    window.requestResetEmail = async () => {
+      const email = document.getElementById('f-email-reset').value.trim();
+      if (!email) return;
+      const btn = document.getElementById('btn-send-reset');
+      btn.disabled = true; btn.textContent = 'Enviando...';
+      try {
+        await sendPasswordResetEmail(auth, email);
+        alert('Se ha enviado un correo para restablecer tu contraseña. Revisa tu bandeja de entrada.');
+        cerrarModalForgot();
+      } catch (e) {
+        console.error("Error sending reset email:", e);
+        alert('Error al enviar el correo: ' + e.message);
+      } finally {
+        btn.disabled = false; btn.textContent = 'Enviar enlace de recuperación';
+      }
+    };
+
+    window.abrirModalChangePass = () => {
+      document.getElementById('overlay-change-pass').classList.add('open');
+    };
+    window.cerrarModalChangePass = () => {
+      document.getElementById('overlay-change-pass').classList.remove('open');
+      document.getElementById('new-pass').value = '';
+      document.getElementById('new-pass-conf').value = '';
+    };
+    window.confirmChangePassword = async () => {
+      const p1 = document.getElementById('new-pass').value;
+      const p2 = document.getElementById('new-pass-conf').value;
+      if (!p1 || p1.length < 6) return alert('La contraseña debe tener al menos 6 caracteres.');
+      if (p1 !== p2) return alert('Las contraseñas no coinciden.');
+
+      const btn = document.getElementById('btn-confirm-change');
+      btn.disabled = true; btn.textContent = 'Cambiando...';
+      try {
+        await updatePassword(auth.currentUser, p1);
+        alert('Contraseña actualizada correctamente.');
+        cerrarModalChangePass();
+      } catch (e) {
+        console.error("Error changing password:", e);
+        if (e.code === 'auth/requires-recent-login') {
+          alert('Por seguridad, debes haber iniciado sesión recientemente para cambiar tu contraseña. Cierra sesión e intenta de nuevo.');
+        } else {
+          alert('Error al cambiar contraseña: ' + e.message);
+        }
+      } finally {
+        btn.disabled = false; btn.textContent = 'Cambiar contraseña';
+      }
+    };
+
+    // Reset flow (from email link)
+    window.confirmReset = async () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      const oobCode = urlParams.get('oobCode');
+      const p1 = document.getElementById('r-pass1').value;
+      const p2 = document.getElementById('r-pass2').value;
+      if (!p1 || p1.length < 6) return alert('La contraseña debe tener al menos 6 caracteres.');
+      if (p1 !== p2) return alert('Las contraseñas no coinciden.');
+
+      const btn = document.getElementById('btn-reset-now');
+      btn.disabled = true; btn.textContent = 'Restableciendo...';
+      try {
+        await confirmPasswordReset(auth, oobCode, p1);
+        alert('Tu contraseña ha sido restablecida. Ya puedes iniciar sesión.');
+        window.location.href = window.location.pathname; // Reload without params
+      } catch (e) {
+        console.error("Error resetting password:", e);
+        alert('Error al restablecer contraseña: ' + e.message);
+        btn.disabled = false; btn.textContent = 'Restablecer contraseña';
+      }
+    };
+
+    // Chequeo de parámetros de reset en URL al inicio
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('mode') === 'resetPassword' && urlParams.get('oobCode')) {
+      setTimeout(() => {
+        document.getElementById('screen-login').style.display = 'none';
+        document.getElementById('overlay-reset').classList.add('open');
+      }, 500);
+    }
+
     window.doLogout = async () => {
       if (currentUser) {
         try {
@@ -3817,6 +3906,11 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div class="login-err" id="err-login"></div>
         <button class="btn-login" id="btn-login" onclick="doLogin()">Login</button>
+        <div style="text-align: center; margin-top: 15px;">
+          <a href="#" onclick="abrirModalForgot()"
+            style="font-size: 12px; color: var(--accent); text-decoration: none; font-weight: 500;">¿Has olvidado tu
+            contraseña?</a>
+        </div>
       </div>
     </div>
   </div>
@@ -3845,7 +3939,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       <div class="hdr-right">
         <div class="live-dot"></div>
         <div class="clock" id="clock">--:--:--</div>
-        <div class="hdr-user-info">
+        <div class="hdr-user-info" style="cursor: pointer;" onclick="abrirModalChangePass()" title="Cambiar contraseña">
           <div class="hdr-user-name" id="hdr-user"></div>
           <div class="hdr-user-role" id="hdr-role"></div>
         </div>
@@ -3895,7 +3989,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.14.0
+          Versión V.2.15.0
         </div>
       </div>
       </footer>
@@ -4394,6 +4488,80 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       </div>
       <div class="modal-foot">
         <button class="btn-cancel-m" onclick="cerrarModalInformeIA()">Cerrar panel</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL OLVIDÓ CONTRASEÑA -->
+  <div class="overlay" id="overlay-forgot">
+    <div class="modal" style="width:400px;">
+      <div class="modal-head">
+        <div class="modal-title">Recuperar contraseña</div>
+        <button class="btn-close-dp" onclick="cerrarModalForgot()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="font-size:13px; color:var(--text-3); margin-bottom:15px; line-height:1.4;">
+          Introduce tu email y te enviaremos un enlace para que puedas crear una nueva contraseña.
+        </div>
+        <div class="field">
+          <div class="field-lbl">Email</div>
+          <input class="f-input" id="f-email-reset" type="email" placeholder="tu-email@organismo.es">
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel-m" onclick="cerrarModalForgot()">Cancelar</button>
+        <button class="btn-create-m" id="btn-send-reset" onclick="requestResetEmail()">Enviar enlace de
+          recuperación</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL RESTABLECER (Desde link) -->
+  <div class="overlay" id="overlay-reset">
+    <div class="modal" style="width:400px;">
+      <div class="modal-head">
+        <div class="modal-title">Nueva contraseña</div>
+      </div>
+      <div class="modal-body">
+        <div style="font-size:13px; color:var(--text-3); margin-bottom:15px; line-height:1.4;">
+          Crea una nueva contraseña para tu cuenta de EmerCRE.
+        </div>
+        <div class="field">
+          <div class="field-lbl">Nueva contraseña</div>
+          <input class="f-input" id="r-pass1" type="password" placeholder="Mínimo 6 caracteres">
+        </div>
+        <div class="field">
+          <div class="field-lbl">Confirmar nueva contraseña</div>
+          <input class="f-input" id="r-pass2" type="password" placeholder="Repite la contraseña">
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-create-m" id="btn-reset-now" onclick="confirmReset()">Restablecer contraseña</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CAMBIAR (Usuario logueado) -->
+  <div class="overlay" id="overlay-change-pass">
+    <div class="modal" style="width:400px;">
+      <div class="modal-head">
+        <div class="modal-title">Cambiar contraseña</div>
+        <button class="btn-close-dp" onclick="cerrarModalChangePass()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <div class="field-lbl">Nueva contraseña</div>
+          <input class="f-input" id="new-pass" type="password" placeholder="Mínimo 6 caracteres">
+        </div>
+        <div class="field">
+          <div class="field-lbl">Confirmar nueva contraseña</div>
+          <input class="f-input" id="new-pass-conf" type="password" placeholder="Repite la contraseña">
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel-m" onclick="cerrarModalChangePass()">Cancelar</button>
+        <button class="btn-create-m" id="btn-confirm-change" onclick="confirmChangePassword()">Cambiar
+          contraseña</button>
       </div>
     </div>
   </div>
