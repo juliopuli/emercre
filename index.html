@@ -2449,8 +2449,9 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       background: #0f172a;
       position: relative;
       overflow-y: auto;
-      /* Allow scroll on small screens */
+      overflow-x: hidden;
       padding: 20px 0;
+      width: 100%;
     }
 
     .login-hero {
@@ -2660,7 +2661,9 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       display: flex;
       flex-direction: column;
       height: 100vh;
-      overflow: hidden;
+      background: var(--bg);
+      overflow-x: hidden;
+      width: 100%;
     }
 
     /* HEADER */
@@ -2892,14 +2895,15 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     #section-tablas {
       flex: 1;
       height: 100%;
-      /* Ensure they take full height */
       overflow-y: auto;
-      /* Enable internal scrolling */
+      overflow-x: hidden;
+      /* Prevent horizontal overflow */
       display: none;
       flex-direction: column;
       padding: 24px;
       gap: 16px;
       background: var(--bg);
+      max-width: 100vw;
     }
 
     /* SIDEBAR */
@@ -2929,9 +2933,9 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
     .filter-tabs {
       display: flex;
-      border: 1px solid var(--border-mid);
-      border-radius: 2px;
-      overflow: hidden;
+      gap: 12px;
+      flex-wrap: wrap;
+      /* Ensure tabs wrap on small screens */
     }
 
     .ftab {
@@ -3207,19 +3211,21 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
     /* DETAIL PANEL */
     .detail-panel {
-      position: absolute;
-      top: 0;
-      left: 0;
+      position: fixed;
+      top: 60px;
+      right: 0;
+      left: auto !important;
+      /* Force override any legacy left:0 */
       bottom: 0;
-      width: 370px;
+      width: 380px;
       background: var(--bg-1);
-      border-right: 1px solid var(--border-dark);
-      box-shadow: var(--shadow-lg);
+      border-left: 1px solid var(--border-mid);
       display: flex;
       flex-direction: column;
-      z-index: 500;
-      transform: translateX(-100%);
-      transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+      z-index: 601;
+      transform: translateX(100%);
+      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: -10px 0 30px rgba(0, 0, 0, 0.15);
     }
 
     .detail-panel.open {
@@ -3295,6 +3301,15 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       font-size: 12px;
       color: var(--text-2);
       font-weight: 500;
+    }
+
+    .users-table-wrap {
+      background: #ffffff;
+      border: 1px solid var(--border-mid);
+      border-radius: 4px;
+      overflow-x: auto;
+      max-width: 100%;
+      -webkit-overflow-scrolling: touch;
     }
 
     .nivel-selector {
@@ -4210,7 +4225,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       position: fixed;
       inset: 0;
       background: rgba(0, 0, 0, 0.5);
-      z-index: 1000;
+      z-index: 5000;
       display: none;
       opacity: 0;
       transition: opacity 0.3s ease;
@@ -4368,6 +4383,19 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
       .hdr-right {
         gap: 6px;
+        flex: 1;
+        justify-content: flex-end;
+        overflow: hidden;
+      }
+
+      header .btn-logout,
+      header .btn-nueva,
+      header button:not(.btn-menu-toggle) {
+        display: none !important;
+      }
+
+      .hdr-right {
+        gap: 6px;
       }
 
       header .btn-logout,
@@ -4405,8 +4433,14 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
       .detail-panel {
         width: 100%;
-        border-right: none;
+        border-left: none;
         z-index: 700;
+        transform: translateY(100%);
+        top: 0;
+      }
+
+      .detail-panel.open {
+        transform: translateY(0);
       }
 
       .detail-panel .dp-name {
@@ -4672,7 +4706,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.3.0.4
+          Versión V.3.0.5
         </div>
       </div>
       <div id="mobile-menu-overlay" class="mobile-menu-overlay" onclick="toggleMobileMenu()">
