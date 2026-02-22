@@ -53,9 +53,8 @@
     let autocompleteEdit = null;
     let pickListener = null;
     let tempGmMarker = null;
-    let unsubOps = null;
-    let unsubAcciones = null;
     let unsubRecursos = null;
+    let unsubJefes = null;
     let ops = {};
     let editingUserId = null;
 
@@ -434,9 +433,8 @@
     }
 
     function detenerListeners() {
-      if (unsubOps) { unsubOps(); unsubOps = null; }
-      if (unsubAcciones) { unsubAcciones(); unsubAcciones = null; }
       if (unsubRecursos) { unsubRecursos(); unsubRecursos = null; }
+      if (unsubJefes) { unsubJefes(); unsubJefes = null; }
       ops = {};
     }
 
@@ -1664,6 +1662,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       if (sec === 'usuarios') suscribirUsuarios();
       if (sec === 'tablas' && typeof window.showTablaMaestra === 'function') {
         window.showTablaMaestra('vehiculos');
+        suscribirJefesSelect(); // Mantener listas de select actualizadas
       }
       if (sec === 'operaciones' && gmap) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
     };
@@ -1905,7 +1904,11 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       const contVeh = document.getElementById('tabla-vehiculos-container');
       if (contVeh) contVeh.style.display = tabla === 'vehiculos' ? 'flex' : 'none';
 
+      const contJefes = document.getElementById('tabla-jefes-container');
+      if (contJefes) contJefes.style.display = tabla === 'jefes' ? 'flex' : 'none';
+
       if (tabla === 'vehiculos') cargarVehiculos();
+      if (tabla === 'jefes') cargarJefes();
     };
 
     window.changeProvincia = (val) => {
@@ -2035,6 +2038,138 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         cargarVehiculos();
       } catch (e) { alert('Error al eliminar: ' + e.message); }
     };
+
+    // ── GESTIÓN JEFES DE OPERACIONES ───────────────────────────────────
+    let editingJefeId = null;
+
+    async function cargarJefes() {
+      const snap = await getDocs(collection(db, 'jefes_operaciones'));
+      const tbody = document.getElementById('jefes-tbody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      const allJefes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const visible = allJefes.filter(j => {
+        const prov = j.provincia || 'Andalucía';
+        return selectedProvincia === 'Andalucía' || prov === selectedProvincia;
+      });
+
+      visible.forEach(j => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>${j.nombre || '—'}</strong></td>
+          <td style="font-size:11px; color:var(--text-3);">${j.provincia || 'Andalucía'}</td>
+          <td>
+            <button class="tbl-btn danger" onclick="borrarJefe('${j.id}')">Eliminar</button>
+          </td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    window.abrirModalJefe = async () => {
+      editingJefeId = null;
+      document.getElementById('modal-jefe-title').textContent = 'Nuevo Jefe de Operaciones';
+
+      const selUser = document.getElementById('j-user');
+      selUser.innerHTML = '<option value="">Cargando usuarios...</option>';
+
+      const provRow = document.getElementById('j-prov-row');
+      const provSel = document.getElementById('j-provincia');
+      if (currentUserDoc.provincia && currentUserDoc.provincia !== 'Andalucía') {
+        provRow.style.display = 'none';
+        provSel.value = currentUserDoc.provincia;
+      } else {
+        provRow.style.display = 'block';
+        provSel.value = selectedProvincia === 'Andalucía' ? 'Andalucía' : selectedProvincia;
+      }
+
+      // Cargar lista de usuarios del ámbito
+      const snap = await getDocs(collection(db, 'users'));
+      selUser.innerHTML = '<option value="">Seleccionar usuario...</option>';
+      snap.forEach(d => {
+        const u = d.data();
+        if (provSel.value !== 'Andalucía' && u.provincia !== provSel.value) return;
+        const opt = document.createElement('option');
+        opt.value = d.id;
+        opt.dataset.nombre = u.nombre || u.email;
+        opt.textContent = u.nombre || u.email;
+        selUser.appendChild(opt);
+      });
+
+      document.getElementById('overlay-jefe').classList.add('open');
+    };
+
+    window.guardarJefe = async () => {
+      const userId = document.getElementById('j-user').value;
+      if (!userId) { alert('Debes seleccionar un usuario.'); return; }
+      const selUser = document.getElementById('j-user');
+      const nombre = selUser.options[selUser.selectedIndex].dataset.nombre;
+
+      const btn = document.getElementById('btn-guardar-jefe');
+      btn.disabled = true; btn.textContent = 'Guardando…';
+      try {
+        const provincia = document.getElementById('j-provincia').value;
+        await addDoc(collection(db, 'jefes_operaciones'), {
+          uid: userId,
+          nombre,
+          provincia,
+          creadoPor: currentUser.uid,
+          creadoEn: serverTimestamp(),
+          actualizadoEn: serverTimestamp()
+        });
+        mostrarToast('Jefe de Operaciones añadido.');
+        cerrarModalJefe();
+        cargarJefes();
+      } catch (e) { alert('Error: ' + e.message); }
+      btn.disabled = false; btn.textContent = 'Añadir Jefe';
+    };
+
+    window.cerrarModalJefe = () => {
+      document.getElementById('overlay-jefe').classList.remove('open');
+      editingJefeId = null;
+    };
+
+    window.borrarJefe = async id => {
+      if (!confirm('¿Eliminar este Jefe de Operaciones?')) return;
+      try {
+        await deleteDoc(doc(db, 'jefes_operaciones', id));
+        mostrarToast('Jefe de Operaciones eliminado.');
+        cargarJefes();
+      } catch (e) { alert('Error al eliminar: ' + e.message); }
+    };
+
+    // Mantener sincronizados los select de Jefes de Operaciones en los formularios
+    function suscribirJefesSelect() {
+      if (unsubJefes) unsubJefes();
+      unsubJefes = onSnapshot(collection(db, 'jefes_operaciones'), snap => {
+        const jefes = snap.docs.map(d => d.data());
+        const selects = ['f-dir', 'fe-dir', 'f-org-sub-select', 'fe-org-sub-select'];
+
+        selects.forEach(sid => {
+          const sel = document.getElementById(sid);
+          if (!sel) return;
+          const currentVal = sel.value;
+          sel.innerHTML = '';
+
+          // Ordenar alfabéticamente
+          jefes.sort((a, b) => (a.nombre || '').localeCompare(b.nombre || ''));
+
+          jefes.forEach(j => {
+            const opt = document.createElement('option');
+            opt.value = j.nombre;
+            opt.textContent = j.nombre;
+            sel.appendChild(opt);
+          });
+
+          // Mantener selección si existía
+          if (currentVal && Array.from(sel.options).some(o => o.value === currentVal)) {
+            sel.value = currentVal;
+          } else if (sel.options.length > 0) {
+            // No hacemos nada, que se quede el primero por defecto si es creación
+          }
+        });
+      });
+    }
 
     // ── TOAST ──────────────────────────────────────────────────────────
     function mostrarToast(msg) {
@@ -4004,7 +4139,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.15.0
+          Versión V.2.16.0
         </div>
       </div>
       </footer>
@@ -4135,7 +4270,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         <div class="filter-tabs" id="tablas-subnav" style="width: 100%; max-width: 400px; display: flex;">
           <button class="ftab on" id="subnav-vehiculos" onclick="showTablaMaestra('vehiculos')"
             style="flex:1;">Vehículos</button>
-          <!-- Se pueden añadir más pestañas aquí en el futuro -->
+          <button class="ftab" id="subnav-jefes" onclick="showTablaMaestra('jefes')" style="flex:1;">Jefes de
+            Operaciones</button>
         </div>
       </div>
 
@@ -4155,6 +4291,25 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
               </tr>
             </thead>
             <tbody id="vehiculos-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Contenedor Jefes de Operaciones -->
+      <div id="tabla-jefes-container" style="display:none; flex-direction:column; flex:1; gap:16px;">
+        <div style="display:flex; justify-content:flex-end;">
+          <button class="btn-nueva" onclick="abrirModalJefe()">+ Añadir Jefe de Operaciones</button>
+        </div>
+        <div class="users-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Provincia</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="jefes-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -4210,8 +4365,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <div class="field" style="flex:1;">
             <div class="field-lbl">Jefe de Operaciones</div>
             <select class="f-input f-select" id="f-dir" style="width:100%">
-              <option value="Julio Pulido Morilla">Julio Pulido Morilla</option>
-              <option value="Samuel Linares Cantero">Samuel Linares Cantero</option>
+              <!-- Se puebla dinámicamente -->
             </select>
           </div>
           <div class="field" style="flex:1;">
@@ -4227,8 +4381,9 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             <div id="f-org-sub" style="display:none; margin-top:8px;">
               <input class="f-input" id="f-org-sub-input" style="display:none;">
               <select class="f-input f-select" id="f-org-sub-select" style="display:none; width:100%">
-                <option value="Julio Pulido Morilla">Julio Pulido Morilla</option>
-                <option value="Samuel Linares Cantero">Samuel Linares Cantero</option>
+                <!-- Se puebla dinámicamente -->
+              </select>
+              <option value="Samuel Linares Cantero">Samuel Linares Cantero</option>
               </select>
             </div>
           </div>
@@ -4444,6 +4599,44 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
   </div>
 
   <!-- MODAL VEHÍCULO -->
+  <!-- Modal Jefe de Operaciones -->
+  <div class="overlay" id="overlay-jefe">
+    <div class="modal" style="max-width:400px;">
+      <div class="modal-hdr">
+        <div class="modal-title" id="modal-jefe-title">Añadir Jefe de Operaciones</div>
+        <button class="modal-close" onclick="cerrarModalJefe()">&times;</button>
+      </div>
+      <div class="modal-body" style="padding:24px;">
+        <div class="field">
+          <div class="field-lbl">Usuario</div>
+          <select class="f-input f-select" id="j-user" style="width:100%">
+            <!-- Se puebla dinámicamente -->
+          </select>
+          <div style="font-size:11px; color:var(--text-3); margin-top:4px;">
+            Selecciona un usuario para designarlo como Jefe de Operaciones.
+          </div>
+        </div>
+        <div class="field" id="j-prov-row">
+          <div class="field-lbl">Provincia / Ámbito</div>
+          <select class="f-input f-select" id="j-provincia" style="width:100%">
+            <option value="Andalucía">Oficina Autonómica de Andalucía</option>
+            <option value="Almería">Oficina Provincial de Almería</option>
+            <option value="Cádiz">Oficina Provincial de Cádiz</option>
+            <option value="Córdoba">Oficina Provincial de Córdoba</option>
+            <option value="Granada">Oficina Provincial de Granada</option>
+            <option value="Jaén">Oficina Provincial de Jaén</option>
+            <option value="Huelva">Oficina Provincial de Huelva</option>
+            <option value="Málaga">Oficina Provincial de Málaga</option>
+            <option value="Sevilla">Oficina Provincial de Sevilla</option>
+          </select>
+        </div>
+        <button class="btn-crear" id="btn-guardar-jefe" onclick="guardarJefe()" style="width:100%;margin-top:16px;">
+          Añadir Jefe
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div class="overlay" id="overlay-vehiculo">
     <div class="modal" style="width:420px;">
       <div class="modal-head">
