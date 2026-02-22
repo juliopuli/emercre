@@ -93,7 +93,8 @@
     const NIVEL_COLORS = { 1: '#c0392b', 2: '#d35400', 3: '#c08c00', 4: '#1a7a4a' };
     const ROL_LABELS = {
       super_admin: 'Super Admin',
-      admin: 'Administrador',
+      manager: 'Administrador',
+      admin: 'Responsable',
       usuario: 'Usuario',
       autonomica: 'Oficina Autonómica',
       provincial: 'Oficina Provincial'
@@ -318,13 +319,13 @@
         provSelector.value = selectedProvincia;
       }
 
-      const isAdmin = currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'autonomica' || currentRole === 'provincial';
+      const isAdmin = currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'autonomica' || currentRole === 'provincial' || currentRole === 'manager';
       document.getElementById('btn-nueva-op').style.display = isAdmin ? 'flex' : 'none';
 
-      const isSA = currentRole === 'super_admin';
-      document.getElementById('nav-usuarios').style.display = isSA ? 'flex' : 'none';
+      const canManageUsers = currentRole === 'super_admin' || currentRole === 'manager';
+      document.getElementById('nav-usuarios').style.display = canManageUsers ? 'flex' : 'none';
       if (document.getElementById('nav-tablas')) {
-        document.getElementById('nav-tablas').style.display = isSA ? 'flex' : 'none';
+        document.getElementById('nav-tablas').style.display = canManageUsers ? 'flex' : 'none';
       }
 
       suscribirOps();
@@ -867,7 +868,7 @@
       const list = document.getElementById('dp-recursos-list');
       const form = document.getElementById('dp-recursos-form');
       const isFinalizada = op?.estado === 'finalizada';
-      const canModify = !isFinalizada && (currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'usuario');
+      const canModify = !isFinalizada && (currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'usuario' || currentRole === 'manager');
 
       if (form) form.style.display = canModify ? 'block' : 'none';
       if (!list) return;
@@ -903,7 +904,7 @@
 
     function renderDetalle(op) {
       const t = TIPOS[op.tipo] || TIPOS.otro;
-      const isAdmin = currentRole === 'admin' || currentRole === 'super_admin';
+      const isAdmin = currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'manager';
       const isSA = currentRole === 'super_admin';
 
       document.getElementById('dp-id').textContent = op.id.substring(0, 8).toUpperCase();
@@ -965,7 +966,7 @@
           ? a.timestamp.toDate().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
           : '—';
 
-        const isAdmin = currentRole === 'admin' || currentRole === 'super_admin';
+        const isAdmin = currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'manager';
         const isFinalizada = op?.estado === 'finalizada';
         const editBtn = (isAdmin && !isFinalizada)
           ? `<button class="btn-cancel-m" style="padding: 2px 8px; font-size: 11px; margin-left: auto;" onclick="abrirModalEditAccion('${a.id}')">✏️ Editar</button>`
@@ -1557,6 +1558,12 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           // Filtrado por ámbito del administrador
           if (adminProv !== 'Andalucía' && u.provincia !== adminProv) return;
 
+          // Filtrado por jerarquía de roles
+          if (currentRole === 'manager') {
+            // Un Administrador sólo puede ver Responsables y Usuarios
+            if (u.role !== 'admin' && u.role !== 'usuario') return;
+          }
+
           const lastAct = u.ultimaActividad?.toMillis ? u.ultimaActividad.toMillis() : 0;
           const isRecentlyActive = (now - lastAct) < twoHours;
           const isOnline = u.enLinea === true && isRecentlyActive;
@@ -1589,10 +1596,38 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       });
     }
 
+    function cargarOpcionesRoles(selId) {
+      const sel = document.getElementById(selId);
+      sel.innerHTML = '';
+
+      const rolesParaAdmin = [
+        { val: 'usuario', lab: ROL_LABELS.usuario },
+        { val: 'admin', lab: ROL_LABELS.admin }
+      ];
+      const rolesCompletos = [
+        { val: 'usuario', lab: ROL_LABELS.usuario },
+        { val: 'admin', lab: ROL_LABELS.admin },
+        { val: 'manager', lab: ROL_LABELS.manager },
+        { val: 'super_admin', lab: ROL_LABELS.super_admin },
+        { val: 'autonomica', lab: ROL_LABELS.autonomica },
+        { val: 'provincial', lab: ROL_LABELS.provincial }
+      ];
+
+      const lista = currentRole === 'super_admin' ? rolesCompletos : rolesParaAdmin;
+      lista.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.val;
+        opt.textContent = r.lab;
+        sel.appendChild(opt);
+      });
+    }
+
     window.abrirModalUsuario = () => {
       editingUserId = null;
       document.getElementById('modal-user-title').textContent = 'Nuevo usuario';
       ['u-nombre', 'u-email', 'u-pass'].forEach(id => document.getElementById(id).value = '');
+
+      cargarOpcionesRoles('u-role');
       document.getElementById('u-role').value = 'usuario';
 
       const provSel = document.getElementById('u-provincia');
@@ -1655,6 +1690,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       document.getElementById('modal-user-title').textContent = 'Editar usuario';
       document.getElementById('u-nombre').value = u.nombre || '';
       document.getElementById('u-email').value = u.email || '';
+
+      cargarOpcionesRoles('u-role');
       document.getElementById('u-role').value = u.role || 'usuario';
 
       const provSel = document.getElementById('u-provincia');
@@ -3687,7 +3724,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.2.10.0
+          Versión V.2.11.0
         </div>
       </div>
       </footer>
@@ -4093,11 +4130,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <div class="field" style="flex:1;">
             <div class="field-lbl">Rol</div>
             <select class="f-input f-select" id="u-role" style="width:100%">
-              <option value="usuario">Usuario</option>
-              <option value="admin">Administrador</option>
-              <option value="super_admin">Super Admin</option>
-              <option value="autonomica">Oficina Autonómica</option>
-              <option value="provincial">Oficina Provincial</option>
+              <!-- Las opciones se cargan dinámicamente según permiso -->
             </select>
           </div>
           <div class="field" style="flex:1;">
