@@ -2016,173 +2016,216 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     /* LOGIN */
     #screen-login {
       display: flex;
+      flex-direction: column;
       align-items: center;
       justify-content: center;
       height: 100vh;
       background: #0f172a;
-      /* Deep Navy Blue from mockup */
+      position: relative;
+      overflow: hidden;
+    }
+
+    .login-hero {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 300px;
+      padding: 60px;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      z-index: 1;
+    }
+
+    .hero-content {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      color: #fff;
+    }
+
+    .hero-logo-img {
+      width: 100px;
+      height: 100px;
+      object-fit: contain;
+    }
+
+    .hero-text-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .hero-title {
+      font-family: 'Fraunces', serif;
+      font-size: 64px;
+      font-weight: 900;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+
+    .hero-sub {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      opacity: 0.8;
     }
 
     .login-card {
       background: #ffffff;
       border: none;
-      border-radius: 12px;
-      width: 820px;
+      border-radius: 4px;
+      width: 720px;
       max-width: 90vw;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 40px 100px rgba(0, 0, 0, 0.4);
       display: flex;
       overflow: hidden;
-      animation: modalIn 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 2;
+      margin-top: 100px;
+      animation: modalIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
     }
 
     .login-visual {
       flex: 1.1;
-      background: #ffffff;
+      background: #f8fafc;
       display: flex;
-      flex-direction: column;
       align-items: center;
       justify-content: center;
-      padding: 60px;
-      position: relative;
+      padding: 50px;
+    }
+
+    .login-visual img {
+      width: 280px;
+      height: 280px;
+      object-fit: contain;
     }
 
     .login-form-side {
       flex: 1;
-      padding: 60px 70px;
+      padding: 50px;
       display: flex;
       flex-direction: column;
       justify-content: center;
-      gap: 24px;
+      gap: 20px;
       background: #ffffff;
-      border-left: 1px solid #f1f5f9;
     }
 
-    .login-logo {
+    .form-logo-box {
       display: flex;
       flex-direction: column;
       align-items: center;
-      text-align: center;
-      gap: 12px;
-      margin-bottom: 20px;
+      gap: 8px;
+      margin-bottom: 12px;
     }
 
-    .login-title {
+    .form-logo-img {
+      width: 50px;
+      height: 50px;
+      object-fit: contain;
+    }
+
+    .form-title {
       font-family: 'Fraunces', serif;
-      font-size: 42px;
+      font-size: 28px;
       font-weight: 900;
       color: #1e293b;
-      line-height: 1.1;
-      letter-spacing: -0.02em;
+      line-height: 1;
     }
 
-    .login-sub {
-      font-size: 11px;
+    .form-sub {
+      font-size: 9px;
       font-weight: 800;
-      letter-spacing: 0.3em;
-      text-transform: uppercase;
-      color: #64748b;
-    }
-
-    .login-field {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .login-lbl {
-      font-size: 11px;
-      font-weight: 700;
       letter-spacing: 0.12em;
       text-transform: uppercase;
       color: #94a3b8;
     }
 
+    .login-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .login-lbl {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #94a3b8;
+    }
+
     .login-input {
-      background: #f8fafc;
+      background: #ffffff;
       border: 1px solid #e2e8f0;
       color: #1e293b;
-      padding: 14px 16px;
+      padding: 12px 14px;
       font-family: 'IBM Plex Sans', sans-serif;
-      font-size: 15px;
+      font-size: 14px;
       outline: none;
-      border-radius: 8px;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      border-radius: 4px;
+      transition: all 0.2s;
     }
 
     .login-input:focus {
-      background: #ffffff;
-      border-color: #334155;
-      box-shadow: 0 0 0 4px rgba(51, 65, 85, 0.05);
+      border-color: #0f172a;
+      box-shadow: 0 0 0 3px rgba(15, 23, 42, 0.05);
     }
 
     .btn-login {
-      padding: 16px;
-      background: #1e293b;
+      padding: 14px;
+      background: #2563eb;
       border: none;
       color: #fff;
       cursor: pointer;
       font-family: 'IBM Plex Sans', sans-serif;
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 700;
-      border-radius: 8px;
+      border-radius: 4px;
       transition: all 0.2s;
-      margin-top: 12px;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      margin-top: 8px;
     }
 
     .btn-login:hover {
-      background: #0f172a;
-      transform: translateY(-2px);
-      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
-    }
-
-    .btn-login:active {
-      transform: translateY(0);
-    }
-
-    .btn-login:disabled {
-      background: var(--text-4);
-      cursor: not-allowed;
-      transform: none;
+      background: #1d4ed8;
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2);
     }
 
     .login-err {
-      font-size: 13px;
+      font-size: 12px;
       color: #ef4444;
-      background: #fef2f2;
-      border: 1px solid #fee2e2;
-      padding: 12px 16px;
-      border-radius: 8px;
+      background: #fff1f2;
+      border: 1px solid #fecdd3;
+      padding: 10px;
+      border-radius: 4px;
       display: none;
       text-align: center;
     }
 
-    @media (max-width: 850px) {
+    @media (max-width: 800px) {
+      .login-hero {
+        display: none;
+      }
+
       .login-card {
         flex-direction: column;
         width: 100%;
-        max-width: 420px;
-        margin: 24px;
+        max-width: 380px;
+        margin: 20px;
+        margin-top: 0;
       }
 
       .login-visual {
-        padding: 40px;
-        border-right: none;
-        border-bottom: 1px solid #f1f5f9;
+        padding: 30px;
       }
 
       .login-visual img {
-        width: 140px !important;
-        height: 140px !important;
+        width: 160px;
+        height: 160px;
       }
 
       .login-form-side {
-        padding: 40px;
-        border-left: none;
-      }
-
-      .login-title {
-        font-size: 36px;
+        padding: 40px 30px;
       }
     }
 
@@ -3724,14 +3767,24 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
   <!-- LOGIN -->
   <div id="screen-login">
+    <div class="login-hero">
+      <div class="hero-content">
+        <img src="assets/logo_emercre.png" alt="Logo Hero" class="hero-logo-img">
+        <div class="hero-text-group">
+          <div class="hero-title">EmerCRE</div>
+          <div class="hero-sub">Gestión de Emergencias</div>
+        </div>
+      </div>
+    </div>
     <div class="login-card">
       <div class="login-visual">
-        <img src="assets/logo_emercre.png" alt="EmerCRE Logo" style="width: 240px; height: 240px; object-fit: contain;">
+        <img src="assets/logo_emercre.png" alt="EmerCRE Large Icon">
       </div>
       <div class="login-form-side">
-        <div class="login-logo">
-          <div class="login-title">EmerCRE</div>
-          <div class="login-sub">Gestión de Emergencias</div>
+        <div class="form-logo-box">
+          <img src="assets/logo_emercre.png" alt="Form Logo" class="form-logo-img">
+          <div class="form-title">EmerCRE</div>
+          <div class="form-sub">Gestión de Emergencias</div>
         </div>
         <div class="login-field">
           <div class="login-lbl">Email</div>
@@ -3743,7 +3796,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <input class="login-input" id="l-pass" type="password" placeholder="••••••••" autocomplete="current-password">
         </div>
         <div class="login-err" id="err-login"></div>
-        <button class="btn-login" id="btn-login" onclick="doLogin()">Acceder</button>
+        <button class="btn-login" id="btn-login" onclick="doLogin()">Login</button>
       </div>
     </div>
   </div>
