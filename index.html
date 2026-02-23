@@ -249,7 +249,9 @@
       if (!origin || !dest) return;
 
       const btn = document.getElementById('btn-calc-route');
+      const info = document.getElementById('route-info');
       btn.disabled = true; btn.textContent = '...';
+      if (info) info.style.display = 'none';
 
       directionsService.route({
         origin: origin,
@@ -259,6 +261,14 @@
         btn.disabled = false; btn.textContent = 'Calcular';
         if (status === 'OK') {
           directionsRenderer.setDirections(result);
+          if (info && result.routes[0] && result.routes[0].legs[0]) {
+            const leg = result.routes[0].legs[0];
+            info.innerHTML = `
+              <div style="font-weight:700; color:var(--accent); font-size:12px; margin-bottom:2px;">${leg.distance.text}</div>
+              <div style="font-size:11px; color:var(--text-3);">Duración est.: <b>${leg.duration.text}</b></div>
+            `;
+            info.style.display = 'block';
+          }
         } else {
           alert('No se pudo calcular la ruta: ' + status);
         }
@@ -269,6 +279,8 @@
       directionsRenderer.setDirections({ routes: [] });
       document.getElementById('route-origin').value = '';
       document.getElementById('route-dest').value = '';
+      const info = document.getElementById('route-info');
+      if (info) { info.innerHTML = ''; info.style.display = 'none'; }
     };
 
     // ── ACTIVIDAD (HEARTBEAT) ──────────────────────────────────────────
@@ -5091,7 +5103,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.3.5.0
+          Versión V.3.5.1
         </div>
       </div>
 
@@ -5204,6 +5216,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
               <button class="btn-cancel-m" style="flex:1; padding:6px; font-size:11px;"
                 onclick="clearRoute()">✖</button>
             </div>
+            <div id="route-info"
+              style="margin-top:8px; padding-top:8px; border-top:1px dashed var(--border-mid); display:none;"></div>
           </div>
         </div>
         <div class="pick-banner" id="pick-banner">📍 Haz clic en el mapa para fijar la ubicación</div>
