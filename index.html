@@ -379,12 +379,12 @@
 
       let q;
       if (chatId === 'general') {
-        q = query(collection(db, 'chat_mensajes'), where('destinatarioId', '==', 'general'), orderBy('timestamp', 'asc'), limitToLast(50));
+        q = query(collection(db, 'chat_mensajes'), where('destinatarioId', '==', 'general'), limitToLast(50));
       } else {
         // Chat privado: mensajes de A para B O de B para A
         q = query(collection(db, 'chat_mensajes'),
           where('destinatarioId', 'in', [currentUser.uid, chatId]),
-          orderBy('timestamp', 'asc'), limitToLast(50)
+          limitToLast(100)
         );
       }
 
@@ -392,8 +392,11 @@
         msgsDiv.innerHTML = '';
         let batchToMark = [];
 
-        snap.forEach(docSnap => {
-          const m = docSnap.data();
+        // Ordenar en cliente para evitar necesidad de índices compuestos en Firebase
+        const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        docs.sort((a, b) => (a.timestamp?.toMillis ? a.timestamp.toMillis() : 0) - (b.timestamp?.toMillis ? b.timestamp.toMillis() : 0));
+
+        docs.forEach(m => {
           // Filtrar redundancia manual para el 'in' en chats privados (Firebase no soporta OR de forma nativa simple para este caso cruzado sin indices complejos)
           if (chatId !== 'general') {
             const isRelated = (m.remitenteId === currentUser.uid && m.destinatarioId === chatId) ||
@@ -419,12 +422,12 @@
           if (!isMe) {
             if (chatId === 'general') {
               if (!m.leidoPor || !m.leidoPor.includes(currentUser.uid)) {
-                batchToMark.push(updateDoc(doc(db, 'chat_mensajes', docSnap.id), {
+                batchToMark.push(updateDoc(doc(db, 'chat_mensajes', m.id), {
                   leidoPor: arrayUnion(currentUser.uid)
                 }));
               }
             } else if (!m.leido) {
-              batchToMark.push(updateDoc(doc(db, 'chat_mensajes', docSnap.id), { leido: true }));
+              batchToMark.push(updateDoc(doc(db, 'chat_mensajes', m.id), { leido: true }));
             }
           }
         });
@@ -5451,7 +5454,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.0.1
+          Versión V.4.1.0
         </div>
       </div>
 
@@ -5591,11 +5594,12 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <div class="chat-messages" id="chat-messages">
             <!-- Cargado dinámicamente -->
           </div>
-          <div class="chat-input-area">
-            <input type="text" id="chat-input" class="chat-input" placeholder="Escribe un mensaje..."
-              onkeydown="if(event.key==='Enter') enviarMensaje()">
+          <div class="chat-input-area" style="align-items: flex-end;">
+            <textarea id="chat-input" class="chat-input" placeholder="Escribe un mensaje..." rows="2"
+              style="resize:none; height: auto; min-height: 44px; padding: 10px 14px;"
+              onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); enviarMensaje(); }"></textarea>
             <button class="btn-reg"
-              style="padding:6px 12px; border-radius:15px; font-size:12px; height: 38px; align-self: center;"
+              style="padding:4px 10px; border-radius:8px; font-size:11px; height: 44px; min-width: 60px; align-self: flex-end;"
               onclick="enviarMensaje()">Enviar</button>
           </div>
         </div>
@@ -5603,7 +5607,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     </div>
 
     <!-- USUARIOS -->
-    <div id="section-usuarios">
+    <div id="section-usuarios" style="display:none;">
       <div class="users-toolbar">
         <div>
           <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;">Gestión de usuarios</div>
@@ -5629,7 +5633,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     </div>
 
     <!-- TABLAS MAESTRAS -->
-    <div id="section-tablas">
+    <div id="section-tablas" style="display:none;">
       <div class="users-toolbar"
         style="margin-bottom: 8px; flex-direction: column; align-items: flex-start; gap: 16px;">
         <div>
