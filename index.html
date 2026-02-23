@@ -857,7 +857,12 @@
               // Si es la carga inicial, asumimos que no es nueva "en tiempo real"
               // a no ser que tú mismo la hayas creado muy recientemente
               if (!initialLoad && d.creadoPor !== currentUser.uid) {
-                hasNewOp = true;
+                // Solo pitar si es de mi ámbito o soy autonómico (V.4.7.0)
+                const myProv = currentUserDoc.provincia;
+                const opProv = d.provincia;
+                if (myProv === 'Andalucía' || myProv === opProv) {
+                  hasNewOp = true;
+                }
                 ops[dId]._isNew = true;
               }
             }
@@ -5587,7 +5592,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.6.3
+          Versión V.4.7.0
         </div>
       </div>
 
