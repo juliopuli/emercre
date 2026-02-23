@@ -17,7 +17,7 @@
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
     import {
       getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
-      onSnapshot, query, orderBy, serverTimestamp, getDoc, getDocs
+      onSnapshot, query, where, orderBy, limit, limitToLast, serverTimestamp, getDoc, getDocs, arrayUnion, or, and
     }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
@@ -379,12 +379,15 @@
 
       let q;
       if (chatId === 'general') {
-        q = query(collection(db, 'chat_mensajes'), where('destinatarioId', '==', 'general'), orderBy('timestamp', 'asc'), limitToLast(50));
+        q = query(collection(db, 'chat_mensajes'), where('destinatarioId', '==', 'general'), limit(200));
       } else {
-        // Chat privado: mensajes de A para B O de B para A
+        // Chat privado: usamos 'or' para cubrir remitente/destinatario de forma segura con las reglas
         q = query(collection(db, 'chat_mensajes'),
-          where('destinatarioId', 'in', [currentUser.uid, chatId]),
-          limit(200)
+          or(
+            and(where('remitenteId', '==', currentUser.uid), where('destinatarioId', '==', chatId)),
+            and(where('remitenteId', '==', chatId), where('destinatarioId', '==', currentUser.uid))
+          ),
+          limit(300)
         );
       }
 
@@ -431,6 +434,9 @@
             }
           }
         });
+        if (snap.empty) {
+          msgsDiv.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-4);">No hay mensajes todavía. 👋</div>';
+        }
         msgsDiv.scrollTop = msgsDiv.scrollHeight;
         if (batchToMark.length > 0) await Promise.all(batchToMark);
       }, err => {
@@ -5461,7 +5467,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.1.1
+          Versión V.4.1.2
         </div>
       </div>
 
