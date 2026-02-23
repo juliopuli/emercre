@@ -64,6 +64,10 @@
     let directionsRenderer = null;
     let autocompleteOrigin = null;
     let autocompleteDest = null;
+    let unsubChatGlobal = null;
+    let unsubChatDetail = null;
+    let currentChatId = 'general'; // 'general' o userId
+    let unreadMessages = {}; // id -> count
     let jefeGuardiaActual = null;
     let ops = {};
     let editingUserId = null;
@@ -281,6 +285,173 @@
       document.getElementById('route-dest').value = '';
       const info = document.getElementById('route-info');
       if (info) { info.innerHTML = ''; info.style.display = 'none'; }
+    };
+
+    // ── CHAT LOGIC ─────────────────────────────────────────────────────
+    window.suscribirNotificacionesChat = () => {
+      if (unsubChatGlobal) unsubChatGlobal();
+      // Escuchar todos los mensajes para contar no leídos
+      const q = query(collection(db, 'chat_mensajes'), orderBy('timestamp', 'desc'), limit(100));
+      unsubChatGlobal = onSnapshot(q, snap => {
+        unreadMessages = {};
+        snap.forEach(doc => {
+          const m = doc.data();
+          if (m.remitenteId === currentUser.uid) return;
+
+          if (m.destinatarioId === 'general') {
+            if (!m.leidoPor || !m.leidoPor.includes(currentUser.uid)) {
+              unreadMessages['general'] = (unreadMessages['general'] || 0) + 1;
+            }
+          } else if (m.destinatarioId === currentUser.uid) {
+            if (!m.leido) {
+              unreadMessages[m.remitenteId] = (unreadMessages[m.remitenteId] || 0) + 1;
+            }
+          }
+        });
+        renderChatList();
+        renderChatNavBadge();
+      });
+    };
+
+    function renderChatNavBadge() {
+      const total = Object.values(unreadMessages).reduce((a, b) => a + b, 0);
+      const dot = '<span class="nav-badge"></span>';
+      document.getElementById('nav-chat-badge').innerHTML = total > 0 ? dot : '';
+      const mdot = document.getElementById('mnav-chat-badge');
+      if (mdot) mdot.innerHTML = total > 0 ? dot : '';
+    }
+
+    function renderChatList() {
+      const list = document.getElementById('chat-list');
+      if (!list) return;
+
+      let html = `
+        <div class="chat-item ${currentChatId === 'general' ? 'active' : ''}" onclick="selectChat('general')">
+          <div style="width:36px; height:36px; background:var(--accent); border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-size:18px;">👥</div>
+          <div>
+            <div class="name">General</div>
+            <div class="status">Todos los usuarios</div>
+          </div>
+          ${unreadMessages['general'] ? `<span class="chat-badge">${unreadMessages['general']}</span>` : ''}
+        </div>
+      `;
+
+      // Usuarios registrados
+      allUsersCache.forEach(u => {
+        if (u.uid === currentUser.uid) return;
+        const isOnline = u.enLinea && (Date.now() - (u.ultimaActividad?.toMillis() || 0)) < 300000;
+        html += `
+          <div class="chat-item ${currentChatId === u.uid ? 'active' : ''}" onclick="selectChat('${u.uid}')">
+            <div style="width:36px; height:36px; background:var(--bg-3); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:16px; position:relative;">
+              👤
+              <div style="position:absolute; bottom:0; right:0; width:10px; height:10px; border-radius:50%; background:${isOnline ? '#2ecc71' : '#bdc3c7'}; border:2px solid white;"></div>
+            </div>
+            <div>
+              <div class="name">${u.nombre || u.email}</div>
+              <div class="status">${u.role}</div>
+            </div>
+            ${unreadMessages[u.uid] ? `<span class="chat-badge">${unreadMessages[u.uid]}</span>` : ''}
+          </div>
+        `;
+      });
+      list.innerHTML = html;
+    }
+
+    let allUsersCache = [];
+    async function cargarUsuariosParaChat() {
+      const snap = await getDocs(collection(db, 'users'));
+      allUsersCache = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+      renderChatList();
+    }
+
+    window.selectChat = (id) => {
+      currentChatId = id;
+      renderChatList();
+      const name = id === 'general' ? 'General' : (allUsersCache.find(u => u.uid === id)?.nombre || 'Chat Privado');
+      document.getElementById('chat-target-name').textContent = name;
+      suscribirChatDetalle(id);
+    };
+
+    function suscribirChatDetalle(chatId) {
+      if (unsubChatDetail) unsubChatDetail();
+      const msgsDiv = document.getElementById('chat-messages');
+      msgsDiv.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-4);">Cargando mensajes...</div>';
+
+      let q;
+      if (chatId === 'general') {
+        q = query(collection(db, 'chat_mensajes'), where('destinatarioId', '==', 'general'), orderBy('timestamp', 'asc'), limitToLast(50));
+      } else {
+        // Chat privado: mensajes de A para B O de B para A
+        q = query(collection(db, 'chat_mensajes'),
+          where('destinatarioId', 'in', [currentUser.uid, chatId]),
+          orderBy('timestamp', 'asc'), limitToLast(50)
+        );
+      }
+
+      unsubChatDetail = onSnapshot(q, async snap => {
+        msgsDiv.innerHTML = '';
+        let batchToMark = [];
+
+        snap.forEach(docSnap => {
+          const m = docSnap.data();
+          // Filtrar redundancia manual para el 'in' en chats privados (Firebase no soporta OR de forma nativa simple para este caso cruzado sin indices complejos)
+          if (chatId !== 'general') {
+            const isRelated = (m.remitenteId === currentUser.uid && m.destinatarioId === chatId) ||
+              (m.remitenteId === chatId && m.destinatarioId === currentUser.uid);
+            if (!isRelated) return;
+          }
+
+          const isMe = m.remitenteId === currentUser.uid;
+          const ts = m.timestamp?.toDate ? m.timestamp.toDate().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '...';
+
+          const bubble = document.createElement('div');
+          bubble.className = `msg-bubble ${isMe ? 'msg-sent' : 'msg-received'}`;
+          bubble.innerHTML = `
+            <div>${m.texto}</div>
+            <div class="msg-meta">
+              <span>${!isMe && chatId === 'general' ? `<b>${m.remitenteNombre || 'Usuario'}</b>` : ''}</span>
+              <span>${ts}</span>
+            </div>
+          `;
+          msgsDiv.appendChild(bubble);
+
+          // Mark as read if not me
+          if (!isMe) {
+            if (chatId === 'general') {
+              if (!m.leidoPor || !m.leidoPor.includes(currentUser.uid)) {
+                batchToMark.push(updateDoc(doc(db, 'chat_mensajes', docSnap.id), {
+                  leidoPor: arrayUnion(currentUser.uid)
+                }));
+              }
+            } else if (!m.leido) {
+              batchToMark.push(updateDoc(doc(db, 'chat_mensajes', docSnap.id), { leido: true }));
+            }
+          }
+        });
+        msgsDiv.scrollTop = msgsDiv.scrollHeight;
+        if (batchToMark.length > 0) await Promise.all(batchToMark);
+      });
+    }
+
+    window.enviarMensaje = async () => {
+      const input = document.getElementById('chat-input');
+      const text = input.value.trim();
+      if (!text) return;
+
+      input.value = '';
+      try {
+        await addDoc(collection(db, 'chat_mensajes'), {
+          remitenteId: currentUser.uid,
+          remitenteNombre: currentUserDoc.nombre || currentUser.email,
+          destinatarioId: currentChatId,
+          texto: text,
+          timestamp: serverTimestamp(),
+          leido: false,
+          leidoPor: []
+        });
+      } catch (e) {
+        alert('Error al enviar: ' + e.message);
+      }
     };
 
     // ── ACTIVIDAD (HEARTBEAT) ──────────────────────────────────────────
@@ -536,6 +707,7 @@
       suscribirOps();
       suscribirJefesSelect();
       suscribirGuardia();
+      suscribirNotificacionesChat();
       showSection('operaciones');
       if (gmap && mapReady) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
     }
@@ -546,6 +718,8 @@
       if (unsubRecursos) { unsubRecursos(); unsubRecursos = null; }
       if (unsubJefes) { unsubJefes(); unsubJefes = null; }
       if (unsubGuardia) { unsubGuardia(); unsubGuardia = null; }
+      if (unsubChatGlobal) { unsubChatGlobal(); unsubChatGlobal = null; }
+      if (unsubChatDetail) { unsubChatDetail(); unsubChatDetail = null; }
       ops = {};
     }
 
@@ -1843,6 +2017,16 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       document.getElementById('section-usuarios').style.display = sec === 'usuarios' ? 'flex' : 'none';
       if (document.getElementById('section-tablas')) {
         document.getElementById('section-tablas').style.display = sec === 'tablas' ? 'flex' : 'none';
+      }
+
+      if (sec === 'chat') {
+        document.getElementById('section-chat-view').style.display = 'flex';
+        document.getElementById('section-chat').style.display = 'flex';
+        cargarUsuariosParaChat();
+        selectChat(currentChatId);
+      } else {
+        document.getElementById('section-chat-view').style.display = 'none';
+        document.getElementById('section-chat').style.display = 'none';
       }
 
       if (sec === 'usuarios') suscribirUsuarios();
@@ -3194,6 +3378,166 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
     .map-routing-panel.open {
       display: flex;
+    }
+
+    /* CHAT UI */
+    #section-chat {
+      display: none;
+      height: calc(100vh - 120px);
+      gap: 1px;
+      background: var(--border);
+      overflow: hidden;
+    }
+
+    .chat-sidebar {
+      width: 280px;
+      background: var(--bg-1);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .chat-list {
+      flex: 1;
+      overflow-y: auto;
+    }
+
+    .chat-item {
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+      border-bottom: 1px solid var(--border-light);
+      position: relative;
+    }
+
+    .chat-item:hover {
+      background: var(--bg-2);
+    }
+
+    .chat-item.active {
+      background: var(--accent-light);
+      border-left: 4px solid var(--accent);
+    }
+
+    .chat-item .name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-1);
+    }
+
+    .chat-item .status {
+      font-size: 10px;
+      color: var(--text-3);
+    }
+
+    .chat-badge {
+      background: #27ae60;
+      color: white;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 10px;
+      margin-left: auto;
+    }
+
+    .nav-badge {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: #27ae60;
+      border-radius: 50%;
+      margin-left: 4px;
+      box-shadow: 0 0 8px rgba(39, 174, 96, 0.5);
+    }
+
+    .chat-main {
+      flex: 1;
+      background: var(--bg-2);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    .chat-header {
+      padding: 12px 20px;
+      background: var(--bg-1);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .chat-header h3 {
+      font-size: 15px;
+      margin: 0;
+      color: var(--text-1);
+    }
+
+    .chat-messages {
+      flex: 1;
+      padding: 20px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .msg-bubble {
+      max-width: 75%;
+      padding: 10px 14px;
+      border-radius: 12px;
+      font-size: 13px;
+      line-height: 1.4;
+      position: relative;
+      word-break: break-word;
+    }
+
+    .msg-sent {
+      align-self: flex-end;
+      background: var(--accent);
+      color: white;
+      border-bottom-right-radius: 2px;
+    }
+
+    .msg-received {
+      align-self: flex-start;
+      background: white;
+      color: var(--text-1);
+      border: 1px solid var(--border-mid);
+      border-bottom-left-radius: 2px;
+    }
+
+    .msg-meta {
+      font-size: 9px;
+      margin-top: 4px;
+      opacity: 0.7;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .chat-input-area {
+      padding: 16px;
+      background: var(--bg-1);
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 10px;
+    }
+
+    .chat-input {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid var(--border-mid);
+      border-radius: 20px;
+      font-size: 13px;
+      background: var(--bg-2);
+      outline: none;
+    }
+
+    .chat-input:focus {
+      border-color: var(--accent);
     }
 
     /* SIDEBAR */
@@ -5047,6 +5391,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
     <nav class="app-nav">
       <button class="nav-item on" data-sec="operaciones" onclick="showSection('operaciones')">🗺 Operaciones</button>
+      <button class="nav-item" data-sec="chat" onclick="showSection('chat')">💬 Chat <span
+          id="nav-chat-badge"></span></button>
       <button class="nav-item" id="nav-usuarios" data-sec="usuarios" onclick="showSection('usuarios')"
         style="display:none">👥 Usuarios</button>
       <button class="nav-item" id="nav-tablas" data-sec="tablas" onclick="showSection('tablas')" style="display:none">🗂
@@ -5063,6 +5409,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         <div class="drawer-links">
           <button class="drawer-item on" data-sec="operaciones" onclick="mobileShowSection('operaciones')">🗺
             Operaciones</button>
+          <button class="drawer-item" data-sec="chat" onclick="mobileShowSection('chat')">💬 Chat <span
+              id="mnav-chat-badge"></span></button>
           <button class="drawer-item" id="mnav-usuarios" data-sec="usuarios" onclick="mobileShowSection('usuarios')"
             style="display:none">👥 Usuarios</button>
           <button class="drawer-item" id="mnav-tablas" data-sec="tablas" onclick="mobileShowSection('tablas')"
@@ -5103,7 +5451,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.3.6.0
+          Versión V.4.0.0
         </div>
       </div>
 
@@ -5222,6 +5570,34 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div class="pick-banner" id="pick-banner">📍 Haz clic en el mapa para fijar la ubicación</div>
         <div id="map"></div>
+      </div>
+    </div>
+
+    <!-- CHAT SECTION -->
+    <div id="section-chat-view" style="display:none; flex:1; flex-direction:column;">
+      <div id="section-chat">
+        <div class="chat-sidebar">
+          <div
+            style="padding:16px; border-bottom:1px solid var(--border); font-weight:700; color:var(--text-3); font-size:11px; text-transform:uppercase;">
+            Contactos</div>
+          <div class="chat-list" id="chat-list">
+            <!-- Cargado dinámicamente -->
+          </div>
+        </div>
+        <div class="chat-main">
+          <div class="chat-header">
+            <h3 id="chat-target-name">General</h3>
+          </div>
+          <div class="chat-messages" id="chat-messages">
+            <!-- Cargado dinámicamente -->
+          </div>
+          <div class="chat-input-area">
+            <input type="text" id="chat-input" class="chat-input" placeholder="Escribe un mensaje..."
+              onkeydown="if(event.key==='Enter') enviarMensaje()">
+            <button class="btn-reg" style="padding:8px 16px; border-radius:20px;"
+              onclick="enviarMensaje()">Enviar</button>
+          </div>
+        </div>
       </div>
     </div>
 
