@@ -870,11 +870,13 @@
       });
     }
 
+    let currentAssignedIds = [];
     function suscribirRecursos(opId) {
       if (unsubRecursos) unsubRecursos();
       const q = query(collection(db, 'operaciones', opId, 'recursos'), orderBy('asignadoEn', 'desc'));
       unsubRecursos = onSnapshot(q, snap => {
         const recursos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        currentAssignedIds = recursos.map(r => r.recursoId);
         renderRecursosOp(recursos, ops[opId]);
       });
     }
@@ -894,10 +896,14 @@
         const snap = await getDocs(collection(db, 'vehiculos'));
         opcionesRecursosCache.vehiculos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         // Filtrar vehículos por el ámbito de la operación
-        const filtered = opcionesRecursosCache.vehiculos.filter(v => {
+        let filtered = opcionesRecursosCache.vehiculos.filter(v => {
           const prov = v.provincia || 'Málaga';
           return prov === currentOp.provincia;
         });
+
+        // FILTRO: No mostrar los que ya están asignados
+        filtered = filtered.filter(v => !currentAssignedIds.includes(v.id));
+
         filtered.forEach(v => {
           sel.innerHTML += `<option value="${v.id}">${v.indicativo} - ${v.tipo} (${v.matricula})</option>`;
         });
@@ -1016,7 +1022,7 @@
       if (!list) return;
 
       const summary = document.getElementById('dp-recursos-summary');
-      if (summary) summary.textContent = `Recursos asignados (${recursos.length})`;
+      if (summary) summary.textContent = `Asignar Recursos (${recursos.length})`;
 
       if (!recursos.length) {
         list.innerHTML = '<div style="font-size:11px;color:var(--text-4);">No hay recursos asignados.</div>';
@@ -3432,7 +3438,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       padding: 6px 16px 8px;
       border-bottom: 1px solid var(--border);
       flex-shrink: 0;
-      background: var(--bg-1);
+      background: var(--accent-lt);
+      /* Resaltado de color */
     }
 
     .dp-timeline {
@@ -4847,7 +4854,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.3.2.2
+          Versión V.3.3.0
         </div>
       </div>
 
@@ -4880,11 +4887,11 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div class="dp-info-row" id="dp-info-row"></div>
 
-        <!-- RECURSOS ASIGNADOS -->
+        <!-- ASIGNAR RECURSOS -->
         <details class="dp-recursos" id="dp-recursos-wrapper">
           <summary class="section-label" id="dp-recursos-summary"
-            style="cursor:pointer; outline:none; font-size:10px; margin-bottom:6px;">
-            Recursos asignados (0)</summary>
+            style="cursor:pointer; outline:none; font-size:10px; margin-bottom:6px; color:var(--accent);">
+            Asignar Recursos (0)</summary>
           <div id="dp-recursos-list" style="display:flex; flex-direction:column; gap:4px; margin-bottom:8px;"></div>
 
           <div id="dp-recursos-form"
