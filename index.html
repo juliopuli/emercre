@@ -59,6 +59,11 @@
     let unsubRecursos = null;
     let unsubJefes = null;
     let unsubGuardia = null;
+    let trafficLayer = null;
+    let directionsService = null;
+    let directionsRenderer = null;
+    let autocompleteOrigin = null;
+    let autocompleteDest = null;
     let jefeGuardiaActual = null;
     let ops = {};
     let editingUserId = null;
@@ -126,6 +131,14 @@
         streetViewControl: false,
         fullscreenControl: false,
         zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM }
+      });
+
+      trafficLayer = new google.maps.TrafficLayer();
+      directionsService = new google.maps.DirectionsService();
+      directionsRenderer = new google.maps.DirectionsRenderer({
+        map: gmap,
+        suppressMarkers: false,
+        polylineOptions: { strokeColor: '#1a3a6e', strokeOpacity: 0.7, strokeWeight: 5 }
       });
 
       google.maps.event.addListenerOnce(gmap, 'tilesloaded', function () {
@@ -198,6 +211,64 @@
           }
         });
       }
+    };
+
+    window.toggleTraffic = () => {
+      const isOn = !!trafficLayer.getMap();
+      trafficLayer.setMap(isOn ? null : gmap);
+      document.getElementById('btn-toggle-traffic').classList.toggle('active', !isOn);
+      mostrarToast(!isOn ? 'Capa de tráfico activada' : 'Capa de tráfico desactivada');
+    };
+
+    window.toggleDirections = () => {
+      const panel = document.getElementById('map-routing-panel');
+      panel.classList.toggle('open');
+      if (panel.classList.contains('open')) {
+        ensureAutocompleteRouting();
+      }
+    };
+
+    window.ensureAutocompleteRouting = () => {
+      if (!autocompleteOrigin) {
+        autocompleteOrigin = new google.maps.places.Autocomplete(document.getElementById('route-origin'), {
+          fields: ['geometry', 'formatted_address', 'name'],
+          componentRestrictions: { country: 'es' }
+        });
+      }
+      if (!autocompleteDest) {
+        autocompleteDest = new google.maps.places.Autocomplete(document.getElementById('route-dest'), {
+          fields: ['geometry', 'formatted_address', 'name'],
+          componentRestrictions: { country: 'es' }
+        });
+      }
+    };
+
+    window.calculateRoute = () => {
+      const origin = document.getElementById('route-origin').value;
+      const dest = document.getElementById('route-dest').value;
+      if (!origin || !dest) return;
+
+      const btn = document.getElementById('btn-calc-route');
+      btn.disabled = true; btn.textContent = '...';
+
+      directionsService.route({
+        origin: origin,
+        destination: dest,
+        travelMode: google.maps.TravelMode.DRIVING
+      }, (result, status) => {
+        btn.disabled = false; btn.textContent = 'Calcular';
+        if (status === 'OK') {
+          directionsRenderer.setDirections(result);
+        } else {
+          alert('No se pudo calcular la ruta: ' + status);
+        }
+      });
+    };
+
+    window.clearRoute = () => {
+      directionsRenderer.setDirections({ routes: [] });
+      document.getElementById('route-origin').value = '';
+      document.getElementById('route-dest').value = '';
     };
 
     // ── ACTIVIDAD (HEARTBEAT) ──────────────────────────────────────────
@@ -3057,6 +3128,62 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       transform: translateX(14px);
     }
 
+    /* MAP CONTROLS */
+    .map-controls-floating {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .map-btn-float {
+      background: rgba(255, 255, 255, 0.85);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border-mid);
+      border-radius: 4px;
+      padding: 8px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-2);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+      transition: all 0.2s;
+    }
+
+    .map-btn-float:hover {
+      background: #fff;
+      color: var(--accent);
+    }
+
+    .map-btn-float.active {
+      background: var(--accent);
+      color: #fff;
+      border-color: var(--accent);
+    }
+
+    .map-routing-panel {
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border-mid);
+      border-radius: 6px;
+      padding: 12px;
+      width: 240px;
+      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .map-routing-panel.open {
+      display: flex;
+    }
+
     /* SIDEBAR */
     .panel-left {
       width: 320px;
@@ -4964,7 +5091,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.3.4.1
+          Versión V.3.5.0
         </div>
       </div>
 
@@ -5060,6 +5187,25 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
       <button id="btn-mobile-map-toggle" class="btn-mobile-map-toggle" onclick="toggleMobileMap()">Ver Mapa 🗺</button>
       <div class="map-zone">
+        <div class="map-controls-floating">
+          <button id="btn-toggle-traffic" class="map-btn-float" onclick="toggleTraffic()">🚦 Tráfico</button>
+          <button id="btn-toggle-route" class="map-btn-float" onclick="toggleDirections()">🛣️ Rutas</button>
+          <div id="map-routing-panel" class="map-routing-panel">
+            <div
+              style="font-size:10px; font-weight:700; color:var(--text-3); text-transform:uppercase; margin-bottom:4px;">
+              Cálculo de Ruta</div>
+            <input type="text" id="route-origin" class="f-input" placeholder="Origen..."
+              style="padding:6px; font-size:11px;">
+            <input type="text" id="route-dest" class="f-input" placeholder="Destino..."
+              style="padding:6px; font-size:11px;">
+            <div style="display:flex; gap:6px; margin-top:4px;">
+              <button class="btn-reg" id="btn-calc-route" style="flex:2; padding:6px; font-size:11px;"
+                onclick="calculateRoute()">Calcular</button>
+              <button class="btn-cancel-m" style="flex:1; padding:6px; font-size:11px;"
+                onclick="clearRoute()">✖</button>
+            </div>
+          </div>
+        </div>
         <div class="pick-banner" id="pick-banner">📍 Haz clic en el mapa para fijar la ubicación</div>
         <div id="map"></div>
       </div>
