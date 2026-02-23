@@ -326,8 +326,8 @@
             }
           }
         });
-        renderChatList();
         renderChatNavBadge();
+        renderChatList();
       });
     };
 
@@ -347,40 +347,68 @@
       const list = document.getElementById('chat-list');
       if (!list) return;
 
-      // Clonar y ordenar usuarios por actividad reciente
-      const sortedUsers = [...allUsersCache]
-        .filter(u => u.uid !== currentUser.uid)
-        .sort((a, b) => (lastMessageAt[b.uid] || 0) - (lastMessageAt[a.uid] || 0));
+      // Crear lista unificada para ordenar (General + Usuarios)
+      let items = [];
 
-      let html = `
-        <div class="chat-item ${currentChatId === 'general' ? 'active' : ''}" onclick="selectChat('general')" 
-          style="order:${- (lastMessageAt['general'] || 0)}">
-          <div style="width:36px; height:36px; background:var(--accent); border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-size:18px;">👥</div>
-          <div>
-            <div class="name">General</div>
-            <div class="status">Todos los usuarios</div>
-          </div>
-          ${unreadMessages['general'] ? `<span class="chat-badge">${unreadMessages['general']}</span>` : ''}
-        </div>
-      `;
-
-      sortedUsers.forEach(u => {
-        const isOnline = u.enLinea && (Date.now() - (u.ultimaActividad?.toMillis() || 0)) < 300000;
-        html += `
-          <div class="chat-item ${currentChatId === u.uid ? 'active' : ''}" onclick="selectChat('${u.uid}')">
-            <div style="width:36px; height:36px; background:var(--bg-3); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:16px; position:relative;">
-              👤
-              <div style="position:absolute; bottom:0; right:0; width:10px; height:10px; border-radius:50%; background:${isOnline ? '#2ecc71' : '#bdc3c7'}; border:2px solid white;"></div>
-            </div>
-            <div>
-              <div class="name">${u.nombre || u.email}</div>
-              <div class="status">${u.role}</div>
-            </div>
-            ${unreadMessages[u.uid] ? `<span class="chat-badge">${unreadMessages[u.uid]}</span>` : ''}
-          </div>
-        `;
+      // Añadir General
+      items.push({
+        id: 'general',
+        nombre: 'General',
+        sub: 'Todos los usuarios',
+        lastAct: lastMessageAt['general'] || 0,
+        unread: unreadMessages['general'] || 0,
+        isGeneral: true
       });
-      list.innerHTML = html;
+
+      // Añadir Usuarios
+      allUsersCache.forEach(u => {
+        if (u.uid === currentUser.uid) return;
+        const isOnline = u.enLinea && (Date.now() - (u.ultimaActividad?.toMillis() || 0)) < 300000;
+        items.push({
+          id: u.uid,
+          nombre: u.nombre || u.email,
+          sub: u.role,
+          lastAct: lastMessageAt[u.uid] || 0,
+          unread: unreadMessages[u.uid] || 0,
+          isOnline: isOnline,
+          isGeneral: false
+        });
+      });
+
+      // Ordenar por última actividad (descendente)
+      items.sort((a, b) => b.lastAct - a.lastAct);
+
+      list.innerHTML = items.map(item => {
+        const isActive = currentChatId === item.id;
+        const badge = item.unread ? `<span class="chat-badge">${item.unread}</span>` : '';
+
+        if (item.isGeneral) {
+          return `
+            <div class="chat-item ${isActive ? 'active' : ''}" onclick="selectChat('general')" style="order:${-item.lastAct}">
+              <div style="width:36px; height:36px; background:var(--accent); border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-size:18px;">👥</div>
+              <div>
+                <div class="name">General</div>
+                <div class="status">Todos los usuarios</div>
+              </div>
+              ${badge}
+            </div>
+          `;
+        } else {
+          return `
+            <div class="chat-item ${isActive ? 'active' : ''}" onclick="selectChat('${item.id}')" style="order:${-item.lastAct}">
+              <div style="width:36px; height:36px; background:var(--bg-3); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:16px; position:relative;">
+                👤
+                <div style="position:absolute; bottom:0; right:0; width:10px; height:10px; border-radius:50%; background:${item.isOnline ? '#2ecc71' : '#bdc3c7'}; border:2px solid white;"></div>
+              </div>
+              <div>
+                <div class="name">${item.nombre}</div>
+                <div class="status">${item.sub}</div>
+              </div>
+              ${badge}
+            </div>
+          `;
+        }
+      }).join('');
     }
 
     let allUsersCache = [];
@@ -745,6 +773,7 @@
       suscribirOps();
       suscribirJefesSelect();
       suscribirGuardia();
+      cargarUsuariosParaChat();
       suscribirNotificacionesChat();
       showSection('operaciones');
       if (gmap && mapReady) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
@@ -3438,6 +3467,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     .chat-list {
       flex: 1;
       overflow-y: auto;
+      display: flex;
+      flex-direction: column;
     }
 
     .chat-item {
@@ -3472,7 +3503,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     }
 
     .chat-badge {
-      background: #27ae60;
+      background: #e74c3c;
       color: white;
       font-size: 9px;
       font-weight: 700;
@@ -3485,10 +3516,10 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       display: inline-block;
       width: 8px;
       height: 8px;
-      background: #27ae60;
+      background: #e74c3c;
       border-radius: 50%;
       margin-left: 4px;
-      box-shadow: 0 0 8px rgba(39, 174, 96, 0.5);
+      box-shadow: 0 0 8px rgba(231, 76, 60, 0.5);
     }
 
     .chat-main {
@@ -5493,7 +5524,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.2.0
+          Versión V.4.2.2
         </div>
       </div>
 
