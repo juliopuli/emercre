@@ -361,7 +361,8 @@
         const myProv = currentUserDoc.provincia;
         const userProv = u.provincia;
         if (myProv && myProv !== 'Andalucía') {
-          return userProv === myProv;
+          // Si soy provincial, veo mi provincia Y a los autonómicos (Andalucía)
+          return userProv === myProv || userProv === 'Andalucía';
         }
         return true;
       });
@@ -4799,6 +4800,16 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       user-select: none;
     }
 
+    /* SECTIONS V.4.5.0 */
+    #section-usuarios,
+    #section-tablas {
+      padding: 24px;
+      flex-direction: column;
+      gap: 24px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
     .marker-main {
       position: relative;
       width: 70px;
@@ -5543,7 +5554,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.4.0
+          Versión V.4.5.0
         </div>
       </div>
 
