@@ -288,66 +288,65 @@
     };
 
     // ── CHAT LOGIC ─────────────────────────────────────────────────────
-    let lastMessageAt = {}; // Mapa para ordenar por actividad
+    let unreadMessagesGeneral = 0;
+    let unreadMessagesPrivados = {}; // uid -> count
+    let lastMessageAt = {};
+    let unsubUserPresence = null;
+    let unsubChatGeneralGlobal = null;
+    let unsubChatPrivateGlobal = null;
 
     window.suscribirNotificacionesChat = () => {
-      if (unsubChatGlobal) unsubChatGlobal();
-      // Escuchar mensajes recientes para ordenar y notificar (FILTRADO por reglas para evitar error de permisos)
-      const q = query(
-        collection(db, 'chat_mensajes'),
-        or(
-          where('destinatarioId', '==', 'general'),
-          where('destinatarioId', '==', currentUser.uid),
-          where('remitenteId', '==', currentUser.uid)
-        ),
-        orderBy('timestamp', 'desc'),
-        limit(200)
-      );
-      unsubChatGlobal = onSnapshot(q, snap => {
-        unreadMessages = {};
-        lastMessageAt = {};
+      if (unsubChatGeneralGlobal) unsubChatGeneralGlobal();
+      if (unsubChatPrivateGlobal) unsubChatPrivateGlobal();
 
+      const updateGlobalState = () => {
+        renderChatNavBadge();
+        renderChatList();
+      };
+
+      // 1. Escuchar mensajes GENERAL
+      const qGen = query(collection(db, 'chat_mensajes'), where('destinatarioId', '==', 'general'), orderBy('timestamp', 'desc'), limit(20));
+      unsubChatGeneralGlobal = onSnapshot(qGen, snap => {
+        unreadMessagesGeneral = 0;
+        let latestTs = 0;
         snap.forEach(doc => {
           const m = doc.data();
-          const targetId = m.destinatarioId;
-          const senderId = m.remitenteId;
           const ts = m.timestamp?.toMillis ? m.timestamp.toMillis() : (Date.now());
-
-          // 1. Registro de actividad para ordenación
-          if (targetId === 'general') {
-            lastMessageAt['general'] = Math.max(lastMessageAt['general'] || 0, ts);
-          } else {
-            // Actividad privada: afecta a ambos (emisor y receptor)
-            lastMessageAt[senderId] = Math.max(lastMessageAt[senderId] || 0, ts);
-            lastMessageAt[targetId] = Math.max(lastMessageAt[targetId] || 0, ts);
+          latestTs = Math.max(latestTs, ts);
+          if (m.remitenteId !== currentUser.uid) {
+            if (!m.leidoPor || !m.leidoPor.includes(currentUser.uid)) unreadMessagesGeneral++;
           }
+        });
+        if (latestTs > 0) lastMessageAt['general'] = latestTs;
+        updateGlobalState();
+      }, err => console.error("General Listener Error:", err));
 
-          // 2. Conteo de no leídos
-          if (senderId === currentUser.uid) return;
-
-          if (targetId === 'general') {
-            if (!m.leidoPor || !m.leidoPor.includes(currentUser.uid)) {
-              unreadMessages['general'] = (unreadMessages['general'] || 0) + 1;
-            }
-          } else if (targetId === currentUser.uid) {
-            if (!m.leido) {
-              unreadMessages[senderId] = (unreadMessages[senderId] || 0) + 1;
+      // 2. Escuchar mensajes PRIVADOS
+      const qPriv = query(
+        collection(db, 'chat_mensajes'),
+        or(where('destinatarioId', '==', currentUser.uid), where('remitenteId', '==', currentUser.uid)),
+        orderBy('timestamp', 'desc'),
+        limit(100)
+      );
+      unsubChatPrivateGlobal = onSnapshot(qPriv, snap => {
+        unreadMessagesPrivados = {};
+        snap.forEach(doc => {
+          const m = doc.data();
+          const ts = m.timestamp?.toMillis ? m.timestamp.toMillis() : (Date.now());
+          const otherId = m.remitenteId === currentUser.uid ? m.destinatarioId : m.remitenteId;
+          if (otherId !== 'general') {
+            lastMessageAt[otherId] = Math.max(lastMessageAt[otherId] || 0, ts);
+            if (m.destinatarioId === currentUser.uid && !m.leido) {
+              unreadMessagesPrivados[otherId] = (unreadMessagesPrivados[otherId] || 0) + 1;
             }
           }
         });
-        renderChatNavBadge();
-        renderChatList();
-      }, err => {
-        console.error("Global Chat Notification Error:", err);
-      });
+        updateGlobalState();
+      }, err => console.error("Private Listener Error:", err));
     };
 
     function renderChatNavBadge() {
-      // SOLO mensajes privados para el badge global
-      let totalPrivado = 0;
-      for (const uid in unreadMessages) {
-        if (uid !== 'general') totalPrivado += unreadMessages[uid];
-      }
+      let totalPrivado = Object.values(unreadMessagesPrivados).reduce((a, b) => a + b, 0);
       const dot = '<span class="nav-badge"></span>';
       document.getElementById('nav-chat-badge').innerHTML = totalPrivado > 0 ? dot : '';
       const mdot = document.getElementById('mnav-chat-badge');
@@ -367,7 +366,7 @@
         nombre: 'General',
         sub: 'Todos los usuarios',
         lastAct: lastMessageAt['general'] || 0,
-        unread: unreadMessages['general'] || 0,
+        unread: unreadMessagesGeneral,
         isGeneral: true
       });
 
@@ -380,7 +379,7 @@
           nombre: u.nombre || u.email,
           sub: u.role,
           lastAct: lastMessageAt[u.uid] || 0,
-          unread: unreadMessages[u.uid] || 0,
+          unread: unreadMessagesPrivados[u.uid] || 0,
           isOnline: isOnline,
           isGeneral: false
         });
@@ -424,9 +423,11 @@
 
     let allUsersCache = [];
     async function cargarUsuariosParaChat() {
-      const snap = await getDocs(collection(db, 'users'));
-      allUsersCache = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
-      renderChatList();
+      if (unsubUserPresence) unsubUserPresence();
+      unsubUserPresence = onSnapshot(collection(db, 'users'), snap => {
+        allUsersCache = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
+        renderChatList();
+      });
     }
 
     window.selectChat = (id) => {
@@ -593,6 +594,9 @@
         currentUser = null; currentRole = null;
         mostrarLogin();
         detenerListeners();
+        if (unsubUserPresence) unsubUserPresence();
+        if (unsubChatGeneralGlobal) unsubChatGeneralGlobal();
+        if (unsubChatPrivateGlobal) unsubChatPrivateGlobal();
       }
     });
 
@@ -5535,7 +5539,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.2.3
+          Versión V.4.3.0
         </div>
       </div>
 
