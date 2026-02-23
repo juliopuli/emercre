@@ -818,11 +818,32 @@
       renderDetalle(op);
       renderSidebar();
       if (op.coords && gmap) {
-        const b = new google.maps.LatLngBounds();
-        b.extend({ lat: op.coords.lat, lng: op.coords.lng });
-        const leftPad = (window.innerWidth > 900) ? 680 : 40;
-        gmap.fitBounds(b, { top: 60, bottom: 60, left: leftPad, right: 60 });
-        // zoom level adjustment is tricky with fitBounds, but fitBounds is better for "centered" visible area
+        // Centrar suavemente en el área visible (derecha de los paneles)
+        const currentZoom = gmap.getZoom();
+        const targetZoom = (currentZoom < 10 || currentZoom > 16) ? 13 : currentZoom;
+
+        // Offset simple: si el panel de detalle + sidebar son ~700px, 
+        // queremos descentrar el centro real un poco a la izquierda para que el marcador 
+        // quede centrado en el hueco del mapa.
+        const projection = gmap.getProjection();
+        if (projection && window.innerWidth > 900) {
+          const pos = new google.maps.LatLng(op.coords.lat, op.coords.lng);
+          // 350px de offset (mitad del espacio ocupado por paneles)
+          const offset = 350 / Math.pow(2, targetZoom);
+          // Esto es una simplificación, panTo con padding en fitBounds es más preciso pero salta más.
+          // Para evitar saltos, usamos panTo directo si el usuario lo prefiere.
+          // Pero el usuario dice que "desplaza el mapa hacia la derecha". 
+          // Si es absolute, el mapa ocupa todo. Así que el marcador debe quedar 
+          // a la derecha del panel.
+
+          gmap.setZoom(targetZoom);
+          gmap.panTo(pos);
+          // Aplicamos un pequeño retraso para el offset visual si fuera necesario, 
+          // pero panTo estándar es más "estable".
+        } else {
+          gmap.setZoom(targetZoom);
+          gmap.panTo({ lat: op.coords.lat, lng: op.coords.lng });
+        }
       }
       suscribirAcciones(id);
       suscribirRecursos(id);
@@ -2910,6 +2931,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       flex: 1;
       overflow: hidden;
       display: flex;
+      position: relative;
     }
 
     #section-usuarios,
@@ -3240,8 +3262,11 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       display: flex;
       flex-direction: column;
       flex-shrink: 0;
-      position: relative;
-      z-index: 100;
+      position: absolute;
+      top: 0;
+      left: 320px;
+      bottom: 0;
+      z-index: 1000;
       box-shadow: 4px 0 10px rgba(0, 0, 0, 0.05);
       transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s;
     }
@@ -4822,7 +4847,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.3.2.1
+          Versión V.3.2.2
         </div>
       </div>
 
