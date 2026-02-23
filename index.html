@@ -59,6 +59,8 @@
     let unsubRecursos = null;
     let unsubJefes = null;
     let unsubGuardia = null;
+    let unsubGlobalJefes = null;
+    let allJefesGuardiaCacheMap = {}; // "Provincia" -> "Nombre del Jefe"
     let trafficLayer = null;
     let directionsService = null;
     let directionsRenderer = null;
@@ -370,10 +372,27 @@
       // 2. Preparar items de contactos privados y ordenarlos
       let privateItems = filteredUsers.map(u => {
         const isOnline = u.enLinea && (Date.now() - (u.ultimaActividad?.toMillis() || 0)) < 300000;
+
+        // Determinar rol amigable (V.4.8.0)
+        let roleLabel = ROL_LABELS[u.role] || u.role;
+        let isJefeDeGuardia = false;
+        let jefeProv = '';
+
+        // Buscar si es jefe de guardia en alguna provincia
+        for (const [prov, nombreJefe] of Object.entries(allJefesGuardiaCacheMap)) {
+          if (nombreJefe === u.nombre) {
+            isJefeDeGuardia = true;
+            jefeProv = prov;
+            break;
+          }
+        }
+
         return {
           id: u.uid,
           nombre: u.nombre || u.email,
-          sub: u.role,
+          roleLabel: roleLabel,
+          isJefeDeGuardia: isJefeDeGuardia,
+          jefeProv: jefeProv,
           lastAct: lastMessageAt[u.uid] || 0,
           unread: unreadMessagesPrivados[u.uid] || 0,
           isOnline: isOnline,
@@ -418,7 +437,9 @@
               </div>
               <div>
                 <div class="name">${item.nombre}</div>
-                <div class="status">${item.sub}</div>
+                <div class="status">
+                  ${item.isJefeDeGuardia ? `<span style="color: #e74c3c; font-weight: 600;">Jefe de Operaciones de Guardia en "${item.jefeProv}"</span>` : item.roleLabel}
+                </div>
               </div>
               ${badge}
             </div>
@@ -808,6 +829,7 @@
       suscribirOps();
       suscribirJefesSelect();
       suscribirGuardia();
+      suscribirTodosLosJefes();
       cargarUsuariosParaChat();
       suscribirNotificacionesChat();
       showSection('operaciones');
@@ -820,6 +842,7 @@
       if (unsubRecursos) { unsubRecursos(); unsubRecursos = null; }
       if (unsubJefes) { unsubJefes(); unsubJefes = null; }
       if (unsubGuardia) { unsubGuardia(); unsubGuardia = null; }
+      if (unsubGlobalJefes) { unsubGlobalJefes(); unsubGlobalJefes = null; }
       // Clean chat listeners (V.4.5.1)
       if (unsubChatGeneralGlobal) { unsubChatGeneralGlobal(); unsubChatGeneralGlobal = null; }
       if (unsubChatPrivateGlobal) { unsubChatPrivateGlobal(); unsubChatPrivateGlobal = null; }
@@ -2743,6 +2766,20 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           const sel = document.getElementById('hdr-jefe-guardia-sel');
           if (sel) sel.value = '';
         }
+      });
+    }
+
+    function suscribirTodosLosJefes() {
+      if (unsubGlobalJefes) unsubGlobalJefes();
+      unsubGlobalJefes = onSnapshot(collection(db, 'config_guardia'), snap => {
+        allJefesGuardiaCacheMap = {};
+        snap.forEach(d => {
+          if (d.data().jefeNombre) {
+            allJefesGuardiaCacheMap[d.id] = d.data().jefeNombre;
+          }
+        });
+        // Refrescar chat si está visible
+        renderChatList();
       });
     }
 
@@ -5592,7 +5629,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.7.0
+          Versión V.4.8.0
         </div>
       </div>
 
