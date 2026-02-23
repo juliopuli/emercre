@@ -20,6 +20,8 @@
       onSnapshot, query, where, orderBy, limit, limitToLast, serverTimestamp, getDoc, getDocs, arrayUnion, or, and
     }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+    import { initializeAppCheck, ReCaptchaV3Provider }
+      from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app-check.js";
 
     // ── CONFIGURACIÓN IA ───────────────────────────────────────────────
     let geminiApiKey = '__GEMINI_API_KEY__'; // Clave por defecto proporcionada por el usuario
@@ -36,6 +38,20 @@
     const fbApp = initializeApp(firebaseConfig);
     const auth = getAuth(fbApp);
     const db = getFirestore(fbApp);
+
+    // ── FIREBASE APP CHECK (V.4.9.0) ──────────────────────────────────
+    // IMPORTANTE: Para que esto funcione en producción, debes registrar 
+    // tu sitio en la consola de Firebase y obtener la clave de reCAPTCHA v3.
+    // Solo se permite acceso desde los dominios autorizados.
+    try {
+      self.FIREBASE_APPCHECK_DEBUG_TOKEN = true; // Activa modo debug para desarrollo local
+      initializeAppCheck(fbApp, {
+        provider: new ReCaptchaV3Provider('6LcV3eEqAAAAAKS7R_z5_K4_7_y_X_P_T_Q_0_A_Z'), // Reemplazar con clave real de reCAPTCHA v3
+        isTokenAutoRefreshEnabled: true
+      });
+    } catch (e) {
+      console.warn("App Check failed to initialize (probable dev environment):", e);
+    }
 
     // ── ESTADO GLOBAL ──────────────────────────────────────────────────
     let currentUser = null;
@@ -5633,7 +5649,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.8.1
+          Versión V.4.9.0
         </div>
       </div>
 
