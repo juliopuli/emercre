@@ -304,8 +304,8 @@
         renderChatList();
       };
 
-      // 1. Escuchar mensajes GENERAL (Sin orderBy para evitar necesidad de índices compuestos)
-      const qGen = query(collection(db, 'chat_mensajes'), where('destinatarioId', '==', 'general'), limit(100));
+      // 1. Escuchar mensajes GENERAL (Sin limit ni orderBy para asegurar recibir los últimos sin índices)
+      const qGen = query(collection(db, 'chat_mensajes'), where('destinatarioId', '==', 'general'));
       unsubChatGeneralGlobal = onSnapshot(qGen, snap => {
         unreadMessagesGeneral = 0;
         let latestTs = 0;
@@ -321,11 +321,10 @@
         updateGlobalState();
       }, err => console.error("General Listener Error:", err));
 
-      // 2. Escuchar mensajes PRIVADOS (Sin orderBy)
+      // 2. Escuchar mensajes PRIVADOS (Sin limit ni orderBy)
       const qPriv = query(
         collection(db, 'chat_mensajes'),
-        or(where('destinatarioId', '==', currentUser.uid), where('remitenteId', '==', currentUser.uid)),
-        limit(300)
+        or(where('destinatarioId', '==', currentUser.uid), where('remitenteId', '==', currentUser.uid))
       );
       unsubChatPrivateGlobal = onSnapshot(qPriv, snap => {
         unreadMessagesPrivados = {};
@@ -5538,7 +5537,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.3.1
+          Versión V.4.3.2
         </div>
       </div>
 
