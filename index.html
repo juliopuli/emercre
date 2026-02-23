@@ -43,6 +43,7 @@
     let currentUserDoc = null;
     let selOpId = null;
     let filtro = 'all';
+    let mostrarCerradas = false;
     let picking = false;
     let pickedCoords = null;
     let pickedAddress = '';
@@ -437,6 +438,10 @@
         document.getElementById('mnav-tablas').style.display = canManageUsers ? 'block' : 'none';
       }
 
+      const isPrivileged = currentRole === 'super_admin' || currentRole === 'manager' || currentRole === 'admin';
+      const sideToggle = document.getElementById('sidebar-toggle-cerradas');
+      if (sideToggle) sideToggle.style.display = isPrivileged ? 'flex' : 'none';
+
       suscribirOps();
       suscribirJefesSelect();
       suscribirGuardia();
@@ -729,6 +734,16 @@
       if (selectedProvincia !== 'Andalucía') {
         visible = visible.filter(o => o.provincia === selectedProvincia);
       }
+
+      // Lógica de filtrado de intervenciones ocultas (V.3.4.0)
+      visible = visible.filter(op => {
+        const isCerrada = op.estado === 'finalizada';
+        const isOculta = op.oculta === true;
+        // Si está activa o no está oculta, pasa.
+        // Si está oculta, solo pasa si mostrarCerradas es true.
+        if (isOculta) return mostrarCerradas;
+        return true;
+      });
 
       visible.sort((a, b) => {
         // Prioridad Crítica (N4) siempre arriba
@@ -1099,7 +1114,31 @@
       document.querySelectorAll('.nsel-opt').forEach(b => {
         b.disabled = isFinalizada;
       });
+
+      // Lógica de Ocultar (V.3.4.0)
+      const hideWrapper = document.getElementById('dp-hide-wrapper');
+      if (hideWrapper) {
+        if (isFinalizada && (currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'manager')) {
+          hideWrapper.style.display = 'flex';
+          document.getElementById('dp-hide-switch').checked = !!op.oculta;
+        } else {
+          hideWrapper.style.display = 'none';
+        }
+      }
     }
+
+    window.toggleOcultarActual = async (checked) => {
+      if (!selOpId) return;
+      try {
+        await updateDoc(doc(db, 'operaciones', selOpId), { oculta: checked, actualizadoEn: serverTimestamp() });
+        mostrarToast(checked ? 'Intervención ocultada' : 'Intervención visible');
+      } catch (e) { alert('Error: ' + e.message); }
+    };
+
+    window.toggleGlobalCerradas = (checked) => {
+      mostrarCerradas = checked;
+      renderSidebar();
+    };
 
     function renderTimeline(acciones, op) {
       const tl = document.getElementById('dp-timeline');
@@ -2940,7 +2979,6 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       position: relative;
     }
 
-    #section-usuarios,
     #section-tablas {
       flex: 1;
       height: 100%;
@@ -2953,6 +2991,54 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       gap: 16px;
       background: var(--bg);
       max-width: 100vw;
+    }
+
+    /* Switch Toggle */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 32px;
+      height: 18px;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: var(--bg-3);
+      transition: .4s;
+      border-radius: 18px;
+      border: 1px solid var(--border-mid);
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 12px;
+      width: 12px;
+      left: 2px;
+      bottom: 2px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+
+    input:checked+.slider {
+      background-color: var(--accent);
+      border-color: var(--accent);
+    }
+
+    input:checked+.slider:before {
+      transform: translateX(14px);
     }
 
     /* SIDEBAR */
@@ -4846,6 +4932,14 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             <button class="ftab" onclick="setFiltro('4',this)">N4</button>
           </div>
         </div>
+        <div id="sidebar-toggle-cerradas"
+          style="display:none; align-items:center; gap:8px; padding:4px 16px 8px; border-bottom:1px dashed var(--border-mid);">
+          <span style="font-size:10px; color:var(--text-3); font-weight:600;">Mostrar intervenciones cerradas</span>
+          <label class="switch">
+            <input type="checkbox" onchange="toggleGlobalCerradas(this.checked)">
+            <span class="slider"></span>
+          </label>
+        </div>
         <div class="ops-list" id="ops-list">
           <div class="empty-msg show" id="empty-msg">
             <div style="font-size:28px;opacity:0.4">📋</div>
@@ -4854,7 +4948,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.3.3.0
+          Versión V.3.4.0
         </div>
       </div>
 
@@ -4937,6 +5031,13 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <div class="dp-admin-btns" id="dp-admin-btns" style="padding:0;border:none;display:none;">
             <button id="dp-reabrir-btn" class="btn-edit-op" onclick="reabrirOp()" style="display:none;">Abrir</button>
             <button class="btn-danger" onclick="borrarOp()">🗑 Borrar</button>
+          </div>
+          <div id="dp-hide-wrapper" style="margin-left:auto; display:none; align-items:center; gap:6px;">
+            <span style="font-size:10px; color:var(--text-3); font-weight:600;">Ocultar</span>
+            <label class="switch">
+              <input type="checkbox" id="dp-hide-switch" onchange="toggleOcultarActual(this.checked)">
+              <span class="slider"></span>
+            </label>
           </div>
         </div>
       </div>
