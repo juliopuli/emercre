@@ -288,23 +288,41 @@
     };
 
     // ── CHAT LOGIC ─────────────────────────────────────────────────────
+    let lastMessageAt = {}; // Mapa para ordenar por actividad
+
     window.suscribirNotificacionesChat = () => {
       if (unsubChatGlobal) unsubChatGlobal();
-      // Escuchar todos los mensajes para contar no leídos
-      const q = query(collection(db, 'chat_mensajes'), orderBy('timestamp', 'desc'), limit(100));
+      // Escuchar mensajes recientes para ordenar y notificar
+      const q = query(collection(db, 'chat_mensajes'), orderBy('timestamp', 'desc'), limit(150));
       unsubChatGlobal = onSnapshot(q, snap => {
         unreadMessages = {};
+        lastMessageAt = {};
+
         snap.forEach(doc => {
           const m = doc.data();
-          if (m.remitenteId === currentUser.uid) return;
+          const targetId = m.destinatarioId;
+          const senderId = m.remitenteId;
+          const ts = m.timestamp?.toMillis ? m.timestamp.toMillis() : 0;
 
-          if (m.destinatarioId === 'general') {
+          // 1. Registro de actividad para ordenación
+          if (targetId === 'general') {
+            lastMessageAt['general'] = Math.max(lastMessageAt['general'] || 0, ts);
+          } else {
+            // Actividad privada: afecta a ambos (emisor y receptor)
+            lastMessageAt[senderId] = Math.max(lastMessageAt[senderId] || 0, ts);
+            lastMessageAt[targetId] = Math.max(lastMessageAt[targetId] || 0, ts);
+          }
+
+          // 2. Conteo de no leídos
+          if (senderId === currentUser.uid) return;
+
+          if (targetId === 'general') {
             if (!m.leidoPor || !m.leidoPor.includes(currentUser.uid)) {
               unreadMessages['general'] = (unreadMessages['general'] || 0) + 1;
             }
-          } else if (m.destinatarioId === currentUser.uid) {
+          } else if (targetId === currentUser.uid) {
             if (!m.leido) {
-              unreadMessages[m.remitenteId] = (unreadMessages[m.remitenteId] || 0) + 1;
+              unreadMessages[senderId] = (unreadMessages[senderId] || 0) + 1;
             }
           }
         });
@@ -314,19 +332,29 @@
     };
 
     function renderChatNavBadge() {
-      const total = Object.values(unreadMessages).reduce((a, b) => a + b, 0);
+      // SOLO mensajes privados para el badge global
+      let totalPrivado = 0;
+      for (const uid in unreadMessages) {
+        if (uid !== 'general') totalPrivado += unreadMessages[uid];
+      }
       const dot = '<span class="nav-badge"></span>';
-      document.getElementById('nav-chat-badge').innerHTML = total > 0 ? dot : '';
+      document.getElementById('nav-chat-badge').innerHTML = totalPrivado > 0 ? dot : '';
       const mdot = document.getElementById('mnav-chat-badge');
-      if (mdot) mdot.innerHTML = total > 0 ? dot : '';
+      if (mdot) mdot.innerHTML = totalPrivado > 0 ? dot : '';
     }
 
     function renderChatList() {
       const list = document.getElementById('chat-list');
       if (!list) return;
 
+      // Clonar y ordenar usuarios por actividad reciente
+      const sortedUsers = [...allUsersCache]
+        .filter(u => u.uid !== currentUser.uid)
+        .sort((a, b) => (lastMessageAt[b.uid] || 0) - (lastMessageAt[a.uid] || 0));
+
       let html = `
-        <div class="chat-item ${currentChatId === 'general' ? 'active' : ''}" onclick="selectChat('general')">
+        <div class="chat-item ${currentChatId === 'general' ? 'active' : ''}" onclick="selectChat('general')" 
+          style="order:${- (lastMessageAt['general'] || 0)}">
           <div style="width:36px; height:36px; background:var(--accent); border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-size:18px;">👥</div>
           <div>
             <div class="name">General</div>
@@ -336,9 +364,7 @@
         </div>
       `;
 
-      // Usuarios registrados
-      allUsersCache.forEach(u => {
-        if (u.uid === currentUser.uid) return;
+      sortedUsers.forEach(u => {
         const isOnline = u.enLinea && (Date.now() - (u.ultimaActividad?.toMillis() || 0)) < 300000;
         html += `
           <div class="chat-item ${currentChatId === u.uid ? 'active' : ''}" onclick="selectChat('${u.uid}')">
@@ -5467,7 +5493,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.1.2
+          Versión V.4.2.0
         </div>
       </div>
 
