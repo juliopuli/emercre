@@ -443,15 +443,14 @@
 
       let q;
       if (chatId === 'general') {
-        q = query(collection(db, 'chat_mensajes'), where('destinatarioId', '==', 'general'), limit(200));
+        q = query(collection(db, 'chat_mensajes'), where('destinatarioId', '==', 'general'));
       } else {
         // Chat privado: usamos 'or' para cubrir remitente/destinatario de forma segura con las reglas
         q = query(collection(db, 'chat_mensajes'),
           or(
             and(where('remitenteId', '==', currentUser.uid), where('destinatarioId', '==', chatId)),
             and(where('remitenteId', '==', chatId), where('destinatarioId', '==', currentUser.uid))
-          ),
-          limit(300)
+          )
         );
       }
 
