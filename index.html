@@ -1925,13 +1925,20 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       handleTipoChange('f');
       document.getElementById('f-nivel').value = '3';
       document.getElementById('f-dir').value = 'Julio Pulido Morilla';
-      document.getElementById('f-org').value = '112';
+      document.getElementById('f-org').value = '';
       document.getElementById('coord-box').classList.remove('show');
     };
 
     window.crearOp = async () => {
       const nombre = document.getElementById('f-nombre').value.trim();
       if (!nombre) { document.getElementById('f-nombre').focus(); return; }
+
+      const org = document.getElementById('f-org').value;
+      if (!org) {
+        alert('El campo "Solicitado por" es obligatorio.');
+        document.getElementById('f-org').focus();
+        return;
+      }
       const btn = document.getElementById('btn-crear-op');
       btn.disabled = true; btn.textContent = 'Creando…';
       try {
@@ -5578,7 +5585,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.5.2
+          Versión V.4.6.0
         </div>
       </div>
 
@@ -5870,6 +5877,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <div class="field" style="flex:1;">
             <div class="field-lbl">Solicitado por:</div>
             <select class="f-input f-select" id="f-org" style="width:100%" onchange="handleSolicitadoChange('f')">
+              <option value="">-- Seleccionar --</option>
               <option value="112">112</option>
               <option value="061">061</option>
               <option value="Ayuntamiento">Ayuntamiento</option>
