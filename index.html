@@ -292,8 +292,17 @@
 
     window.suscribirNotificacionesChat = () => {
       if (unsubChatGlobal) unsubChatGlobal();
-      // Escuchar mensajes recientes para ordenar y notificar
-      const q = query(collection(db, 'chat_mensajes'), orderBy('timestamp', 'desc'), limit(150));
+      // Escuchar mensajes recientes para ordenar y notificar (FILTRADO por reglas para evitar error de permisos)
+      const q = query(
+        collection(db, 'chat_mensajes'),
+        or(
+          where('destinatarioId', '==', 'general'),
+          where('destinatarioId', '==', currentUser.uid),
+          where('remitenteId', '==', currentUser.uid)
+        ),
+        orderBy('timestamp', 'desc'),
+        limit(200)
+      );
       unsubChatGlobal = onSnapshot(q, snap => {
         unreadMessages = {};
         lastMessageAt = {};
@@ -302,7 +311,7 @@
           const m = doc.data();
           const targetId = m.destinatarioId;
           const senderId = m.remitenteId;
-          const ts = m.timestamp?.toMillis ? m.timestamp.toMillis() : 0;
+          const ts = m.timestamp?.toMillis ? m.timestamp.toMillis() : (Date.now());
 
           // 1. Registro de actividad para ordenación
           if (targetId === 'general') {
@@ -328,6 +337,8 @@
         });
         renderChatNavBadge();
         renderChatList();
+      }, err => {
+        console.error("Global Chat Notification Error:", err);
       });
     };
 
@@ -384,7 +395,7 @@
 
         if (item.isGeneral) {
           return `
-            <div class="chat-item ${isActive ? 'active' : ''}" onclick="selectChat('general')" style="order:${-item.lastAct}">
+            <div class="chat-item ${isActive ? 'active' : ''}" onclick="selectChat('general')">
               <div style="width:36px; height:36px; background:var(--accent); border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-size:18px;">👥</div>
               <div>
                 <div class="name">General</div>
@@ -395,7 +406,7 @@
           `;
         } else {
           return `
-            <div class="chat-item ${isActive ? 'active' : ''}" onclick="selectChat('${item.id}')" style="order:${-item.lastAct}">
+            <div class="chat-item ${isActive ? 'active' : ''}" onclick="selectChat('${item.id}')">
               <div style="width:36px; height:36px; background:var(--bg-3); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:16px; position:relative;">
                 👤
                 <div style="position:absolute; bottom:0; right:0; width:10px; height:10px; border-radius:50%; background:${item.isOnline ? '#2ecc71' : '#bdc3c7'}; border:2px solid white;"></div>
@@ -5524,7 +5535,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.2.2
+          Versión V.4.2.3
         </div>
       </div>
 
