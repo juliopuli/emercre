@@ -2709,9 +2709,11 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             document.getElementById(`${prefix}-dir`).value = jefeNombre;
             const orgSelect = document.getElementById(`${prefix}-org`);
             if (orgSelect) {
-              // Eliminado auto-relleno de 'Jefe de Operaciones' para obligar a selección manual (V.4.6.1)
-              // orgSelect.value = 'Jefe de Operaciones';
-              // handleSolicitadoChange(prefix);
+              // Si ya está seleccionado 'Jefe de Operaciones', sincronizamos el sub-selector (V.4.6.3)
+              if (orgSelect.value === 'Jefe de Operaciones') {
+                const subSelect = document.getElementById(`${prefix}-org-sub-select`);
+                if (subSelect) subSelect.value = jefeNombre;
+              }
             }
           }
         }
@@ -5585,7 +5587,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.6.2
+          Versión V.4.6.3
         </div>
       </div>
 
