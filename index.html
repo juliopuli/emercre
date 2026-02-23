@@ -616,9 +616,11 @@
       if (hasValidCoords && !editPickMode && !picking) {
         if (boundsTimeout) clearTimeout(boundsTimeout);
         boundsTimeout = setTimeout(() => {
-          gmap.fitBounds(bounds, { top: 40, bottom: 40, left: 40, right: 380 });
-          // right padding for the desktop sidebar so it doesn't hide markers
-          if (gmap.getZoom() > 14) gmap.setZoom(14); // prevent excessive zooming on single marker
+          // Adjust padding for the desktop sidebar(s)
+          const leftPad = (selOpId && window.innerWidth > 900) ? 720 : 340;
+          // 340 (sidebar) + 380 (detail) ~ 720
+          gmap.fitBounds(bounds, { top: 40, bottom: 40, left: leftPad, right: 40 });
+          if (gmap.getZoom() > 14) gmap.setZoom(14);
         }, 100);
       }
     }
@@ -3229,25 +3231,19 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
     /* DETAIL PANEL */
     .detail-panel {
-      position: fixed !important;
-      top: 60px !important;
-      right: 0 !important;
-      left: auto !important;
-      bottom: 0 !important;
-      width: 380px !important;
+      width: 380px;
       background: var(--bg-1);
-      border-left: 1px solid var(--border-mid);
-      display: flex;
+      border-right: 1px solid var(--border-mid);
+      display: none;
       flex-direction: column;
-      z-index: 2000 !important;
-      /* Above mostly everything */
-      transform: translateX(100%);
-      transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
-      box-shadow: -10px 0 30px rgba(0, 0, 0, 0.15);
+      flex-shrink: 0;
+      position: relative;
+      z-index: 100;
+      box-shadow: 4px 0 10px rgba(0, 0, 0, 0.05);
     }
 
     .detail-panel.open {
-      transform: translateX(0);
+      display: flex;
     }
 
     .dp-header {
@@ -4449,13 +4445,17 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
       .detail-panel {
         width: 100% !important;
+        position: fixed !important;
+        top: 0 !important;
         left: 0 !important;
         right: 0 !important;
+        bottom: 0 !important;
         border-left: none;
         z-index: 5500 !important;
-        /* Above mobile menu overlay if needed */
         transform: translateY(100%) !important;
-        top: 0 !important;
+        display: flex !important;
+        /* Always drawer-like on mobile when toggled */
+        transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1) !important;
       }
 
       .detail-panel.open {
@@ -4816,16 +4816,11 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.3.1.0
+          Versión V.3.2.0
         </div>
       </div>
-      <button id="btn-mobile-map-toggle" class="btn-mobile-map-toggle" onclick="toggleMobileMap()">Ver Mapa 🗺</button>
-      <div class="map-zone">
-        <div class="pick-banner" id="pick-banner">📍 Haz clic en el mapa para fijar la ubicación</div>
-        <div id="map"></div>
-      </div>
 
-      <!-- PANEL DETALLE -->
+      <!-- PANEL DETALLE (Movido aquí a la izquierda) -->
       <div class="detail-panel" id="detail-panel">
         <div class="dp-header">
           <div class="dp-scope-title" id="dp-scope-title"></div>
@@ -4906,6 +4901,12 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             <button class="btn-danger" onclick="borrarOp()">🗑 Borrar</button>
           </div>
         </div>
+      </div>
+
+      <button id="btn-mobile-map-toggle" class="btn-mobile-map-toggle" onclick="toggleMobileMap()">Ver Mapa 🗺</button>
+      <div class="map-zone">
+        <div class="pick-banner" id="pick-banner">📍 Haz clic en el mapa para fijar la ubicación</div>
+        <div id="map"></div>
       </div>
     </div>
 
