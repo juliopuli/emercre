@@ -805,7 +805,10 @@
       if (unsubRecursos) { unsubRecursos(); unsubRecursos = null; }
       if (unsubJefes) { unsubJefes(); unsubJefes = null; }
       if (unsubGuardia) { unsubGuardia(); unsubGuardia = null; }
-      if (unsubChatGlobal) { unsubChatGlobal(); unsubChatGlobal = null; }
+      // Clean chat listeners (V.4.5.1)
+      if (unsubChatGeneralGlobal) { unsubChatGeneralGlobal(); unsubChatGeneralGlobal = null; }
+      if (unsubChatPrivateGlobal) { unsubChatPrivateGlobal(); unsubChatPrivateGlobal = null; }
+      if (unsubUserPresence) { unsubUserPresence(); unsubUserPresence = null; }
       if (unsubChatDetail) { unsubChatDetail(); unsubChatDetail = null; }
       ops = {};
     }
@@ -2114,6 +2117,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       } else {
         document.getElementById('section-chat-view').style.display = 'none';
         document.getElementById('section-chat').style.display = 'none';
+        // Detener listener de detalle al salir del chat para permitir notificaciones (V.4.5.1)
+        if (unsubChatDetail) { unsubChatDetail(); unsubChatDetail = null; }
       }
 
       if (sec === 'usuarios') suscribirUsuarios();
@@ -5554,7 +5559,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.5.0
+          Versión V.4.5.1
         </div>
       </div>
 
