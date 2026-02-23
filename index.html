@@ -63,6 +63,14 @@
     let ops = {};
     let editingUserId = null;
 
+    // Helper visibilidad (V.3.4.1)
+    function isOpVisible(op) {
+      if (!op) return false;
+      const isOculta = op.oculta === true;
+      if (isOculta) return mostrarCerradas;
+      return true;
+    }
+
     // ── ESTRUCTURA AUTONÓMICA ──────────────────────────────────────────
     const PROVINCIAS = ['Almería', 'Cádiz', 'Córdoba', 'Granada', 'Jaén', 'Huelva', 'Málaga', 'Sevilla'];
     let selectedProvincia = 'Andalucía'; // 'Andalucía' o una provincia concreta
@@ -563,14 +571,22 @@
     let boundsTimeout = null;
     function renderMapa() {
       if (!gmap || !mapReady) return;
+
+      // Limpiar marcadores que ya no existen o no son visibles (V.3.4.1)
       Object.keys(gmMarkers).forEach(id => {
-        if (!ops[id]) { gmMarkers[id].setMap(null); delete gmMarkers[id]; }
+        if (!ops[id] || !isOpVisible(ops[id])) {
+          gmMarkers[id].setMap(null);
+          delete gmMarkers[id];
+        }
       });
 
       const bounds = new google.maps.LatLngBounds();
       let hasValidCoords = false;
 
       Object.values(ops).forEach(op => {
+        // Filtrado por visibilidad (V.3.4.1)
+        if (!isOpVisible(op)) return;
+
         // Filtrado por provincia
         if (selectedProvincia !== 'Andalucía' && op.provincia !== selectedProvincia) return;
 
@@ -727,7 +743,7 @@
       const empty = document.getElementById('empty-msg');
       list.querySelectorAll('.op-card').forEach(c => c.remove());
 
-      let visible = Object.values(ops);
+      let visible = Object.values(ops).filter(isOpVisible);
       if (filtro !== 'all') visible = visible.filter(o => String(o.nivel) === filtro);
 
       // Filtrado por provincia
@@ -4948,7 +4964,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.3.4.0
+          Versión V.3.4.1
         </div>
       </div>
 
