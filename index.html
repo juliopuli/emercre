@@ -439,12 +439,27 @@
     window.selectChat = (id) => {
       currentChatId = id;
       renderChatList();
+      const inputArea = document.getElementById('chat-input-area');
+
+      if (!id) {
+        document.getElementById('chat-target-name').textContent = 'Selecciona una conversación';
+        if (inputArea) inputArea.style.display = 'none';
+        if (unsubChatDetail) { unsubChatDetail(); unsubChatDetail = null; }
+        document.getElementById('chat-messages').innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-4);">\
+          <div style="font-size:32px; margin-bottom:10px;">💬</div>\
+          Elija una persona o el canal General para comenzar a chatear.\
+        </div>';
+        return;
+      }
+
+      if (inputArea) inputArea.style.display = 'flex';
       const name = id === 'general' ? 'General' : (allUsersCache.find(u => u.uid === id)?.nombre || 'Chat Privado');
       document.getElementById('chat-target-name').textContent = name;
       suscribirChatDetalle(id);
     };
 
     function suscribirChatDetalle(chatId) {
+      if (!chatId) return; // V.4.5.2
       if (unsubChatDetail) unsubChatDetail();
       const msgsDiv = document.getElementById('chat-messages');
       msgsDiv.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-4);">Cargando mensajes...</div>';
@@ -2113,12 +2128,16 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         document.getElementById('section-chat-view').style.display = 'flex';
         document.getElementById('section-chat').style.display = 'flex';
         cargarUsuariosParaChat();
-        selectChat(currentChatId);
+        // Al entrar, no auto-seleccionamos si no hay nada (V.4.5.2)
+        if (currentChatId) selectChat(currentChatId);
+        else selectChat(null);
       } else {
         document.getElementById('section-chat-view').style.display = 'none';
         document.getElementById('section-chat').style.display = 'none';
         // Detener listener de detalle al salir del chat para permitir notificaciones (V.4.5.1)
         if (unsubChatDetail) { unsubChatDetail(); unsubChatDetail = null; }
+        // Deseleccionar chat al salir para que al volver no se marque como leído auto (V.4.5.2)
+        currentChatId = null;
       }
 
       if (sec === 'usuarios') suscribirUsuarios();
@@ -5559,7 +5578,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.5.1
+          Versión V.4.5.2
         </div>
       </div>
 
@@ -5699,7 +5718,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <div class="chat-messages" id="chat-messages">
             <!-- Cargado dinámicamente -->
           </div>
-          <div class="chat-input-area" style="align-items: flex-end; padding: 12px 16px;">
+          <div id="chat-input-area" class="chat-input-area"
+            style="display: none; align-items: flex-end; padding: 12px 16px;">
             <textarea id="chat-input" class="chat-input" placeholder="Escribe un mensaje..." rows="1"
               oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"
               onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); enviarMensaje(); }"></textarea>
