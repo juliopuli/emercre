@@ -379,12 +379,12 @@
 
       let q;
       if (chatId === 'general') {
-        q = query(collection(db, 'chat_mensajes'), where('destinatarioId', '==', 'general'), limitToLast(50));
+        q = query(collection(db, 'chat_mensajes'), where('destinatarioId', '==', 'general'), orderBy('timestamp', 'asc'), limitToLast(50));
       } else {
         // Chat privado: mensajes de A para B O de B para A
         q = query(collection(db, 'chat_mensajes'),
           where('destinatarioId', 'in', [currentUser.uid, chatId]),
-          limitToLast(100)
+          limit(200)
         );
       }
 
@@ -433,6 +433,9 @@
         });
         msgsDiv.scrollTop = msgsDiv.scrollHeight;
         if (batchToMark.length > 0) await Promise.all(batchToMark);
+      }, err => {
+        console.error("Chat error:", err);
+        msgsDiv.innerHTML = `<div style="text-align:center; padding:20px; color:var(--crit-1);">Error: ${err.message}</div>`;
       });
     }
 
@@ -3531,12 +3534,16 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
     .chat-input {
       flex: 1;
-      padding: 12px 18px;
+      padding: 10px 14px;
       border: 1px solid var(--border-mid);
-      border-radius: 20px;
-      font-size: 14px;
+      border-radius: 6px;
+      font-size: 13px;
       background: var(--bg-2);
       outline: none;
+      min-height: 40px;
+      max-height: 120px;
+      resize: none;
+      line-height: 1.4;
     }
 
     .chat-input:focus {
@@ -5454,7 +5461,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.1.0
+          Versión V.4.1.1
         </div>
       </div>
 
@@ -5594,12 +5601,12 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <div class="chat-messages" id="chat-messages">
             <!-- Cargado dinámicamente -->
           </div>
-          <div class="chat-input-area" style="align-items: flex-end;">
-            <textarea id="chat-input" class="chat-input" placeholder="Escribe un mensaje..." rows="2"
-              style="resize:none; height: auto; min-height: 44px; padding: 10px 14px;"
+          <div class="chat-input-area" style="align-items: flex-end; padding: 12px 16px;">
+            <textarea id="chat-input" class="chat-input" placeholder="Escribe un mensaje..." rows="1"
+              oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"
               onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); enviarMensaje(); }"></textarea>
-            <button class="btn-reg"
-              style="padding:4px 10px; border-radius:8px; font-size:11px; height: 44px; min-width: 60px; align-self: flex-end;"
+            <button class="btn-create-m"
+              style="padding:0 12px; border-radius:6px; font-size:12px; height: 38px; min-width: 70px; margin-bottom: 0; align-self: flex-end;"
               onclick="enviarMensaje()">Enviar</button>
           </div>
         </div>
