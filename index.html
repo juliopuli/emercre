@@ -613,13 +613,10 @@
         }
       });
 
-      if (hasValidCoords && !editPickMode && !picking) {
+      if (hasValidCoords && !editPickMode && !picking && !selOpId) {
         if (boundsTimeout) clearTimeout(boundsTimeout);
         boundsTimeout = setTimeout(() => {
-          // Adjust padding for the desktop sidebar(s)
-          const leftPad = (selOpId && window.innerWidth > 900) ? 720 : 340;
-          // 340 (sidebar) + 380 (detail) ~ 720
-          gmap.fitBounds(bounds, { top: 40, bottom: 40, left: leftPad, right: 40 });
+          gmap.fitBounds(bounds, { top: 40, bottom: 40, left: 340, right: 40 });
           if (gmap.getZoom() > 14) gmap.setZoom(14);
         }, 100);
       }
@@ -821,8 +818,11 @@
       renderDetalle(op);
       renderSidebar();
       if (op.coords && gmap) {
-        gmap.panTo({ lat: op.coords.lat, lng: op.coords.lng });
-        gmap.setZoom(13);
+        const b = new google.maps.LatLngBounds();
+        b.extend({ lat: op.coords.lat, lng: op.coords.lng });
+        const leftPad = (window.innerWidth > 900) ? 680 : 40;
+        gmap.fitBounds(b, { top: 60, bottom: 60, left: leftPad, right: 60 });
+        // zoom level adjustment is tricky with fitBounds, but fitBounds is better for "centered" visible area
       }
       suscribirAcciones(id);
       suscribirRecursos(id);
@@ -835,6 +835,7 @@
       if (unsubAcciones) { unsubAcciones(); unsubAcciones = null; }
       if (unsubRecursos) { unsubRecursos(); unsubRecursos = null; }
       renderSidebar();
+      renderMapa(); // Re-center map to show all
     };
 
     function suscribirAcciones(opId) {
@@ -3231,19 +3232,24 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
     /* DETAIL PANEL */
     .detail-panel {
-      width: 380px;
+      width: 0;
+      opacity: 0;
+      overflow: hidden;
       background: var(--bg-1);
-      border-right: 1px solid var(--border-mid);
-      display: none;
+      border-right: none;
+      display: flex;
       flex-direction: column;
       flex-shrink: 0;
       position: relative;
       z-index: 100;
       box-shadow: 4px 0 10px rgba(0, 0, 0, 0.05);
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s;
     }
 
     .detail-panel.open {
-      display: flex;
+      width: 380px;
+      opacity: 1;
+      border-right: 1px solid var(--border-mid);
     }
 
     .dp-header {
@@ -4816,7 +4822,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.3.2.0
+          Versión V.3.2.1
         </div>
       </div>
 
