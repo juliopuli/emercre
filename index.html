@@ -355,10 +355,34 @@
       const list = document.getElementById('chat-list');
       if (!list) return;
 
-      // Crear lista unificada para ordenar (General + Usuarios)
-      let items = [];
+      // 1. Filtrar usuarios por ámbito (provincia)
+      const filteredUsers = allUsersCache.filter(u => {
+        if (u.uid === currentUser.uid) return false;
+        const myProv = currentUserDoc.provincia;
+        const userProv = u.provincia;
+        if (myProv && myProv !== 'Andalucía') {
+          return userProv === myProv;
+        }
+        return true;
+      });
 
-      // Añadir General
+      // 2. Preparar items de contactos privados y ordenarlos
+      let privateItems = filteredUsers.map(u => {
+        const isOnline = u.enLinea && (Date.now() - (u.ultimaActividad?.toMillis() || 0)) < 300000;
+        return {
+          id: u.uid,
+          nombre: u.nombre || u.email,
+          sub: u.role,
+          lastAct: lastMessageAt[u.uid] || 0,
+          unread: unreadMessagesPrivados[u.uid] || 0,
+          isOnline: isOnline,
+          isGeneral: false
+        };
+      });
+      privateItems.sort((a, b) => b.lastAct - a.lastAct);
+
+      // 3. Crear lista final con General SIEMPRE primero (PINNED)
+      let items = [];
       items.push({
         id: 'general',
         nombre: 'General',
@@ -367,24 +391,7 @@
         unread: unreadMessagesGeneral,
         isGeneral: true
       });
-
-      // Añadir Usuarios
-      allUsersCache.forEach(u => {
-        if (u.uid === currentUser.uid) return;
-        const isOnline = u.enLinea && (Date.now() - (u.ultimaActividad?.toMillis() || 0)) < 300000;
-        items.push({
-          id: u.uid,
-          nombre: u.nombre || u.email,
-          sub: u.role,
-          lastAct: lastMessageAt[u.uid] || 0,
-          unread: unreadMessagesPrivados[u.uid] || 0,
-          isOnline: isOnline,
-          isGeneral: false
-        });
-      });
-
-      // Ordenar por última actividad (descendente)
-      items.sort((a, b) => b.lastAct - a.lastAct);
+      items = items.concat(privateItems);
 
       list.innerHTML = items.map(item => {
         const isActive = currentChatId === item.id;
