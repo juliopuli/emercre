@@ -1857,6 +1857,9 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             break;
           case 'Jefe de Operaciones':
             subSelect.style.display = 'block';
+            // Auto-seleccionar el jefe que ya está puesto en el campo de dirección (V.4.6.2)
+            const jefeActual = document.getElementById(`${prefix}-dir`).value;
+            if (jefeActual) subSelect.value = jefeActual;
             break;
           default:
             subContainer.style.display = 'none';
@@ -5582,7 +5585,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.6.1
+          Versión V.4.6.2
         </div>
       </div>
 
