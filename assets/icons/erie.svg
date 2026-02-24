@@ -1,0 +1,17 @@
+<svg width="240" height="135" viewBox="0 0 240 135" xmlns="http://www.w3.org/2000/svg">
+  <!-- Top section: Red background -->
+  <rect x="0" y="0" width="240" height="100" fill="#ff1f1f" />
+  
+  <!-- "ERIE" Text -->
+  <text x="120" y="75" font-family="Arial, sans-serif" font-weight="900" font-size="64" fill="#ffffff" text-anchor="middle" letter-spacing="2">ERIE</text>
+  
+  <!-- Bottom section: White background for text -->
+  <rect x="0" y="100" width="240" height="35" fill="#ffffff" />
+  
+  <!-- "EQUIPO DE RESPUESTA INMEDIATA EN EMERGENCIAS" Text -->
+  <text x="120" y="117" font-family="Arial, sans-serif" font-weight="900" font-size="12" fill="#ff1f1f" text-anchor="middle" letter-spacing="0.5">EQUIPO DE RESPUESTA INMEDIATA</text>
+  <text x="120" y="130" font-family="Arial, sans-serif" font-weight="900" font-size="12" fill="#ff1f1f" text-anchor="middle" letter-spacing="0.5">EN EMERGENCIAS</text>
+
+  <!-- Border -->
+  <rect x="0" y="0" width="240" height="135" fill="none" stroke="#ff1f1f" stroke-width="4"/>
+</svg>
