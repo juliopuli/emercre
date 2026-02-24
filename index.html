@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>EmerCRE — Sistema de Gestión de Catástrofes</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link
@@ -1106,7 +1106,8 @@
       if (hasValidCoords && !editPickMode && !picking && !selOpId) {
         if (boundsTimeout) clearTimeout(boundsTimeout);
         boundsTimeout = setTimeout(() => {
-          gmap.fitBounds(bounds, { top: 40, bottom: 40, left: 340, right: 40 });
+          const isMobile = window.innerWidth < 900;
+          gmap.fitBounds(bounds, isMobile ? { top: 30, bottom: 30, left: 30, right: 30 } : { top: 40, bottom: 40, left: 340, right: 40 });
           if (gmap.getZoom() > 14) gmap.setZoom(14);
         }, 100);
       }
@@ -6652,7 +6653,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.5.5.1
+          Versión V.5.5.2
         </div>
       </div>
 
