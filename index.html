@@ -939,7 +939,19 @@
       container.className = 'custom-marker';
       container.style.setProperty('--nivel-color', color);
 
-      let html = `
+      let html = '';
+      if (recursosSummary && recursosSummary['erbes'] > 0) {
+        const count = recursosSummary['erbes'];
+        const isCrit = nivel == 4;
+        html += `<div class="marker-top-badges ${isCrit ? 'has-crit' : ''}">
+                  <div class="badge-item-erbe">
+                    <img src="assets/icons/erbe.svg" class="badge-erbes-img">
+                    ${count > 1 ? `<div class="badge-count">${count}</div>` : ''}
+                  </div>
+                </div>`;
+      }
+
+      html += `
         <div class="marker-main">
           ${isNew ? '<div class="marker-new-glow"></div>' : ''}
           ${nivel == 4 ? '<div class="marker-crit-badge">!</div>' : ''}
@@ -949,18 +961,19 @@
       `;
 
       if (recursosSummary) {
-        let badgesHtml = '<div class="marker-badges">';
         const types = [
           { key: 'camiones', icon: 'assets/icons/truck.png' },
           { key: 'ambulancias', icon: 'assets/icons/ambulance.png' },
           { key: 'offroad', icon: 'assets/icons/offroad.png' },
-          { key: 'van', icon: 'assets/icons/van.png' },
-          { key: 'erbes', icon: 'assets/icons/erbe.svg' }
+          { key: 'van', icon: 'assets/icons/van.png' }
         ];
 
+        let hasVehicles = false;
+        let badgesHtml = '<div class="marker-badges">';
         types.forEach(t => {
           const count = recursosSummary[t.key] || 0;
           if (count > 0) {
+            hasVehicles = true;
             badgesHtml += `
               <div class="badge-item">
                 <img src="${t.icon}" class="badge-img badge-${t.key}">
@@ -969,7 +982,7 @@
           }
         });
         badgesHtml += '</div>';
-        html += badgesHtml;
+        if (hasVehicles) html += badgesHtml;
       }
 
       container.innerHTML = html;
@@ -5137,8 +5150,36 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       object-fit: contain;
     }
 
-    .badge-erbes {
-      width: 48px;
+    .marker-top-badges {
+      position: absolute;
+      bottom: calc(100% + 4px);
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      pointer-events: none;
+    }
+
+    .marker-top-badges.has-crit {
+      bottom: calc(100% + 18px);
+      /* Elevamos si hay exclamación de crítica */
+    }
+
+    .badge-item-erbe {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+    }
+
+    .badge-erbes-img {
+      width: 65px;
+      height: auto;
+      object-fit: contain;
+      border-radius: 2px;
     }
 
     .badge-count {
@@ -5791,7 +5832,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.10.3
+          Versión V.4.10.4
         </div>
       </div>
 
@@ -6348,7 +6389,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.4.10.3
+            Versión V.4.10.4
           </div>
         </div>
         <div class="field" id="j-prov-row">
