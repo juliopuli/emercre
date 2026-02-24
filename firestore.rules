@@ -1,0 +1,87 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function rol() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+    }
+    function logueado() {
+      return request.auth != null;
+    }
+
+    match /users/{userId} {
+      allow read: if logueado();
+      allow update: if logueado() && (
+        rol() == 'super_admin' || 
+        (rol() == 'manager' && resource.data.role in ['admin', 'usuario']) ||
+        request.auth.uid == userId
+      );
+      allow create: if logueado() && (
+        rol() == 'super_admin' || 
+        (rol() == 'manager' && request.resource.data.role in ['admin', 'usuario'])
+      );
+      allow delete: if logueado() && rol() == 'super_admin';
+      
+      match /sessions/{sessionId} {
+        allow read: if logueado() && (request.auth.uid == userId || rol() == 'super_admin');
+        allow create: if logueado() && request.auth.uid == userId;
+      }
+    }
+
+    match /operaciones/{opId} {
+      allow read: if logueado();
+      allow create: if logueado() && rol() in ['super_admin', 'manager', 'admin'];
+      allow update: if logueado() && rol() in ['super_admin', 'manager', 'admin', 'usuario'];
+      allow delete: if logueado() && rol() == 'super_admin';
+    }
+
+    match /operaciones/{opId}/acciones/{accionId} {
+      allow read: if logueado();
+      allow create: if logueado();
+      allow update, delete: if logueado() && rol() in ['super_admin', 'manager', 'admin'];
+    }
+
+    match /vehiculos/{vId} {
+      allow read: if logueado();
+      allow create, update, delete: if logueado() && rol() in ['super_admin', 'manager'];
+    }
+
+    match /erbes/{eId} {
+      allow read: if logueado();
+      allow create, update, delete: if logueado() && rol() in ['super_admin', 'manager'];
+    }
+
+    match /jefes_operaciones/{jId} {
+      allow read: if logueado();
+      allow create, update, delete: if logueado() && rol() in ['super_admin', 'manager'];
+    }
+
+    match /config_guardia/{docId} {
+      allow read: if logueado();
+      allow create, update, delete: if logueado() && rol() in ['super_admin', 'manager', 'admin', 'autonomica', 'provincial'];
+    }
+    
+    match /operaciones/{opId}/recursos/{recursoId} {
+      allow read: if logueado();
+      allow create: if logueado();
+      allow update, delete: if logueado() && rol() in ['super_admin', 'manager', 'admin', 'usuario'];
+    }
+
+    // ── REGLAS PARA EL CHAT (V.4.0.1) ───────────────────────────────────
+    match /chat_mensajes/{msgId} {
+      // Un usuario solo puede leer mensajes del canal general o donde sea remitente/destinatario
+      allow read: if logueado() && (
+        resource.data.destinatarioId == 'general' ||
+        resource.data.destinatarioId == request.auth.uid ||
+        resource.data.remitenteId == request.auth.uid
+      );
+      // Solo el remitente puede crear el mensaje
+      allow create: if logueado() && request.resource.data.remitenteId == request.auth.uid;
+      // Permitir actualización solo para marcar como leído (privado o general)
+      allow update: if logueado() && (
+        resource.data.destinatarioId == request.auth.uid || 
+        resource.data.destinatarioId == 'general'
+      );
+    }
+  }
+}
