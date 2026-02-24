@@ -5074,10 +5074,11 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
     .marker-expand-card {
       position: absolute;
-      /* Default collapsed state (hidden) */
-      top: 0;
+      /* Anchor the bottom of the card safely above the ERBE icon */
+      bottom: calc(100% + 85px);
       left: 50%;
-      transform: translateX(-50%) translateY(-50%) scale(0.95);
+      transform: translateX(-50%) scale(0.95);
+      transform-origin: bottom center;
       background: white;
       border-radius: 4px;
       padding: 12px;
@@ -5095,8 +5096,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     .custom-marker.expanded .marker-expand-card {
       opacity: 1;
       visibility: visible;
-      /* Rise above the ERBE icon natively */
-      transform: translateX(-50%) translateY(-145px) scale(1);
+      /* The transform only translates X, the bottom anchor handles Y */
+      transform: translateX(-50%) scale(1);
       pointer-events: auto;
       z-index: 20;
     }
@@ -5926,7 +5927,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.11.5
+          Versión V.4.11.6
         </div>
       </div>
 
@@ -6483,7 +6484,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.4.11.5
+            Versión V.4.11.6
           </div>
         </div>
         <div class="field" id="j-prov-row">
