@@ -1023,7 +1023,7 @@
             <span style="font-size:9px;font-weight:700;padding:2px 7px;border-radius:2px;
               background:${NIVEL_COLORS[op.nivel]}20;color:${NIVEL_COLORS[op.nivel]};
               border:1px solid ${NIVEL_COLORS[op.nivel]}50;">
-              N${op.nivel} ${NIVEL_LABELS[op.nivel]}
+              ${NIVEL_LABELS[op.nivel]}
             </span>
           </div>
           <button onclick="window.abrirDetalle('${op.id}')"
@@ -1043,7 +1043,7 @@
     function renderMapa() {
       if (!gmap || !mapReady) return;
 
-      // Build search filter helper (V.5.3.0)
+      // Build search filter helper (V.5.4.0)
       const q = searchQuery.trim().toLowerCase();
       function isOpSearchVisible(op) {
         if (!isOpVisible(op)) return false;
@@ -1226,7 +1226,7 @@
         return true;
       });
 
-      // Búsqueda de texto (V.5.3.0)
+      // Búsqueda de texto (V.5.4.0)
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
         visible = visible.filter(op => {
@@ -1289,7 +1289,7 @@
         <span class="card-loc">📍 ${op.loc || 'Sin ubicación'}</span>
         <div style="display:flex; gap:4px; align-items:center;">
           ${op.estado === 'finalizada' ? '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:2px;background:var(--bg-3);color:var(--text-3);border:1px solid var(--border-mid);">FINALIZADA</span>' : ''}
-          <span class="nivel-pill pill-${op.nivel}">N${op.nivel} ${NIVEL_LABELS[op.nivel]}</span>
+          <span class="nivel-pill pill-${op.nivel}">${NIVEL_LABELS[op.nivel]}</span>
         </div>
       </div>`;
         card.addEventListener('click', () => {
@@ -6263,15 +6263,10 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
       </div>
       <div class="hdr-div"></div>
-      <div class="nivel-indicators">
-        <div class="nivel-chip chip-n1"><span class="nivel-chip-val" id="cnt1">0</span><span
-            class="nivel-chip-lbl">N1</span></div>
-        <div class="nivel-chip chip-n2"><span class="nivel-chip-val" id="cnt2">0</span><span
-            class="nivel-chip-lbl">N2</span></div>
-        <div class="nivel-chip chip-n3"><span class="nivel-chip-val" id="cnt3">0</span><span
-            class="nivel-chip-lbl">N3</span></div>
-        <div class="nivel-chip chip-n4"><span class="nivel-chip-val" id="cnt4">0</span><span
-            class="nivel-chip-lbl">N4</span></div>
+      <div style="display:flex; align-items:center; gap:10px;">
+        <div id="clock"
+          style="font-family:'IBM Plex Mono',monospace; font-size:22px; font-weight:700; color:var(--accent); letter-spacing:1px;">
+          --:--:--</div>
       </div>
       <div class="hdr-right">
         <!-- Jefe de Guardia -->
@@ -6293,15 +6288,6 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           </div>
         </div>
 
-        <div class="hdr-div"></div>
-
-        <!-- Hora -->
-        <div style="display:flex; flex-direction:column; align-items:flex-end;">
-          <span
-            style="font-size:9px; color:var(--text-3); font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Hora
-            Local</span>
-          <div class="clock" id="clock" style="font-weight:600;">--:--:--</div>
-        </div>
 
         <div class="hdr-div"></div>
 
@@ -6410,7 +6396,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.5.3.0
+          Versión V.5.4.0
         </div>
       </div>
 
@@ -7008,7 +6994,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.5.3.0
+            Versión V.5.4.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
