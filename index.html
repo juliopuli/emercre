@@ -114,7 +114,7 @@
     let ops = {};
     let editingUserId = null;
 
-    // ── CONFIGURACIÓN PUENTE NOTIFICACIONES (V.5.8.11) ──────────────────
+    // ── CONFIGURACIÓN PUENTE NOTIFICACIONES (V.5.10.0) ─────────────────
     const NOTIF_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbzl-ljIznAWZq-jifONqRwgweLNBYN5PPC1UJpohQkadV3WLTIMFkc_CQtRusYJJZx2/exec";
 
 
@@ -745,11 +745,11 @@
       };
       const lines = Object.entries(status).map(([k, v]) => `${k}: ${v}`).join('\n');
       alert("--- Diagnóstico Push ---\n" + lines);
-    };    // Función para disparar la notificación (V.5.7.0)
+    };    // Función para disparar la notificación push real (V.5.10.0)
     window.broadcastNuevaOperacion = async (op) => {
       console.log("Broadcasting nueva operación:", op.nombre);
 
-      // 1. Guardar en una colección de "pendientes" por si el usuario pone una Cloud Function o Relay
+      // 1. Guardar en colección de pendientes (backup / auditoría)
       try {
         await addDoc(collection(db, 'fcm_notificaciones'), {
           titulo: 'Nueva Operación',
@@ -762,19 +762,37 @@
         console.warn("No se pudo guardar la petición de push:", e);
       }
 
-      // 2. Notificar vía Puente (Google Apps Script) para iOS / Pantalla Bloqueada
-      if (NOTIF_BRIDGE_URL) {
-        fetch(NOTIF_BRIDGE_URL, {
-          method: 'POST',
-          mode: 'no-cors', // Importante para Google Apps Script
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            titulo: 'Nueva Operación',
-            body: `${op.creadoPorNombre} ha creado: ${op.nombre}`,
-            provincia: op.provincia,
-            data: { opId: op.id }
-          })
-        }).catch(err => console.warn("Error al llamar al puente de notificaciones:", err));
+      // 2. Recoger tokens FCM de los usuarios del ámbito correcto
+      const tokens = allUsersCache
+        .filter(u => {
+          if (u.uid === currentUser.uid) return false; // No notificarme a mí mismo
+          if (!u.fcmToken) return false; // Sin token = sin push
+          if (!u.activo) return false; // Usuarios inactivos
+          // Filtrar por provincia: notificar a los de esa provincia + autonómicos
+          if (u.provincia === op.provincia || u.provincia === 'Andalucía') return true;
+          return false;
+        })
+        .map(u => u.fcmToken);
+
+      console.log(`Tokens FCM a notificar: ${tokens.length}`);
+
+      // 3. Enviar al puente GAS para push real (FCM HTTP v1)
+      if (NOTIF_BRIDGE_URL && tokens.length > 0) {
+        try {
+          const resp = await fetch(NOTIF_BRIDGE_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain' }, // text/plain evita preflight CORS
+            body: JSON.stringify({
+              tokens: tokens,
+              titulo: 'Nueva Operación',
+              body: `${op.creadoPorNombre} ha creado: ${op.nombre}`,
+              data: { opId: op.id }
+            })
+          });
+          console.log("Puente Push respuesta:", resp.status);
+        } catch (err) {
+          console.warn("Error al llamar al puente de notificaciones:", err);
+        }
       }
     }
 
@@ -7268,7 +7286,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          Versión V.5.9.3 (Chat Auth Only SuperAdmin)
+          Versión V.5.10.0 (Real Push via FCM Bridge)
         </div>
       </div>
 
