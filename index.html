@@ -409,14 +409,24 @@
       const list = document.getElementById('chat-list');
       if (!list) return;
 
-      // 1. Filtrar usuarios por ámbito (provincia)
+      // 1. Filtrar usuarios por ámbito (provincia) y preferencia autonómica
       const filteredUsers = allUsersCache.filter(u => {
         if (u.uid === currentUser.uid) return false;
         const myProv = currentUserDoc.provincia;
         const userProv = u.provincia;
+
         if (myProv && myProv !== 'Andalucía') {
-          return userProv === myProv || userProv === 'Andalucía';
+          // Si yo soy de una provincia específica (ej. Sevilla) veo a los de mi provincia
+          if (userProv === myProv) return true;
+          // Si el otro es Autonómico, lo veo SOLO si tiene aparecerEnTodosLosChats !== false
+          // Si no tiene la propiedad definida (usuarios antiguos), por compatibilidad se asume true
+          if (userProv === 'Andalucía') {
+            return u.aparecerEnTodosLosChats !== false;
+          }
+          return false;
         }
+
+        // Si yo soy Autonómico (Andalucía) los veo a todos, no hay filtro de provincia
         return true;
       });
 
@@ -2662,6 +2672,13 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       });
     }
 
+    window.checkAutonomicScope = (val) => {
+      const row = document.getElementById('u-todos-chats-row');
+      if (row) {
+        row.style.display = val === 'Andalucía' ? 'flex' : 'none';
+      }
+    };
+
     window.abrirModalUsuario = () => {
       editingUserId = null;
       document.getElementById('modal-user-title').textContent = 'Nuevo usuario';
@@ -2682,7 +2699,9 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       }
 
       document.getElementById('u-activo').value = 'true';
+      document.getElementById('u-todos-chats').checked = true; // Por defecto checked
       document.getElementById('u-pass-row').style.display = 'flex';
+      checkAutonomicScope(provSel.value);
       document.getElementById('overlay-user').classList.add('open');
       document.getElementById('u-nombre').focus();
     };
@@ -2745,7 +2764,10 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       }
 
       document.getElementById('u-activo').value = u.activo === false ? 'false' : 'true';
+      // Retrocompatibilidad: si no está definido, asume true
+      document.getElementById('u-todos-chats').checked = u.aparecerEnTodosLosChats !== false;
       document.getElementById('u-pass-row').style.display = 'none';
+      checkAutonomicScope(provSel.value);
       document.getElementById('overlay-user').classList.add('open');
     };
 
@@ -2761,12 +2783,14 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       const role = document.getElementById('u-role').value;
       const provincia = document.getElementById('u-provincia').value;
       const activo = document.getElementById('u-activo').value === 'true';
+      const aparecerEnTodosLosChats = document.getElementById('u-todos-chats').checked && provincia === 'Andalucía';
+
       if (!nombre || !email) { alert('Nombre y email son obligatorios.'); return; }
       const btn = document.getElementById('btn-guardar-user');
       btn.disabled = true; btn.textContent = 'Guardando…';
       try {
         if (editingUserId) {
-          await updateDoc(doc(db, 'users', editingUserId), { nombre, role, provincia, activo });
+          await updateDoc(doc(db, 'users', editingUserId), { nombre, role, provincia, activo, aparecerEnTodosLosChats });
           mostrarToast('Usuario actualizado.');
         } else {
           if (!pass || pass.length < 6) { alert('La contraseña debe tener al menos 6 caracteres.'); btn.disabled = false; btn.textContent = 'Guardar'; return; }
@@ -2780,7 +2804,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           const data = await res.json();
           if (data.error) throw new Error(data.error.message);
           await setDoc(doc(db, 'users', data.localId), {
-            nombre, email, role, provincia, activo,
+            nombre, email, role, provincia, activo, aparecerEnTodosLosChats,
             creadoPor: currentUser.uid,
             creadoEn: serverTimestamp()
           });
@@ -7213,7 +7237,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          Versión V.5.8.13 (WebPush Mobile UI Fix)
+          Versión V.5.9.0 (Chat Visibility settings)
         </div>
       </div>
 
@@ -7763,7 +7787,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           </div>
           <div class="field" style="flex:1;">
             <div class="field-lbl">Perfil / Provincia</div>
-            <select class="f-input f-select" id="u-provincia" style="width:100%">
+            <select class="f-input f-select" id="u-provincia" style="width:100%"
+              onchange="checkAutonomicScope(this.value)">
               <option value="Andalucía">Oficina Autonómica de Andalucía</option>
               <option value="Almería">Oficina Provincial de Almería</option>
               <option value="Cádiz">Oficina Provincial de Cádiz</option>
@@ -7782,6 +7807,13 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             <option value="true">Activo</option>
             <option value="false">Inactivo</option>
           </select>
+        </div>
+        <div class="field" id="u-todos-chats-row"
+          style="display:none; margin-top:12px; align-items:center; gap:8px; padding:12px; background:var(--bg-2); border-radius:6px; border:1px solid var(--border-mid);">
+          <input type="checkbox" id="u-todos-chats" style="width:18px; height:18px; cursor:pointer;" checked>
+          <label for="u-todos-chats"
+            style="font-size:13px; font-weight:600; color:var(--text-1); cursor:pointer;">Aparecer en los chats de todas
+            las provincias</label>
         </div>
       </div>
       <div class="modal-foot">
