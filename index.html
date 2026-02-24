@@ -1212,7 +1212,7 @@
         return true;
       });
 
-      // Búsqueda de texto (V.5.2.0)
+      // Búsqueda de texto (V.5.2.1)
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
         visible = visible.filter(op => {
@@ -1681,6 +1681,7 @@
     window.toggleGlobalCerradas = (checked) => {
       mostrarCerradas = checked;
       renderSidebar();
+      renderMapa();
     };
 
     function renderTimeline(acciones, op) {
@@ -6393,7 +6394,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.5.2.0
+          Versión V.5.2.1
         </div>
       </div>
 
@@ -6991,7 +6992,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.5.2.0
+            Versión V.5.2.1
           </div>
         </div>
         <div class="field" id="j-prov-row">
