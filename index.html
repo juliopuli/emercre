@@ -58,6 +58,8 @@
     let filtro = 'all';
     let mostrarCerradas = false;
     let searchQuery = '';
+    let userSearchQuery = '';
+    let tablasSearchQuery = '';
     let picking = false;
     let pickedCoords = null;
     let pickedAddress = '';
@@ -1210,7 +1212,7 @@
         return true;
       });
 
-      // Búsqueda de texto (V.5.1.1)
+      // Búsqueda de texto (V.5.2.0)
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
         visible = visible.filter(op => {
@@ -2321,44 +2323,54 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     };
 
     let unsubUsuarios = null;
+    let cachedUsersSnap = null;
+
     function suscribirUsuarios() {
       if (unsubUsuarios) unsubUsuarios();
       unsubUsuarios = onSnapshot(collection(db, 'users'), snap => {
-        const tbody = document.getElementById('users-tbody');
-        if (!tbody) return;
-        tbody.innerHTML = '';
-        const now = Date.now();
-        const twoHours = 2 * 60 * 60 * 1000;
+        cachedUsersSnap = snap;
+        renderUsersTable();
+      });
+    }
 
-        const adminProv = currentUserDoc.provincia || 'Andalucía';
+    function renderUsersTable() {
+      if (!cachedUsersSnap) return;
+      const tbody = document.getElementById('users-tbody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+      const now = Date.now();
+      const twoHours = 2 * 60 * 60 * 1000;
+      const adminProv = currentUserDoc.provincia || 'Andalucía';
+      const q = userSearchQuery.trim().toLowerCase();
 
-        snap.forEach(d => {
-          const u = d.data();
+      cachedUsersSnap.forEach(d => {
+        const u = d.data();
+        if (adminProv !== 'Andalucía' && u.provincia !== adminProv) return;
+        if (currentRole === 'manager') {
+          if (u.role !== 'admin' && u.role !== 'usuario') return;
+        }
 
-          // Filtrado por ámbito del administrador
-          if (adminProv !== 'Andalucía' && u.provincia !== adminProv) return;
+        // Search filter
+        if (q) {
+          const fields = [u.nombre || '', u.email || '', u.provincia || '', ROL_LABELS[u.role] || u.role || ''].join(' ').toLowerCase();
+          if (!fields.includes(q)) return;
+        }
 
-          // Filtrado por jerarquía de roles
-          if (currentRole === 'manager') {
-            // Un Administrador sólo puede ver Responsables y Usuarios
-            if (u.role !== 'admin' && u.role !== 'usuario') return;
-          }
+        const lastAct = u.ultimaActividad?.toMillis ? u.ultimaActividad.toMillis() : 0;
+        const isRecentlyActive = (now - lastAct) < twoHours;
+        const isOnline = u.enLinea === true && isRecentlyActive;
 
-          const lastAct = u.ultimaActividad?.toMillis ? u.ultimaActividad.toMillis() : 0;
-          const isRecentlyActive = (now - lastAct) < twoHours;
-          const isOnline = u.enLinea === true && isRecentlyActive;
+        const initials = (u.nombre || 'U').split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+        const hue = (u.nombre || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
+        const avatarBg = `hsl(${hue}, 45%, 55%)`;
 
-          const initials = (u.nombre || 'U').split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
-          const hue = (u.nombre || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
-          const avatarBg = `hsl(${hue}, 45%, 55%)`;
+        const svgEdit = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+        const svgLog = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`;
+        const svgTrash = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
+        const svgToggle = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>`;
 
-          const svgEdit = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
-          const svgLog = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`;
-          const svgTrash = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
-          const svgToggle = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>`;
-
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
           <td>
             <div style="display:flex; align-items:center; gap:10px;">
               <div class="user-avatar" style="background:${avatarBg};">${initials}</div>
@@ -2380,16 +2392,29 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             <button class="tbl-btn" onclick="editarUsuario('${d.id}')" title="Editar">${svgEdit}</button>
             <button class="tbl-btn" onclick="abrirLogUsuario('${d.id}', '${u.nombre || u.email}')" title="Ver log">${svgLog}</button>
             ${d.id !== currentUser.uid
-              ? (currentRole === 'super_admin'
-                ? `<button class="tbl-btn danger" onclick="borrarUsuario('${d.id}')" title="Eliminar de la DB">${svgTrash}</button>
+            ? (currentRole === 'super_admin'
+              ? `<button class="tbl-btn danger" onclick="borrarUsuario('${d.id}')" title="Eliminar de la DB">${svgTrash}</button>
                    <button class="tbl-btn" onclick="desactivarUsuario('${d.id}')" title="Desactivar">${svgToggle}</button>`
-                : `<button class="tbl-btn danger" onclick="desactivarUsuario('${d.id}')" title="Desactivar">${svgToggle}</button>`)
-              : '<span style="font-size:11px;color:var(--text-4)">(tú)</span>'}
+              : `<button class="tbl-btn danger" onclick="desactivarUsuario('${d.id}')" title="Desactivar">${svgToggle}</button>`)
+            : '<span style="font-size:11px;color:var(--text-4)">(tú)</span>'}
           </td>`;
-          tbody.appendChild(tr);
-        });
+        tbody.appendChild(tr);
       });
     }
+
+    window.handleUserSearch = (value) => {
+      userSearchQuery = value;
+      document.getElementById('user-search-clear').style.display = value ? 'flex' : 'none';
+      renderUsersTable();
+    };
+
+    window.clearUserSearch = () => {
+      const input = document.getElementById('user-search');
+      if (input) input.value = '';
+      userSearchQuery = '';
+      document.getElementById('user-search-clear').style.display = 'none';
+      renderUsersTable();
+    };
 
     function cargarOpcionesRoles(selId) {
       const sel = document.getElementById(selId);
@@ -2566,6 +2591,13 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       const activeBtn = document.getElementById(`subnav-${tabla}`);
       if (activeBtn) activeBtn.classList.add('active');
 
+      // Reset search when switching tabs
+      tablasSearchQuery = '';
+      const tSearch = document.getElementById('tablas-search');
+      if (tSearch) tSearch.value = '';
+      const tClear = document.getElementById('tablas-search-clear');
+      if (tClear) tClear.style.display = 'none';
+
       const contVeh = document.getElementById('tabla-vehiculos-container');
       if (contVeh) contVeh.style.display = tabla === 'vehiculos' ? 'flex' : 'none';
 
@@ -2582,6 +2614,35 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       if (tabla === 'erbes') cargarErbes();
       if (tabla === 'eries') cargarEries();
       if (tabla === 'jefes') cargarJefes();
+    };
+
+    window.handleTablasSearch = (value) => {
+      tablasSearchQuery = value;
+      document.getElementById('tablas-search-clear').style.display = value ? 'flex' : 'none';
+      // Re-render the active tab
+      const activeTab = document.querySelector('#tablas-subnav .tablas-pill.active');
+      if (activeTab) {
+        const id = activeTab.id.replace('subnav-', '');
+        if (id === 'vehiculos') cargarVehiculos();
+        else if (id === 'erbes') cargarErbes();
+        else if (id === 'eries') cargarEries();
+        else if (id === 'jefes') cargarJefes();
+      }
+    };
+
+    window.clearTablasSearch = () => {
+      const input = document.getElementById('tablas-search');
+      if (input) input.value = '';
+      tablasSearchQuery = '';
+      document.getElementById('tablas-search-clear').style.display = 'none';
+      const activeTab = document.querySelector('#tablas-subnav .tablas-pill.active');
+      if (activeTab) {
+        const id = activeTab.id.replace('subnav-', '');
+        if (id === 'vehiculos') cargarVehiculos();
+        else if (id === 'erbes') cargarErbes();
+        else if (id === 'eries') cargarEries();
+        else if (id === 'jefes') cargarJefes();
+      }
     };
 
     window.changeProvincia = (val) => {
@@ -2606,10 +2667,19 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
       const allVehs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
       // Filtrado por ámbito (con fallback a Málaga)
-      const visible = allVehs.filter(v => {
+      let visible = allVehs.filter(v => {
         const prov = v.provincia || 'Málaga';
         return selectedProvincia === 'Andalucía' || prov === selectedProvincia;
       });
+
+      // Search filter
+      if (tablasSearchQuery.trim()) {
+        const q = tablasSearchQuery.trim().toLowerCase();
+        visible = visible.filter(v => {
+          const fields = [v.indicativo || '', v.matricula || '', v.tipo || '', v.provincia || ''].join(' ').toLowerCase();
+          return fields.includes(q);
+        });
+      }
 
       visible.forEach(v => {
         const svgEdit = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
@@ -2747,11 +2817,18 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       tbody.innerHTML = '';
 
       const allErbes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const visible = allErbes.filter(e => {
+      let visible = allErbes.filter(e => {
         const prov = e.provincia || 'Málaga';
         return selectedProvincia === 'Andalucía' || prov === selectedProvincia;
       });
 
+      if (tablasSearchQuery.trim()) {
+        const q = tablasSearchQuery.trim().toLowerCase();
+        visible = visible.filter(e => {
+          const fields = [e.localidad || '', e.provincia || ''].join(' ').toLowerCase();
+          return fields.includes(q);
+        });
+      }
       visible.forEach(e => {
         const svgEdit = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
         const svgTrash = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
@@ -2860,11 +2937,18 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       tbody.innerHTML = '';
 
       const allEries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const visible = allEries.filter(e => {
+      let visible = allEries.filter(e => {
         const prov = e.provincia || 'Málaga';
         return selectedProvincia === 'Andalucía' || prov === selectedProvincia;
       });
 
+      if (tablasSearchQuery.trim()) {
+        const q = tablasSearchQuery.trim().toLowerCase();
+        visible = visible.filter(e => {
+          const fields = [e.especialidad || '', e.provincia || ''].join(' ').toLowerCase();
+          return fields.includes(q);
+        });
+      }
       visible.forEach(e => {
         const svgEdit = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
         const svgTrash = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
@@ -2964,11 +3048,18 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       tbody.innerHTML = '';
 
       const allJefes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const visible = allJefes.filter(j => {
+      let visible = allJefes.filter(j => {
         const prov = j.provincia || 'Andalucía';
         return selectedProvincia === 'Andalucía' || prov === selectedProvincia;
       });
 
+      if (tablasSearchQuery.trim()) {
+        const q = tablasSearchQuery.trim().toLowerCase();
+        visible = visible.filter(j => {
+          const fields = [j.nombre || '', j.provincia || ''].join(' ').toLowerCase();
+          return fields.includes(q);
+        });
+      }
       visible.forEach(j => {
         const svgTrash = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
         const tr = document.createElement('tr');
@@ -6302,7 +6393,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.5.1.1
+          Versión V.5.2.0
         </div>
       </div>
 
@@ -6466,6 +6557,17 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <button class="btn-nueva" onclick="abrirModalUsuario()">+ Nuevo usuario</button>
       </div>
+      <div class="search-box" style="margin-bottom:16px;">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        <input type="text" id="user-search" class="search-input" placeholder="Buscar usuarios..."
+          oninput="handleUserSearch(this.value)">
+        <button id="user-search-clear" class="search-clear" onclick="clearUserSearch()"
+          style="display:none;">&times;</button>
+      </div>
       <div class="users-table-wrap">
         <table>
           <thead>
@@ -6497,6 +6599,18 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <button class="tablas-pill" id="subnav-jefes" onclick="showTablaMaestra('jefes')">Jefes de
             Operaciones</button>
         </div>
+      </div>
+
+      <div class="search-box" style="margin-bottom:16px;">
+        <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+          stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        <input type="text" id="tablas-search" class="search-input" placeholder="Buscar en tablas..."
+          oninput="handleTablasSearch(this.value)">
+        <button id="tablas-search-clear" class="search-clear" onclick="clearTablasSearch()"
+          style="display:none;">&times;</button>
       </div>
 
       <!-- Contenedor Vehículos -->
@@ -6877,7 +6991,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.5.1.1
+            Versión V.5.2.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
