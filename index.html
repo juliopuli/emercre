@@ -113,6 +113,10 @@
     let ops = {};
     let editingUserId = null;
 
+    // ── CONFIGURACIÓN PUENTE NOTIFICACIONES (V.5.8.0) ──────────────────
+    const NOTIF_BRIDGE_URL = ""; // Sustituir por la URL de Google Apps Script 
+
+
     // Helper visibilidad (V.3.4.1)
     function isOpVisible(op) {
       if (!op) return false;
@@ -721,6 +725,21 @@
         });
       } catch (e) {
         console.warn("No se pudo guardar la petición de push:", e);
+      }
+
+      // 2. Notificar vía Puente (Google Apps Script) para iOS / Pantalla Bloqueada
+      if (NOTIF_BRIDGE_URL) {
+        fetch(NOTIF_BRIDGE_URL, {
+          method: 'POST',
+          mode: 'no-cors', // Importante para Google Apps Script
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            titulo: 'Nueva Operación',
+            body: `${op.creadoPorNombre} ha creado: ${op.nombre}`,
+            provincia: op.provincia,
+            data: { opId: op.id }
+          })
+        }).catch(err => console.warn("Error al llamar al puente de notificaciones:", err));
       }
     }
 
@@ -7193,7 +7212,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          Versión V.5.7.5 (Toast & PWA Check)
+          Versión V.5.8.0 (Notification Bridge)
         </div>
       </div>
 
