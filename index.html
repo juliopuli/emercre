@@ -2319,15 +2319,27 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           const isRecentlyActive = (now - lastAct) < twoHours;
           const isOnline = u.enLinea === true && isRecentlyActive;
 
+          const initials = (u.nombre || 'U').split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+          const hue = (u.nombre || '').split('').reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
+          const avatarBg = `hsl(${hue}, 45%, 55%)`;
+
+          const svgEdit = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+          const svgLog = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>`;
+          const svgTrash = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
+          const svgToggle = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>`;
+
           const tr = document.createElement('tr');
           tr.innerHTML = `
           <td>
-            <div style="display:flex; align-items:center; gap:8px;">
-              <div style="width:10px; height:10px; border-radius:50%; background:${isOnline ? '#2ecc71' : '#e74c3c'}; border:1px solid rgba(0,0,0,0.1);" title="${isOnline ? 'En línea' : 'Desconectado'}"></div>
-              ${u.nombre || '—'}
+            <div style="display:flex; align-items:center; gap:10px;">
+              <div class="user-avatar" style="background:${avatarBg};">${initials}</div>
+              <div>
+                <div style="font-weight:600;">${u.nombre || '—'}</div>
+                <div style="font-size:11px; color:#6c757d;">${isOnline ? '🟢 En línea' : '🔴 Desconectado'}</div>
+              </div>
             </div>
           </td>
-          <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${u.email}</td>
+          <td style="font-family:'IBM Plex Mono',monospace;font-size:12px; color:#6c757d;">${u.email}</td>
           <td>
             <div style="display:flex; flex-direction:column; gap:2px;">
               <span class="rol-badge rol-${u.role}">${ROL_LABELS[u.role] || u.role}</span>
@@ -2336,13 +2348,13 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           </td>
           <td><span class="activo-badge ${u.activo !== false ? 'activo' : 'inactivo'}">${u.activo !== false ? 'Activo' : 'Inactivo'}</span></td>
           <td>
-            <button class="tbl-btn" onclick="editarUsuario('${d.id}')">Editar</button>
-            <button class="tbl-btn" onclick="abrirLogUsuario('${d.id}', '${u.nombre || u.email}')">Log</button>
+            <button class="tbl-btn" onclick="editarUsuario('${d.id}')" title="Editar">${svgEdit}</button>
+            <button class="tbl-btn" onclick="abrirLogUsuario('${d.id}', '${u.nombre || u.email}')" title="Ver log">${svgLog}</button>
             ${d.id !== currentUser.uid
               ? (currentRole === 'super_admin'
-                ? `<button class="tbl-btn danger" onclick="borrarUsuario('${d.id}')" title="Eliminar de la DB">Borrar</button>
-                   <button class="tbl-btn" onclick="desactivarUsuario('${d.id}')">Desactivar</button>`
-                : `<button class="tbl-btn danger" onclick="desactivarUsuario('${d.id}')">Desactivar</button>`)
+                ? `<button class="tbl-btn danger" onclick="borrarUsuario('${d.id}')" title="Eliminar de la DB">${svgTrash}</button>
+                   <button class="tbl-btn" onclick="desactivarUsuario('${d.id}')" title="Desactivar">${svgToggle}</button>`
+                : `<button class="tbl-btn danger" onclick="desactivarUsuario('${d.id}')" title="Desactivar">${svgToggle}</button>`)
               : '<span style="font-size:11px;color:var(--text-4)">(tú)</span>'}
           </td>`;
           tbody.appendChild(tr);
@@ -2521,9 +2533,9 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
     // ── TABLAS MAESTRAS ────────────────────────────────────────────────
     window.showTablaMaestra = (tabla) => {
-      document.querySelectorAll('#tablas-subnav .ftab').forEach(b => b.classList.remove('on'));
+      document.querySelectorAll('#tablas-subnav .tablas-pill').forEach(b => b.classList.remove('active'));
       const activeBtn = document.getElementById(`subnav-${tabla}`);
-      if (activeBtn) activeBtn.classList.add('on');
+      if (activeBtn) activeBtn.classList.add('active');
 
       const contVeh = document.getElementById('tabla-vehiculos-container');
       if (contVeh) contVeh.style.display = tabla === 'vehiculos' ? 'flex' : 'none';
@@ -2571,15 +2583,17 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       });
 
       visible.forEach(v => {
+        const svgEdit = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+        const svgTrash = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td><strong>${v.indicativo || '—'}</strong></td>
-          <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${v.matricula || '—'}</td>
-          <td>${v.tipo || '—'}</td>
-          <td style="font-size:11px; color:var(--text-3);">${v.provincia || 'Málaga'}</td>
+          <td><strong>${v.indicativo}</strong></td>
+          <td style="font-family:'IBM Plex Mono',monospace; font-size:12px;">${v.matricula}</td>
+          <td>${v.tipo || '-'}</td>
+          <td style="font-size:11px; color:#6c757d;">${v.provincia || 'Málaga'}</td>
           <td>
-            <button class="tbl-btn" onclick="editarVehiculo('${v.id}')">Editar</button>
-            <button class="tbl-btn danger" onclick="borrarVehiculo('${v.id}')">Eliminar</button>
+            <button class="tbl-btn" onclick="editarVehiculo('${v.id}')" title="Editar">${svgEdit}</button>
+            <button class="tbl-btn danger" onclick="borrarVehiculo('${v.id}')" title="Eliminar">${svgTrash}</button>
           </td>`;
         tbody.appendChild(tr);
       });
@@ -2710,13 +2724,15 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       });
 
       visible.forEach(e => {
+        const svgEdit = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+        const svgTrash = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td><strong>ERBE ${e.localidad || '—'}</strong></td>
-          <td style="font-size:11px; color:var(--text-3);">${e.provincia || 'Málaga'}</td>
+          <td><strong>ERBE ${e.localidad || '-'}</strong></td>
+          <td style="font-size:11px; color:#6c757d;">${e.provincia || 'Málaga'}</td>
           <td>
-            <button class="tbl-btn" onclick="editarErbe('${e.id}')">Editar</button>
-            <button class="tbl-btn danger" onclick="borrarErbe('${e.id}')">Eliminar</button>
+            <button class="tbl-btn" onclick="editarErbe('${e.id}')" title="Editar">${svgEdit}</button>
+            <button class="tbl-btn danger" onclick="borrarErbe('${e.id}')" title="Eliminar">${svgTrash}</button>
           </td>`;
         tbody.appendChild(tr);
       });
@@ -2821,13 +2837,15 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       });
 
       visible.forEach(e => {
+        const svgEdit = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>`;
+        const svgTrash = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td><strong>ERIE ${e.especialidad || '-'}</strong></td>
-          <td style="font-size:11px; color:var(--text-3);">${e.provincia || 'Málaga'}</td>
+          <td style="font-size:11px; color:#6c757d;">${e.provincia || 'Málaga'}</td>
           <td>
-            <button class="tbl-btn" onclick="editarErie('${e.id}')">Editar</button>
-            <button class="tbl-btn danger" onclick="borrarErie('${e.id}')">Eliminar</button>
+            <button class="tbl-btn" onclick="editarErie('${e.id}')" title="Editar">${svgEdit}</button>
+            <button class="tbl-btn danger" onclick="borrarErie('${e.id}')" title="Eliminar">${svgTrash}</button>
           </td>`;
         tbody.appendChild(tr);
       });
@@ -2923,12 +2941,13 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       });
 
       visible.forEach(j => {
+        const svgTrash = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td><strong>${j.nombre || '—'}</strong></td>
-          <td style="font-size:11px; color:var(--text-3);">${j.provincia || 'Andalucía'}</td>
+          <td><strong>${j.nombre || '-'}</strong></td>
+          <td style="font-size:11px; color:#6c757d;">${j.provincia || 'Andalucía'}</td>
           <td>
-            <button class="tbl-btn danger" onclick="borrarJefe('${j.id}')">Eliminar</button>
+            <button class="tbl-btn danger" onclick="borrarJefe('${j.id}')" title="Eliminar">${svgTrash}</button>
           </td>`;
         tbody.appendChild(tr);
       });
@@ -5071,13 +5090,13 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       cursor: not-allowed;
     }
 
-    /* TABLA USUARIOS */
+    /* ═══════════ SECCIONES CARD ═══════════ */
     #section-usuarios,
     #section-tablas {
       background: #ffffff;
       border-radius: 16px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
-      padding: 28px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+      padding: 28px 32px;
       margin: 16px;
     }
 
@@ -5085,13 +5104,27 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       display: flex;
       align-items: center;
       justify-content: space-between;
-      margin-bottom: 20px;
+      margin-bottom: 24px;
     }
 
+    .section-title {
+      font-family: 'Fraunces', serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-1);
+    }
+
+    .section-subtitle {
+      font-size: 13px;
+      color: var(--text-3);
+      margin-top: 4px;
+    }
+
+    /* ═══════════ TABLA CONTENEDOR ═══════════ */
     .users-table-wrap {
       flex: 1;
       overflow: hidden;
-      border: 1px solid rgba(0, 0, 0, 0.08);
+      border: 1px solid #e9ecef;
       border-radius: 12px;
     }
 
@@ -5102,43 +5135,34 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     }
 
     thead tr {
-      background: linear-gradient(135deg, #b71c1c 0%, #d32f2f 100%);
-      border-bottom: none;
+      background: #f8f9fa;
+      border-bottom: 2px solid #e9ecef;
     }
 
     th {
-      padding: 14px 16px;
+      padding: 12px 16px;
       text-align: left;
       font-size: 11px;
       font-weight: 600;
-      color: #ffffff;
+      color: #6c757d;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-    }
-
-    thead th:first-child {
-      border-top-left-radius: 12px;
-    }
-
-    thead th:last-child {
-      border-top-right-radius: 12px;
+      letter-spacing: 0.06em;
     }
 
     td {
       padding: 14px 16px;
-      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      border-bottom: 1px solid #f0f0f0;
       font-size: 13px;
       vertical-align: middle;
       color: var(--text-1);
-      transition: all 0.2s ease;
     }
 
     tr {
-      transition: all 0.2s ease-in-out;
+      transition: background 0.15s ease;
     }
 
     tbody tr:nth-child(even) {
-      background: rgba(245, 245, 247, 0.5);
+      background: #fafbfc;
     }
 
     tr:last-child td {
@@ -5146,87 +5170,132 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     }
 
     tbody tr:hover {
-      background: rgba(183, 28, 28, 0.04);
-      transform: scale(1.002);
-      box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+      background: rgba(183, 28, 28, 0.03);
     }
 
+    /* ═══════════ AVATAR ═══════════ */
+    .user-avatar {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+      flex-shrink: 0;
+    }
+
+    /* ═══════════ BADGES ═══════════ */
     .rol-badge {
       font-size: 10px;
       font-weight: 700;
-      padding: 2px 8px;
-      border-radius: 10px;
-    }
-
-    .rol-super_admin {
-      background: #e8f0fb;
-      color: var(--accent);
-      border: 1px solid #c0cfe8;
-    }
-
-    .rol-admin {
-      background: var(--crit-3-bg);
-      color: var(--crit-3);
-      border: 1px solid var(--crit-3-border);
-    }
-
-    .rol-usuario {
-      background: var(--bg-3);
-      color: var(--text-2);
+      padding: 3px 10px;
+      border-radius: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      display: inline-block;
       border: 1px solid var(--border-mid);
     }
 
     .activo-badge {
       font-size: 10px;
       font-weight: 600;
-      padding: 2px 7px;
-      border-radius: 10px;
+      padding: 3px 10px;
+      border-radius: 12px;
     }
 
     .activo {
-      background: var(--crit-4-bg);
-      color: var(--crit-4);
-      border: 1px solid var(--crit-4-border);
+      background: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
     }
 
     .inactivo {
-      background: var(--crit-1-bg);
-      color: var(--crit-1);
-      border: 1px solid var(--crit-1-border);
+      background: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
     }
 
+    /* ═══════════ BOTONES ACCIÓN ═══════════ */
     .tbl-btn {
-      padding: 5px 12px;
-      background: transparent;
-      border: 1px solid var(--border-mid);
-      color: var(--text-2);
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      border: 1px solid #e9ecef;
+      background: #fff;
       cursor: pointer;
-      font-family: 'IBM Plex Sans', sans-serif;
-      font-size: 11px;
-      font-weight: 500;
-      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
       margin-right: 4px;
-      transition: all 0.2s ease;
+      transition: all 0.15s ease;
+      color: #6c757d;
+      padding: 0;
+    }
+
+    .tbl-btn svg {
+      width: 15px;
+      height: 15px;
     }
 
     .tbl-btn:hover {
-      background: var(--accent);
-      color: #fff;
-      border-color: var(--accent);
-      transform: translateY(-1px);
-      box-shadow: 0 2px 8px rgba(183, 28, 28, 0.2);
+      background: #f8f9fa;
+      border-color: #dee2e6;
+      color: var(--text-1);
     }
 
     .tbl-btn.danger {
-      color: var(--crit-1);
-      border-color: var(--crit-1-border);
+      color: #dc3545;
+      border-color: #f5c6cb;
     }
 
     .tbl-btn.danger:hover {
-      background: var(--crit-1);
+      background: #fff5f5;
+      border-color: #f5c6cb;
+      color: #c82333;
+    }
+
+    .tbl-btn-text {
+      padding: 6px 14px;
+      height: auto;
+      width: auto;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 11px;
+      font-weight: 500;
+    }
+
+    /* ═══════════ TABS PILL ═══════════ */
+    .tablas-pills {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+
+    .tablas-pill {
+      border-radius: 20px;
+      padding: 8px 20px;
+      background: transparent;
+      border: 1px solid #e9ecef;
+      color: #6c757d;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .tablas-pill:hover {
+      background: #f8f9fa;
+      border-color: #dee2e6;
+    }
+
+    .tablas-pill.active {
+      background: var(--accent);
       color: #fff;
-      border-color: var(--crit-1);
-      box-shadow: 0 2px 8px rgba(183, 28, 28, 0.3);
+      border-color: var(--accent);
+      box-shadow: 0 2px 8px rgba(183, 28, 28, 0.2);
     }
 
     /* TOAST */
@@ -6139,7 +6208,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.14.0
+          Versión V.5.0.0
         </div>
       </div>
 
@@ -6298,9 +6367,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     <div id="section-usuarios" style="display:none;">
       <div class="users-toolbar">
         <div>
-          <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;">Gestión de usuarios</div>
-          <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Solo el Super Admin puede crear, editar y
-            desactivar usuarios.</div>
+          <div class="section-title">Gestión de usuarios</div>
+          <div class="section-subtitle">Solo el Super Admin puede crear, editar y desactivar usuarios.</div>
         </div>
         <button class="btn-nueva" onclick="abrirModalUsuario()">+ Nuevo usuario</button>
       </div>
@@ -6322,19 +6390,17 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
     <!-- TABLAS MAESTRAS -->
     <div id="section-tablas" style="display:none;">
-      <div class="users-toolbar"
-        style="margin-bottom: 8px; flex-direction: column; align-items: flex-start; gap: 16px;">
+      <div class="users-toolbar" style="flex-direction: column; align-items: flex-start; gap: 16px;">
         <div>
-          <div style="font-family:'Fraunces',serif;font-size:20px;font-weight:700;">Tablas maestras</div>
-          <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Gestión de catálogos y dispositivos
-            estructurales.</div>
+          <div class="section-title">Tablas maestras</div>
+          <div class="section-subtitle">Gestión de catálogos y dispositivos estructurales.</div>
         </div>
-        <div class="filter-tabs" id="tablas-subnav" style="width: 100%; max-width: 600px; display: flex;">
-          <button class="ftab on" id="subnav-vehiculos" onclick="showTablaMaestra('vehiculos')"
-            style="flex:1;">Vehículos</button>
-          <button class="ftab" id="subnav-erbes" onclick="showTablaMaestra('erbes')" style="flex:1;">ERBEs</button>
-          <button class="ftab" id="subnav-eries" onclick="showTablaMaestra('eries')" style="flex:1;">ERIEs</button>
-          <button class="ftab" id="subnav-jefes" onclick="showTablaMaestra('jefes')" style="flex:1;">Jefes de
+        <div class="tablas-pills" id="tablas-subnav">
+          <button class="tablas-pill active" id="subnav-vehiculos"
+            onclick="showTablaMaestra('vehiculos')">Vehículos</button>
+          <button class="tablas-pill" id="subnav-erbes" onclick="showTablaMaestra('erbes')">ERBEs</button>
+          <button class="tablas-pill" id="subnav-eries" onclick="showTablaMaestra('eries')">ERIEs</button>
+          <button class="tablas-pill" id="subnav-jefes" onclick="showTablaMaestra('jefes')">Jefes de
             Operaciones</button>
         </div>
       </div>
@@ -6717,7 +6783,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.4.14.0
+            Versión V.5.0.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
