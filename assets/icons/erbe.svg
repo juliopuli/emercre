@@ -1,8 +1,11 @@
-<svg width="240" height="96" viewBox="0 0 240 96" xmlns="http://www.w3.org/2000/svg">
-  <rect x="0" y="0" width="240" height="48" fill="#cc0000" />
-  <rect x="0" y="48" width="240" height="48" fill="#ffffff" />
-  <rect x="0.5" y="0.5" width="239" height="95" fill="none" stroke="#cc0000" stroke-width="1"/>
-  <text x="120" y="36" font-family="Arial, sans-serif" font-weight="900" font-size="34" fill="#ffffff" text-anchor="middle">ERBE</text>
-  <text x="120" y="70" font-family="Arial, sans-serif" font-weight="bold" font-size="12" fill="#cc0000" text-anchor="middle">EQUIPOS DE RESPUESTA</text>
-  <text x="120" y="86" font-family="Arial, sans-serif" font-weight="bold" font-size="12" fill="#cc0000" text-anchor="middle">BASICA EN EMERGENCIAS</text>
+<svg width="240" height="135" viewBox="0 0 240 135" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="240" height="68" fill="#c30206" />
+  <rect x="0" y="68" width="240" height="67" fill="#ffffff" />
+  
+  <text x="120" y="55" font-family="Arial, sans-serif" font-weight="900" font-size="52" fill="#ffffff" text-anchor="middle" letter-spacing="1">ERBE</text>
+  
+  <text x="120" y="98" font-family="Arial, sans-serif" font-weight="900" font-size="16" fill="#c30206" text-anchor="middle" letter-spacing="0.5">EQUIPOS DE RESPUESTA</text>
+  <text x="120" y="118" font-family="Arial, sans-serif" font-weight="900" font-size="16" fill="#c30206" text-anchor="middle" letter-spacing="0.5">BASICA EN EMERGENCIAS</text>
+
+  <rect x="0" y="0" width="240" height="135" fill="none" stroke="#c30206" stroke-width="4"/>
 </svg>
