@@ -940,16 +940,34 @@
       container.className = 'custom-marker';
       container.style.setProperty('--nivel-color', color);
 
+      // Calculate orbital positions for badges
+      let totalBadges = 0;
+      if (op.recursosSummary && op.recursosSummary['erbes'] > 0) totalBadges++;
+
+      const types = [
+        { key: 'camiones', icon: 'assets/icons/truck.png' },
+        { key: 'ambulancias', icon: 'assets/icons/ambulance.png' },
+        { key: 'offroad', icon: 'assets/icons/offroad.png' },
+        { key: 'van', icon: 'assets/icons/van.png' }
+      ];
+
+      const presentVehicleTypes = types.filter(t => op.recursosSummary && (op.recursosSummary[t.key] || 0) > 0);
+      totalBadges += presentVehicleTypes.length;
+
+      let currentBadgeIdx = 0;
       let html = '';
+
+      // ERBE (Top radial focus)
       if (op.recursosSummary && op.recursosSummary['erbes'] > 0) {
         const count = op.recursosSummary['erbes'];
         const isCrit = op.nivel == 4;
-        html += `<div class="marker-top-badges ${isCrit ? 'has-crit' : ''}">
+        html += `<div class="marker-radial-item erbe-focus ${isCrit ? 'has-crit' : ''}" style="--idx: ${currentBadgeIdx}; --total: ${totalBadges};">
                   <div class="badge-item-erbe">
                     <img src="assets/icons/erbe.svg" class="badge-erbes-img">
                     ${count > 1 ? `<div class="badge-count">${count}</div>` : ''}
                   </div>
                 </div>`;
+        currentBadgeIdx++;
       }
 
       html += `
@@ -961,29 +979,22 @@
         </div>
       `;
 
-      if (op.recursosSummary) {
-        const types = [
-          { key: 'camiones', icon: 'assets/icons/truck.png' },
-          { key: 'ambulancias', icon: 'assets/icons/ambulance.png' },
-          { key: 'offroad', icon: 'assets/icons/offroad.png' },
-          { key: 'van', icon: 'assets/icons/van.png' }
-        ];
-
-        let hasVehicles = false;
-        let badgesHtml = '<div class="marker-badges">';
-        types.forEach(type => {
-          const count = op.recursosSummary[type.key] || 0;
-          if (count > 0) {
-            hasVehicles = true;
-            badgesHtml += `
+      // Vehicles (Bottom radial focus)
+      if (presentVehicleTypes.length > 0) {
+        let badgesHtml = '<div class="marker-vehicles-container">';
+        presentVehicleTypes.forEach(type => {
+          const count = op.recursosSummary[type.key];
+          badgesHtml += `
+            <div class="marker-radial-item vehicle-focus" style="--idx: ${currentBadgeIdx}; --total: ${totalBadges};">
               <div class="badge-item">
                 <img src="${type.icon}" class="badge-img badge-${type.key}">
                 ${count > 1 ? `<div class="badge-count">${count}</div>` : ''}
-              </div>`;
-          }
+              </div>
+            </div>`;
+          currentBadgeIdx++;
         });
         badgesHtml += '</div>';
-        if (hasVehicles) html += badgesHtml;
+        html += badgesHtml;
       }
 
       // Add expandable card
@@ -5166,20 +5177,62 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       margin-left: 16px;
     }
 
-    .marker-badges {
+    .marker-vehicles-container {
       position: absolute;
       top: 44px;
       left: 50%;
-      transform: translateX(-50%);
       display: flex;
       gap: 6px;
       pointer-events: none;
-      transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      transform: translateX(-50%);
     }
 
-    .custom-marker.expanded .marker-badges {
-      transform: translateX(-50%) translateY(8px) scale(1.05);
-      /* Spread outwards radially */
+    .marker-radial-item {
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      will-change: transform;
+      transform-origin: center center;
+    }
+
+    /* ERBE specific positioning (collapsed) */
+    .marker-radial-item.erbe-focus {
+      position: absolute;
+      bottom: calc(100% + 4px);
+      left: 50%;
+      transform: translateX(-50%) scale(1);
+      display: flex;
+      justify-content: center;
+      pointer-events: none;
+    }
+
+    .marker-radial-item.erbe-focus.has-crit {
+      bottom: calc(100% + 18px);
+    }
+
+    /* Vehicles specific positioning (collapsed) */
+    .marker-radial-item.vehicle-focus {
+      transform: scale(1);
+    }
+
+    /* === EXPANDED ORBITAL FLOWER STATE === */
+    .custom-marker.expanded .marker-radial-item.erbe-focus {
+      /* Rotate upwards radially. Scale exactly 2x */
+      transform: translateX(-50%) translateY(calc(-45px * var(--total))) scale(2);
+    }
+
+    .custom-marker.expanded .marker-radial-item.vehicle-focus {
+      /* Expand radically outwards based on their index. */
+      /* Since they are in a flexbox horizontally by default, we break them out */
+      position: absolute;
+      top: 0;
+      left: 0;
+      /* Dynamic calc based on index to spread in a semi-circle pointing downwards */
+      transform: translate(calc((var(--idx) - (var(--total) / 2)) * 65px),
+          calc(35px + (var(--idx) * 5px))) scale(2);
+    }
+
+    .custom-marker.expanded .marker-vehicles-container {
+      /* Neutralize the flexbox when expanded to allow absolute positioning */
+      display: block;
     }
 
     .badge-item {
@@ -5199,29 +5252,6 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       width: 24px;
       height: 24px;
       object-fit: contain;
-    }
-
-    .marker-top-badges {
-      position: absolute;
-      bottom: calc(100% + 4px);
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
-      pointer-events: none;
-      transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    }
-
-    .custom-marker.expanded .marker-top-badges {
-      transform: translateX(-50%) translateY(-8px) scale(1.05);
-      /* Spread upwards radially */
-    }
-
-    .marker-top-badges.has-crit {
-      bottom: calc(100% + 18px);
-      /* Elevamos si hay exclamación de crítica */
     }
 
     .badge-item-erbe {
@@ -5889,7 +5919,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.11.0
+          Versión V.4.11.1
         </div>
       </div>
 
@@ -6446,7 +6476,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.4.11.0
+            Versión V.4.11.1
           </div>
         </div>
         <div class="field" id="j-prov-row">
