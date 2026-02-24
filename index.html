@@ -660,8 +660,8 @@
       try {
         if (isManual) mostrarToast("Intentando activar notificaciones...");
 
-        // 1. Registrar Service Worker
-        const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+        // 1. Registrar Service Worker (V.5.7.4: Ruta relativa para GitHub Pages)
+        const registration = await navigator.serviceWorker.register('firebase-messaging-sw.js');
         console.log("SW registrado:", registration);
 
         // 2. Solicitar permiso
@@ -7179,7 +7179,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          Versión V.5.7.3 (Final Setup)
+          Versión V.5.7.4 (SW Path Fixed)
         </div>
       </div>
 
