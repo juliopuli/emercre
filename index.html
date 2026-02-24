@@ -426,7 +426,23 @@
           return false;
         }
 
-        // Si yo soy Autonómico (Andalucía) los veo a todos, no hay filtro de provincia
+        // Si yo soy Autonómico (Andalucía)...
+        // Si tengo "aparecerEnTodosLosChats === false", solo veo a otros Autonómicos o a los Jefes de Guardia activos de cualquier provincia
+        if (currentUserDoc.aparecerEnTodosLosChats === false) {
+          if (userProv === 'Andalucía') return true;
+
+          // Comprobar si este usuario (u.nombre) consta como Jefe de Guardia en alguna provincia
+          let isJefe = false;
+          for (const nombreJefe of Object.values(allJefesGuardiaCacheMap)) {
+            if (nombreJefe === u.nombre) {
+              isJefe = true;
+              break;
+            }
+          }
+          return isJefe;
+        }
+
+        // Si soy Autonómico y sí aparezco en todos los chats (comportamiento habitual), veo a todo el mundo
         return true;
       });
 
@@ -7237,7 +7253,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          Versión V.5.9.0 (Chat Visibility settings)
+          Versión V.5.9.1 (Autonomic restricted visibility logic)
         </div>
       </div>
 
