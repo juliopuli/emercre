@@ -5094,8 +5094,9 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     .custom-marker.expanded .marker-expand-card {
       opacity: 1;
       visibility: visible;
-      transform: translateY(-50%) translateX(60px) scale(1);
+      transform: translateY(-50%) translateX(110px) scale(1);
       pointer-events: auto;
+      z-index: 20;
     }
 
     .marker-expand-card button:hover {
@@ -5215,24 +5216,28 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
     /* === EXPANDED ORBITAL FLOWER STATE === */
     .custom-marker.expanded .marker-radial-item.erbe-focus {
-      /* Rotate upwards radially. Scale exactly 2x */
-      transform: translateX(-50%) translateY(calc(-25px - (4px * var(--total)))) scale(2);
+      position: absolute;
+      top: 18px;
+      left: 35px;
+      bottom: auto;
+      --angle: calc((360deg / var(--total)) * var(--idx) - 90deg);
+      transform: translate(-50%, -50%) rotate(var(--angle)) translateY(-75px) rotate(calc(var(--angle) * -1)) scale(1.7);
     }
 
     .custom-marker.expanded .marker-radial-item.vehicle-focus {
-      /* Expand radically outwards based on their index. */
-      /* Since they are in a flexbox horizontally by default, we break them out */
       position: absolute;
       top: 0;
       left: 0;
-      /* Dynamic calc based on index to spread in a semi-circle pointing downwards */
-      transform: translate(calc((var(--idx) - (var(--total) / 2)) * 65px),
-          calc(35px + (var(--idx) * 5px))) scale(2);
+      margin: 0;
+      --angle: calc((360deg / var(--total)) * var(--idx) - 90deg);
+      transform: translate(-50%, -50%) rotate(var(--angle)) translateY(-75px) rotate(calc(var(--angle) * -1)) scale(1.7);
     }
 
     .custom-marker.expanded .marker-vehicles-container {
-      /* Neutralize the flexbox when expanded to allow absolute positioning */
       display: block;
+      top: 18px;
+      left: 35px;
+      transform: none;
     }
 
     .badge-item {
@@ -5919,7 +5924,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.11.2
+          Versión V.4.11.3
         </div>
       </div>
 
@@ -6476,7 +6481,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.4.11.2
+            Versión V.4.11.3
           </div>
         </div>
         <div class="field" id="j-prov-row">
