@@ -1043,9 +1043,28 @@
     function renderMapa() {
       if (!gmap || !mapReady) return;
 
-      // Limpiar marcadores que ya no existen o no son visibles (V.3.4.1)
+      // Build search filter helper (V.5.3.0)
+      const q = searchQuery.trim().toLowerCase();
+      function isOpSearchVisible(op) {
+        if (!isOpVisible(op)) return false;
+        if (selectedProvincia !== 'Andalucía' && op.provincia !== selectedProvincia) return false;
+        // Ocultas filter
+        if (op.oculta === true && !mostrarCerradas) return false;
+        // Search filter
+        if (q) {
+          const fields = [
+            op.nombre || '', op.loc || '', op.tipo || '', op.id || '',
+            op.provincia || '', op.dir || '', op.org || '', op.estado || '',
+            `N${op.nivel}`, NIVEL_LABELS[op.nivel] || ''
+          ].join(' ').toLowerCase();
+          if (!fields.includes(q)) return false;
+        }
+        return true;
+      }
+
+      // Limpiar marcadores que ya no son visibles
       Object.keys(gmMarkers).forEach(id => {
-        if (!ops[id] || !isOpVisible(ops[id])) {
+        if (!ops[id] || !isOpSearchVisible(ops[id])) {
           gmMarkers[id].setMap(null);
           delete gmMarkers[id];
         }
@@ -1055,12 +1074,7 @@
       let hasValidCoords = false;
 
       Object.values(ops).forEach(op => {
-        // Filtrado por visibilidad (V.3.4.1)
-        if (!isOpVisible(op)) return;
-
-        // Filtrado por provincia
-        if (selectedProvincia !== 'Andalucía' && op.provincia !== selectedProvincia) return;
-
+        if (!isOpSearchVisible(op)) return;
         if (!op.coords) return;
         const t = TIPOS[op.tipo] || TIPOS.otro;
         const pos = { lat: op.coords.lat, lng: op.coords.lng };
@@ -1212,7 +1226,7 @@
         return true;
       });
 
-      // Búsqueda de texto (V.5.2.1)
+      // Búsqueda de texto (V.5.3.0)
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
         visible = visible.filter(op => {
@@ -1300,6 +1314,7 @@
       searchQuery = value;
       document.getElementById('ops-search-clear').style.display = value ? 'flex' : 'none';
       renderSidebar();
+      renderMapa();
     };
 
     window.clearSearch = () => {
@@ -1308,6 +1323,7 @@
       searchQuery = '';
       document.getElementById('ops-search-clear').style.display = 'none';
       renderSidebar();
+      renderMapa();
     };
 
     // ── DETALLE ────────────────────────────────────────────────────────
@@ -6394,7 +6410,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.5.2.1
+          Versión V.5.3.0
         </div>
       </div>
 
@@ -6992,7 +7008,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.5.2.1
+            Versión V.5.3.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
