@@ -57,6 +57,7 @@
     let selOpId = null;
     let filtro = 'all';
     let mostrarCerradas = false;
+    let searchQuery = '';
     let picking = false;
     let pickedCoords = null;
     let pickedAddress = '';
@@ -1189,14 +1190,13 @@
       });
     }
 
-    // ── SIDEBAR ────────────────────────────────────────────────────────
+    // ── SIDEBAR ────────────────────────────────────────────────────────────
     function renderSidebar() {
       const list = document.getElementById('ops-list');
       const empty = document.getElementById('empty-msg');
       list.querySelectorAll('.op-card').forEach(c => c.remove());
 
       let visible = Object.values(ops).filter(isOpVisible);
-      if (filtro !== 'all') visible = visible.filter(o => String(o.nivel) === filtro);
 
       // Filtrado por provincia
       if (selectedProvincia !== 'Andalucía') {
@@ -1205,19 +1205,34 @@
 
       // Lógica de filtrado de intervenciones ocultas (V.3.4.0)
       visible = visible.filter(op => {
-        const isCerrada = op.estado === 'finalizada';
         const isOculta = op.oculta === true;
-        // Si está activa o no está oculta, pasa.
-        // Si está oculta, solo pasa si mostrarCerradas es true.
         if (isOculta) return mostrarCerradas;
         return true;
       });
 
+      // Búsqueda de texto (V.5.1.0)
+      if (searchQuery.trim()) {
+        const q = searchQuery.trim().toLowerCase();
+        visible = visible.filter(op => {
+          const fields = [
+            op.nombre || '',
+            op.loc || '',
+            op.tipo || '',
+            op.id || '',
+            op.provincia || '',
+            op.dir || '',
+            op.org || '',
+            op.estado || '',
+            `N${op.nivel}`,
+            NIVEL_LABELS[op.nivel] || ''
+          ].join(' ').toLowerCase();
+          return fields.includes(q);
+        });
+      }
+
       visible.sort((a, b) => {
-        // Prioridad Crítica (N4) siempre arriba
         if (a.nivel == 4 && b.nivel != 4) return -1;
         if (a.nivel != 4 && b.nivel == 4) return 1;
-
         const ta = a.actualizadoEn?.toMillis ? a.actualizadoEn.toMillis() : 0;
         const tb = b.actualizadoEn?.toMillis ? b.actualizadoEn.toMillis() : 0;
         return tb - ta;
@@ -4091,6 +4106,68 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       flex-shrink: 0;
     }
 
+    /* ═══════════ SEARCH BOX ═══════════ */
+    .search-box {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 10px;
+      width: 16px;
+      height: 16px;
+      color: #9ca3af;
+      pointer-events: none;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 10px 32px 10px 34px;
+      border: 1px solid #e9ecef;
+      border-radius: 10px;
+      font-family: 'IBM Plex Sans', sans-serif;
+      font-size: 13px;
+      background: #fff;
+      color: var(--text-1);
+      outline: none;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(183, 28, 28, 0.08);
+    }
+
+    .search-input::placeholder {
+      color: #9ca3af;
+      font-weight: 400;
+    }
+
+    .search-clear {
+      position: absolute;
+      right: 8px;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: none;
+      background: #e9ecef;
+      color: #6c757d;
+      font-size: 14px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s ease;
+      padding: 0;
+      line-height: 1;
+    }
+
+    .search-clear:hover {
+      background: #dee2e6;
+    }
+
     .section-label {
       font-size: 9px;
       font-weight: 600;
@@ -6183,13 +6260,17 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     <div id="section-operaciones">
       <div class="panel-left">
         <div class="panel-left-head">
-          <div class="section-label">Operaciones registradas</div>
-          <div class="filter-tabs">
-            <button class="ftab on" onclick="setFiltro('all',this)">Todas</button>
-            <button class="ftab" onclick="setFiltro('1',this)">N1</button>
-            <button class="ftab" onclick="setFiltro('2',this)">N2</button>
-            <button class="ftab" onclick="setFiltro('3',this)">N3</button>
-            <button class="ftab" onclick="setFiltro('4',this)">N4</button>
+          <div class="search-box">
+            <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input type="text" id="ops-search" class="search-input" placeholder="Buscar operaciones..."
+              oninput="searchQuery = this.value; document.getElementById('ops-search-clear').style.display = this.value ? 'flex' : 'none'; renderSidebar();">
+            <button id="ops-search-clear" class="search-clear"
+              onclick="document.getElementById('ops-search').value=''; searchQuery=''; this.style.display='none'; renderSidebar();"
+              style="display:none;">&times;</button>
           </div>
         </div>
         <div id="sidebar-toggle-cerradas"
@@ -6208,7 +6289,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.5.0.1
+          Versión V.5.1.0
         </div>
       </div>
 
@@ -6783,7 +6864,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.5.0.1
+            Versión V.5.1.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
