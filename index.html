@@ -796,12 +796,11 @@
       }
     }
 
-    // Listener para mensajes en primer plano (Foreground)
+    // Listener para mensajes FCM en primer plano (V.5.10.0)
+    // Solo log, sin toast adicional (el toast ya lo pone el onSnapshot)
     if (messaging) {
       onMessage(messaging, (payload) => {
-        console.log("Mensaje en primer plano recibido:", payload);
-        // Mostrar aviso manual si estamos en la app
-        mostrarToast(`🔔 ${payload.notification.title}: ${payload.notification.body}`);
+        console.log("Mensaje FCM en primer plano recibido:", payload);
       });
     }
 
@@ -1146,14 +1145,9 @@
                 const opProv = d.provincia;
                 if (myProv === 'Andalucía' || myProv === opProv) {
                   hasNewOp = true;
-                  // V.5.7.5: Alerta visual en primer plano
+                  // V.5.10.0: Solo toast visual en primer plano. La notificación del sistema
+                  // la envía el push real de FCM (funciona también con app cerrada/bloqueada).
                   mostrarToast(`📢 Nueva Operación: ${d.nombre}`);
-                  if (Notification.permission === 'granted') {
-                    new Notification('Nueva Operación', {
-                      body: `${d.creadoPorNombre} ha activado ${d.nombre} en ${d.provincia}`,
-                      icon: 'assets/logo_emercre.png'
-                    });
-                  }
                 }
                 ops[dId]._isNew = true;
               }
@@ -7286,7 +7280,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          Versión V.5.10.0 (Real Push via FCM Bridge)
+          Versión V.5.10.1 (Fix duplicate notifications)
         </div>
       </div>
 
