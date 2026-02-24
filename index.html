@@ -374,6 +374,13 @@
       if (mdot) mdot.innerHTML = totalPrivado > 0 ? dot : '';
     }
 
+    function getInitials(name) {
+      if (!name) return "?";
+      const parts = name.split(" ");
+      if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+      return name[0].toUpperCase();
+    }
+
     function renderChatList() {
       const list = document.getElementById('chat-list');
       if (!list) return;
@@ -384,7 +391,6 @@
         const myProv = currentUserDoc.provincia;
         const userProv = u.provincia;
         if (myProv && myProv !== 'Andalucía') {
-          // Si soy provincial, veo mi provincia Y a los autonómicos (Andalucía)
           return userProv === myProv || userProv === 'Andalucía';
         }
         return true;
@@ -393,13 +399,10 @@
       // 2. Preparar items de contactos privados
       let allPrivateItems = filteredUsers.map(u => {
         const isOnline = u.enLinea && (Date.now() - (u.ultimaActividad?.toMillis() || 0)) < 300000;
-
-        // Determinar rol amigable (V.4.8.0)
         let roleLabel = ROL_LABELS[u.role] || u.role;
         let isJefeDeGuardia = false;
         let jefeProv = '';
 
-        // Buscar si es jefe de guardia en alguna provincia
         for (const [prov, nombreJefe] of Object.entries(allJefesGuardiaCacheMap)) {
           if (nombreJefe === u.nombre) {
             isJefeDeGuardia = true;
@@ -411,6 +414,7 @@
         return {
           id: u.uid,
           nombre: u.nombre || u.email,
+          initials: getInitials(u.nombre || u.email),
           roleLabel: roleLabel,
           isJefeDeGuardia: isJefeDeGuardia,
           jefeProv: jefeProv,
@@ -421,11 +425,11 @@
         };
       });
 
-      // 3. Dividir y ordenar (V.4.8.1)
+      // 3. Dividir y ordenar
       const jefeItems = allPrivateItems.filter(i => i.isJefeDeGuardia).sort((a, b) => b.lastAct - a.lastAct);
       const otherItems = allPrivateItems.filter(i => !i.isJefeDeGuardia).sort((a, b) => b.lastAct - a.lastAct);
 
-      // 4. Crear lista final: General -> Jefes -> Otros
+      // 4. Crear lista final
       let items = [];
       items.push({
         id: 'general',
@@ -445,8 +449,8 @@
         if (item.isGeneral) {
           return `
             <div class="chat-item ${isActive ? 'active' : ''}" onclick="selectChat('general')">
-              <div style="width:36px; height:36px; background:var(--accent); border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-size:18px;">👥</div>
-              <div>
+              <div class="chat-avatar chat-avatar-general">👥</div>
+              <div class="chat-item-info">
                 <div class="name">General</div>
                 <div class="status">Todos los usuarios</div>
               </div>
@@ -456,14 +460,14 @@
         } else {
           return `
             <div class="chat-item ${isActive ? 'active' : ''}" onclick="selectChat('${item.id}')">
-              <div style="width:36px; height:36px; background:var(--bg-3); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:16px; position:relative;">
-                👤
-                <div style="position:absolute; bottom:0; right:0; width:10px; height:10px; border-radius:50%; background:${item.isOnline ? '#2ecc71' : '#bdc3c7'}; border:2px solid white;"></div>
+              <div class="chat-avatar chat-avatar-user">
+                ${item.initials}
+                <div class="online-dot" style="background:${item.isOnline ? '#2ecc71' : '#bdc3c7'};"></div>
               </div>
-              <div>
+              <div class="chat-item-info">
                 <div class="name">${item.nombre}</div>
                 <div class="status">
-                  ${item.isJefeDeGuardia ? `<span style="color: #e74c3c; font-weight: 600;">Jefe de Operaciones de Guardia en "${item.jefeProv}"</span>` : item.roleLabel}
+                  ${item.isJefeDeGuardia ? `<span style="color: #e74c3c; font-weight: 600;">Jefe de Operaciones (${item.jefeProv})</span>` : item.roleLabel}
                 </div>
               </div>
               ${badge}
@@ -486,21 +490,34 @@
       currentChatId = id;
       renderChatList();
       const inputArea = document.getElementById('chat-input-area');
+      const chatHeader = document.getElementById('chat-header');
+      const hdrAvatar = document.getElementById('chat-header-avatar');
+      const chatMessages = document.getElementById('chat-messages');
 
       if (!id) {
-        document.getElementById('chat-target-name').textContent = 'Selecciona una conversación';
+        if (chatHeader) chatHeader.style.display = 'none';
         if (inputArea) inputArea.style.display = 'none';
         if (unsubChatDetail) { unsubChatDetail(); unsubChatDetail = null; }
-        document.getElementById('chat-messages').innerHTML = '<div style="text-align:center; padding:40px; color:var(--text-4);">\
-          <div style="font-size:32px; margin-bottom:10px;">💬</div>\
-          Elija una persona o el canal General para comenzar a chatear.\
-        </div>';
+        chatMessages.innerHTML = `
+          <div class="chat-placeholder">
+            <div class="chat-placeholder-icon">💬</div>
+            <h2>EmerCRE Chat</h2>
+            <p>Selecciona un contacto o el canal General para comenzar a chatear e intercambiar información operativa.</p>
+          </div>
+        `;
         return;
       }
 
+      if (chatHeader) chatHeader.style.display = 'flex';
       if (inputArea) inputArea.style.display = 'flex';
-      const name = id === 'general' ? 'General' : (allUsersCache.find(u => u.uid === id)?.nombre || 'Chat Privado');
+
+      const item = id === 'general' ? { nombre: 'General' } : allUsersCache.find(u => u.uid === id);
+      const name = item ? item.nombre : 'Chat';
       document.getElementById('chat-target-name').textContent = name;
+      if (hdrAvatar) {
+        hdrAvatar.textContent = id === 'general' ? '👥' : getInitials(name);
+      }
+
       suscribirChatDetalle(id);
     };
 
@@ -532,7 +549,6 @@
         docs.sort((a, b) => (a.timestamp?.toMillis ? a.timestamp.toMillis() : 0) - (b.timestamp?.toMillis ? b.timestamp.toMillis() : 0));
 
         docs.forEach(m => {
-          // Filtrar redundancia manual para el 'in' en chats privados (Firebase no soporta OR de forma nativa simple para este caso cruzado sin indices complejos)
           if (chatId !== 'general') {
             const isRelated = (m.remitenteId === currentUser.uid && m.destinatarioId === chatId) ||
               (m.remitenteId === chatId && m.destinatarioId === currentUser.uid);
@@ -545,9 +561,10 @@
           const bubble = document.createElement('div');
           bubble.className = `msg-bubble ${isMe ? 'msg-sent' : 'msg-received'}`;
           bubble.innerHTML = `
+            ${!isMe && chatId === 'general' ? `<div style="font-size:11px; margin-bottom:4px; color:#128c7e; font-weight:700;">${m.remitenteNombre || 'Usuario'}</div>` : ''}
             <div>${m.texto}</div>
             <div class="msg-meta">
-              <span>${!isMe && chatId === 'general' ? `<b>${m.remitenteNombre || 'Usuario'}</b>` : ''}</span>
+              <span></span>
               <span>${ts}</span>
             </div>
           `;
@@ -583,6 +600,7 @@
       if (!text) return;
 
       input.value = '';
+      input.style.height = ''; // V.5.6.0: Reset height after sending
       try {
         await addDoc(collection(db, 'chat_mensajes'), {
           remitenteId: currentUser.uid,
@@ -4124,21 +4142,37 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       display: flex;
     }
 
-    /* CHAT UI */
+    /* ═══════ CHAT UI — WhatsApp-Style (V.5.6.0) ═══════ */
     #section-chat {
       display: none;
       height: calc(100vh - 120px);
-      gap: 1px;
-      background: var(--border);
       overflow: hidden;
+      border-radius: 0;
     }
 
     .chat-sidebar {
-      width: 280px;
+      width: 320px;
       background: var(--bg-1);
       display: flex;
       flex-direction: column;
       flex-shrink: 0;
+      border-right: 1px solid var(--border-mid);
+    }
+
+    .chat-sidebar-head {
+      padding: 14px 16px;
+      background: linear-gradient(135deg, #075e54 0%, #128c7e 100%);
+      color: #fff;
+      font-weight: 700;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .chat-sidebar-head span {
+      font-size: 20px;
     }
 
     .chat-list {
@@ -4148,146 +4182,317 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       flex-direction: column;
     }
 
+    .chat-list::-webkit-scrollbar {
+      width: 4px;
+    }
+
+    .chat-list::-webkit-scrollbar-thumb {
+      background: var(--bg-4);
+      border-radius: 4px;
+    }
+
     .chat-item {
-      padding: 12px 16px;
+      padding: 12px 14px;
       display: flex;
       align-items: center;
       gap: 12px;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.15s ease;
       border-bottom: 1px solid var(--border-light);
       position: relative;
     }
 
     .chat-item:hover {
-      background: var(--bg-2);
+      background: rgba(0, 0, 0, 0.04);
     }
 
     .chat-item.active {
-      background: var(--accent-light);
-      border-left: 4px solid var(--accent);
+      background: linear-gradient(90deg, rgba(18, 140, 126, 0.12), rgba(18, 140, 126, 0.04));
+      border-left: 3px solid #128c7e;
+    }
+
+    .chat-avatar {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      font-weight: 700;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .chat-avatar-general {
+      background: linear-gradient(135deg, #128c7e, #25d366);
+      color: white;
+    }
+
+    .chat-avatar-user {
+      background: var(--bg-3);
+      color: var(--text-2);
+    }
+
+    .chat-avatar .online-dot {
+      position: absolute;
+      bottom: 1px;
+      right: 1px;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 2px solid var(--bg-1);
+    }
+
+    .chat-item-info {
+      flex: 1;
+      min-width: 0;
     }
 
     .chat-item .name {
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 600;
       color: var(--text-1);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
     .chat-item .status {
-      font-size: 10px;
+      font-size: 11px;
       color: var(--text-3);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
     }
 
     .chat-badge {
-      background: #e74c3c;
+      background: #25d366;
       color: white;
-      font-size: 9px;
+      font-size: 10px;
       font-weight: 700;
-      padding: 2px 6px;
+      min-width: 20px;
+      height: 20px;
+      padding: 0 6px;
       border-radius: 10px;
-      margin-left: auto;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
     }
 
     .nav-badge {
       display: inline-block;
       width: 8px;
       height: 8px;
-      background: #e74c3c;
+      background: #25d366;
       border-radius: 50%;
       margin-left: 4px;
-      box-shadow: 0 0 8px rgba(231, 76, 60, 0.5);
+      box-shadow: 0 0 8px rgba(37, 211, 102, 0.5);
     }
 
     .chat-main {
       flex: 1;
-      background: var(--bg-2);
       display: flex;
       flex-direction: column;
       position: relative;
+      background: #e5ddd5;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cdefs%3E%3Cpattern id='p' width='40' height='40' patternUnits='userSpaceOnUse'%3E%3Ccircle cx='20' cy='20' r='1.2' fill='%23ccc' opacity='0.3'/%3E%3C/pattern%3E%3C/defs%3E%3Crect fill='url(%23p)' width='200' height='200'/%3E%3C/svg%3E");
     }
 
     .chat-header {
       padding: 12px 20px;
-      background: var(--bg-1);
-      border-bottom: 1px solid var(--border);
+      background: linear-gradient(135deg, #075e54 0%, #128c7e 100%);
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 12px;
+      flex-shrink: 0;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+    }
+
+    .chat-header-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: white;
+      font-size: 16px;
     }
 
     .chat-header h3 {
-      font-size: 15px;
+      font-size: 16px;
       margin: 0;
-      color: var(--text-1);
+      color: #fff;
+      font-weight: 600;
     }
 
     .chat-messages {
       flex: 1;
-      padding: 20px;
+      padding: 16px 60px 16px 16px;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 6px;
+    }
+
+    .chat-messages::-webkit-scrollbar {
+      width: 5px;
+    }
+
+    .chat-messages::-webkit-scrollbar-thumb {
+      background: rgba(0, 0, 0, 0.2);
+      border-radius: 4px;
     }
 
     .msg-bubble {
-      max-width: 75%;
-      padding: 10px 14px;
-      border-radius: 12px;
-      font-size: 13px;
-      line-height: 1.4;
+      max-width: 65%;
+      padding: 8px 12px 6px;
+      border-radius: 8px;
+      font-size: 13.5px;
+      line-height: 1.45;
       position: relative;
       word-break: break-word;
+      box-shadow: 0 1px 1px rgba(0, 0, 0, 0.08);
     }
 
     .msg-sent {
       align-self: flex-end;
-      background: var(--accent);
-      color: white;
-      border-bottom-right-radius: 2px;
+      background: #dcf8c6;
+      color: #303030;
+      border-top-right-radius: 0;
     }
 
     .msg-received {
       align-self: flex-start;
-      background: white;
-      color: var(--text-1);
-      border: 1px solid var(--border-mid);
-      border-bottom-left-radius: 2px;
+      background: #fff;
+      color: #303030;
+      border-top-left-radius: 0;
     }
 
     .msg-meta {
-      font-size: 9px;
-      margin-top: 4px;
-      opacity: 0.7;
+      font-size: 10px;
+      margin-top: 3px;
+      color: rgba(0, 0, 0, 0.45);
       display: flex;
       justify-content: space-between;
+      gap: 12px;
+    }
+
+    .msg-meta b {
+      color: #128c7e;
     }
 
     .chat-input-area {
-      padding: 16px;
-      background: var(--bg-1);
-      border-top: 1px solid var(--border);
+      padding: 10px 16px;
+      background: #f0f0f0;
+      border-top: 1px solid #ddd;
       display: flex;
+      align-items: flex-end;
       gap: 10px;
     }
 
     .chat-input {
       flex: 1;
-      padding: 10px 14px;
-      border: 1px solid var(--border-mid);
-      border-radius: 6px;
-      font-size: 13px;
-      background: var(--bg-2);
-      outline: none;
-      min-height: 40px;
-      max-height: 120px;
+      border: none;
+      border-radius: 20px;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-family: inherit;
       resize: none;
-      line-height: 1.4;
+      max-height: 100px;
+      overflow-y: auto;
+      background: #fff;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+      outline: none;
     }
 
     .chat-input:focus {
-      border-color: var(--accent);
+      box-shadow: 0 1px 4px rgba(18, 140, 126, 0.2);
+    }
+
+    .btn-chat-send {
+      width: 42px;
+      height: 42px;
+      border-radius: 50%;
+      border: none;
+      background: linear-gradient(135deg, #128c7e, #25d366);
+      color: white;
+      font-size: 18px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: transform 0.15s, box-shadow 0.15s;
+      box-shadow: 0 2px 6px rgba(18, 140, 126, 0.3);
+    }
+
+    .btn-chat-send:hover {
+      transform: scale(1.05);
+      box-shadow: 0 3px 10px rgba(18, 140, 126, 0.4);
+    }
+
+    .btn-chat-send:active {
+      transform: scale(0.95);
+    }
+
+    .chat-placeholder {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 40px;
+      background: #f8f9fa;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cdefs%3E%3Cpattern id='p' width='40' height='40' patternUnits='userSpaceOnUse'%3E%3Ccircle cx='20' cy='20' r='1.2' fill='%23ccc' opacity='0.15'/%3E%3C/pattern%3E%3C/defs%3E%3Crect fill='url(%23p)' width='200' height='200'/%3E%3C/svg%3E");
+    }
+
+    .chat-placeholder-icon {
+      width: 100px;
+      height: 100px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #128c7e22, #25d36622);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 48px;
+      margin-bottom: 20px;
+      animation: placeholderPulse 2.5s ease-in-out infinite;
+    }
+
+    @keyframes placeholderPulse {
+
+      0%,
+      100% {
+        transform: scale(1);
+        opacity: 0.8;
+      }
+
+      50% {
+        transform: scale(1.06);
+        opacity: 1;
+      }
+    }
+
+    .chat-placeholder h2 {
+      font-family: 'Fraunces', serif;
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text-1);
+      margin: 0 0 8px;
+    }
+
+    .chat-placeholder p {
+      font-size: 14px;
+      color: var(--text-3);
+      max-width: 320px;
+      line-height: 1.5;
+      margin: 0;
     }
 
     /* SIDEBAR */
@@ -6352,40 +6557,60 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         min-height: 0 !important;
       }
 
-      /* ═══════ Chat Section — Stacked Mobile Layout ═══════ */
+      /* ═══════ Chat Section — Stacked Mobile Layout (V.5.6.0) ═══════ */
       #section-chat {
         flex-direction: column !important;
         height: calc(100vh - 60px) !important;
+        height: calc(100dvh - 60px) !important;
       }
 
       .chat-sidebar {
         width: 100% !important;
-        max-height: 35vh;
+        max-height: 200px;
+        /* Reduced to show more chat area */
         border-right: none !important;
-        border-bottom: 1px solid var(--border-mid);
+        border-bottom: 1px solid #ddd;
         overflow-y: auto;
+      }
+
+      .chat-sidebar-head {
+        padding: 10px 14px;
+        font-size: 14px;
       }
 
       .chat-main {
         flex: 1;
         min-height: 0;
         overflow: hidden;
+        display: flex;
+        flex-direction: column;
       }
 
       .chat-messages {
-        padding: 12px !important;
+        padding: 12px 14px !important;
       }
 
       .chat-header {
-        padding: 10px 14px !important;
+        padding: 8px 12px !important;
       }
 
       .chat-input-area {
-        padding: 10px 12px !important;
+        padding: 8px 10px !important;
       }
 
       .msg-bubble {
-        max-width: 85% !important;
+        max-width: 88% !important;
+        font-size: 13px;
+      }
+
+      .chat-placeholder {
+        padding: 20px;
+      }
+
+      .chat-placeholder-icon {
+        width: 60px;
+        height: 60px;
+        font-size: 32px;
       }
 
       #section-chat-view {
@@ -6850,7 +7075,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          Versión V.5.5.8
+          Versión V.5.6.0
         </div>
       </div>
 
@@ -6978,28 +7203,26 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     <div id="section-chat-view" style="display:none; flex:1; flex-direction:column;">
       <div id="section-chat">
         <div class="chat-sidebar">
-          <div
-            style="padding:16px; border-bottom:1px solid var(--border); font-weight:700; color:var(--text-3); font-size:11px; text-transform:uppercase;">
-            Contactos</div>
+          <div class="chat-sidebar-head">
+            <span>💬</span> Contactos
+          </div>
           <div class="chat-list" id="chat-list">
             <!-- Cargado dinámicamente -->
           </div>
         </div>
         <div class="chat-main">
-          <div class="chat-header">
+          <div id="chat-header" class="chat-header" style="display:none;">
+            <div class="chat-header-avatar" id="chat-header-avatar"></div>
             <h3 id="chat-target-name">General</h3>
           </div>
           <div class="chat-messages" id="chat-messages">
             <!-- Cargado dinámicamente -->
           </div>
-          <div id="chat-input-area" class="chat-input-area"
-            style="display: none; align-items: flex-end; padding: 12px 16px;">
+          <div id="chat-input-area" class="chat-input-area" style="display: none;">
             <textarea id="chat-input" class="chat-input" placeholder="Escribe un mensaje..." rows="1"
               oninput="this.style.height = ''; this.style.height = this.scrollHeight + 'px'"
               onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); enviarMensaje(); }"></textarea>
-            <button class="btn-create-m"
-              style="padding:0 12px; border-radius:6px; font-size:12px; height: 38px; min-width: 70px; margin-bottom: 0; align-self: flex-end;"
-              onclick="enviarMensaje()">Enviar</button>
+            <button class="btn-chat-send" onclick="enviarMensaje()">➤</button>
           </div>
         </div>
       </div>
