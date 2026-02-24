@@ -2717,6 +2717,18 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       if (typeof cargarVehiculos === 'function') cargarVehiculos();
       if (typeof cargarErbes === 'function') cargarErbes();
       if (typeof cargarEries === 'function') cargarEries();
+
+      // Sync drawer selectors (V.5.5.4)
+      const dProvSel = document.getElementById('drawer-prov-selector');
+      if (dProvSel) dProvSel.value = val;
+      const hProvSel = document.getElementById('hdr-prov-selector');
+      if (hProvSel) hProvSel.value = val;
+      const dOficina = document.getElementById('drawer-oficina-title');
+      if (dOficina) {
+        dOficina.textContent = val === 'Andalucía'
+          ? 'Oficina Autonómica de Andalucía'
+          : `Oficina Provincial de ${val}`;
+      }
     };
 
     let editingVehiculoId = null;
@@ -6699,7 +6711,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <div id="drawer-prov-selector-wrap" style="display:none; margin-top:6px;">
             <select id="drawer-prov-selector" class="f-select" style="width:100%; padding:6px 8px; font-size:12px;"
               onchange="changeProvincia(this.value)">
-              <option value="Andalucia">Oficina Autonomica de Andalucia</option>
+              <option value="Andalucía">Oficina Autonómica de Andalucía</option>
             </select>
           </div>
         </div>
