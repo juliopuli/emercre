@@ -669,6 +669,24 @@
           leido: false,
           leidoPor: []
         });
+
+        // V.5.10.2: Push notification para mensajes privados
+        if (currentChatId !== 'general' && NOTIF_BRIDGE_URL) {
+          const destUser = allUsersCache.find(u => u.uid === currentChatId);
+          if (destUser && destUser.fcmToken) {
+            const senderName = currentUserDoc.nombre || currentUser.email;
+            fetch(NOTIF_BRIDGE_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain' },
+              body: JSON.stringify({
+                tokens: [destUser.fcmToken],
+                titulo: 'Mensaje de ' + senderName,
+                body: text.length > 100 ? text.substring(0, 100) + '…' : text,
+                data: { chatFrom: currentUser.uid }
+              })
+            }).catch(err => console.warn("Error push chat privado:", err));
+          }
+        }
       } catch (e) {
         alert('Error al enviar: ' + e.message);
       }
@@ -7280,7 +7298,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          Versión V.5.10.1 (Fix duplicate notifications)
+          Versión V.5.10.2 (Push para mensajes privados de chat)
         </div>
       </div>
 
