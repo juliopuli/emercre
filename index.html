@@ -943,6 +943,7 @@
       // Calculate orbital positions for badges
       let totalBadges = 0;
       if (op.recursosSummary && op.recursosSummary['erbes'] > 0) totalBadges++;
+      if (op.recursosSummary && op.recursosSummary['eries'] > 0) totalBadges++;
 
       const types = [
         { key: 'camiones', icon: 'assets/icons/truck.png' },
@@ -964,6 +965,19 @@
         html += `<div class="marker-radial-item erbe-focus ${isCrit ? 'has-crit' : ''}" style="--idx: ${currentBadgeIdx}; --total: ${totalBadges};">
                   <div class="badge-item-erbe">
                     <img src="assets/icons/erbe.svg" class="badge-erbes-img">
+                    ${count > 1 ? `<div class="badge-count">${count}</div>` : ''}
+                  </div>
+                </div>`;
+        currentBadgeIdx++;
+      }
+
+      // ERIE (Top radial focus)
+      if (op.recursosSummary && op.recursosSummary['eries'] > 0) {
+        const count = op.recursosSummary['eries'];
+        const isCrit = op.nivel == 4;
+        html += `<div class="marker-radial-item erie-focus ${isCrit ? 'has-crit' : ''}" style="--idx: ${currentBadgeIdx}; --total: ${totalBadges};">
+                  <div class="badge-item-erbe">
+                    <img src="assets/icons/erie.svg" class="badge-erbes-img">
                     ${count > 1 ? `<div class="badge-count">${count}</div>` : ''}
                   </div>
                 </div>`;
@@ -1350,7 +1364,7 @@
       });
     }
 
-    let opcionesRecursosCache = { vehiculos: [], erbes: [] };
+    let opcionesRecursosCache = { vehiculos: [], erbes: [], eries: [] };
 
     window.cargarOpcionesRecursos = async () => {
       const cat = document.getElementById('r-cat').value;
@@ -1389,6 +1403,19 @@
         filtered.forEach(e => {
           sel.innerHTML += `<option value="${e.id}">ERBE ${e.localidad} (${e.provincia})</option>`;
         });
+      } else if (cat === 'eries') {
+        const snap = await getDocs(collection(db, 'eries'));
+        opcionesRecursosCache.eries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        let filtered = opcionesRecursosCache.eries.filter(e => {
+          const prov = e.provincia || 'Málaga';
+          return prov === currentOp.provincia;
+        });
+
+        filtered = filtered.filter(e => !currentAssignedIds.includes(e.id));
+
+        filtered.forEach(e => {
+          sel.innerHTML += `<option value="${e.id}">ERIE ${e.especialidad} (${e.provincia})</option>`;
+        });
       }
     };
 
@@ -1409,6 +1436,9 @@
         } else if (cat === 'erbes') {
           const e = opcionesRecursosCache.erbes.find(x => x.id === itemId);
           if (e) recursoDesc = `🏥 ERBE ${e.localidad}`;
+        } else if (cat === 'eries') {
+          const e = opcionesRecursosCache.eries.find(x => x.id === itemId);
+          if (e) recursoDesc = `🏥 ERIE ${e.especialidad}`;
         }
 
         if (recursoDesc) {
@@ -1450,6 +1480,8 @@
               key = keyMap[v.tipo] || 'otros';
             } else if (cat === 'erbes') {
               key = 'erbes';
+            } else if (cat === 'eries') {
+              key = 'eries';
             }
             rSum[key] = (rSum[key] || 0) + 1;
 
@@ -1492,6 +1524,8 @@
             else if (desc.includes('Vehículo transporte personal') || desc.includes('Vehículo de transporte mixto') || desc.includes('Furgoneta')) key = 'van';
           } else if (desc.includes('🏥 ERBE')) {
             key = 'erbes';
+          } else if (desc.includes('🏥 ERIE')) {
+            key = 'eries';
           }
 
           if (rSum[key] > 0) rSum[key]--;
@@ -2497,11 +2531,15 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       const contErbes = document.getElementById('tabla-erbes-container');
       if (contErbes) contErbes.style.display = tabla === 'erbes' ? 'flex' : 'none';
 
+      const contEries = document.getElementById('tabla-eries-container');
+      if (contEries) contEries.style.display = tabla === 'eries' ? 'flex' : 'none';
+
       const contJefes = document.getElementById('tabla-jefes-container');
       if (contJefes) contJefes.style.display = tabla === 'jefes' ? 'flex' : 'none';
 
       if (tabla === 'vehiculos') cargarVehiculos();
       if (tabla === 'erbes') cargarErbes();
+      if (tabla === 'eries') cargarEries();
       if (tabla === 'jefes') cargarJefes();
     };
 
@@ -2514,6 +2552,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       suscribirJefesSelect(); // Refrescar listas de jefes filtradas
       if (typeof cargarVehiculos === 'function') cargarVehiculos();
       if (typeof cargarErbes === 'function') cargarErbes();
+      if (typeof cargarEries === 'function') cargarEries();
     };
 
     let editingVehiculoId = null;
@@ -2744,6 +2783,108 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         await deleteDoc(doc(db, 'erbes', id));
         mostrarToast('ERBE eliminado.');
         cargarErbes();
+      } catch (e) { alert('Error al eliminar: ' + e.message); }
+    };
+
+    // ── GESTIÓN ERIES ──────────────────────────────────────────────────
+    let editingErieId = null;
+
+    async function cargarEries() {
+      const snap = await getDocs(collection(db, 'eries'));
+      const tbody = document.getElementById('eries-tbody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      const allEries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const visible = allEries.filter(e => {
+        const prov = e.provincia || 'Málaga';
+        return selectedProvincia === 'Andalucía' || prov === selectedProvincia;
+      });
+
+      visible.forEach(e => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>ERIE ${e.especialidad || '-'}</strong></td>
+          <td style="font-size:11px; color:var(--text-3);">${e.provincia || 'Málaga'}</td>
+          <td>
+            <button class="tbl-btn" onclick="editarErie('${e.id}')">Editar</button>
+            <button class="tbl-btn danger" onclick="borrarErie('${e.id}')">Eliminar</button>
+          </td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    window.abrirModalErie = () => {
+      editingErieId = null;
+      document.getElementById('modal-erie-title').textContent = 'Nuevo ERIE';
+      const elEsp = document.getElementById('erie-especialidad');
+      if (elEsp) elEsp.value = 'Asistencia Sanitaria';
+
+      const provRow = document.getElementById('erie-prov-row');
+      const provSel = document.getElementById('erie-provincia');
+      if (currentUserDoc.provincia && currentUserDoc.provincia !== 'Andalucía') {
+        provRow.style.display = 'none';
+        provSel.value = currentUserDoc.provincia;
+      } else {
+        provRow.style.display = 'block';
+        provSel.value = selectedProvincia === 'Andalucía' ? 'Andalucía' : selectedProvincia;
+      }
+
+      document.getElementById('overlay-erie').classList.add('open');
+      setTimeout(() => document.getElementById('erie-especialidad').focus(), 100);
+    };
+
+    window.editarErie = async id => {
+      const snap = await getDoc(doc(db, 'eries', id));
+      if (!snap.exists()) return;
+      const e = snap.data();
+      editingErieId = id;
+      document.getElementById('modal-erie-title').textContent = 'Editar ERIE';
+      document.getElementById('erie-especialidad').value = e.especialidad || 'Asistencia Sanitaria';
+
+      const provRow = document.getElementById('erie-prov-row');
+      const provSel = document.getElementById('erie-provincia');
+      provSel.value = e.provincia || 'Málaga';
+      if (currentUserDoc.provincia && currentUserDoc.provincia !== 'Andalucía') {
+        provRow.style.display = 'none';
+      } else {
+        provRow.style.display = 'block';
+      }
+
+      document.getElementById('overlay-erie').classList.add('open');
+    };
+
+    window.cerrarModalErie = () => {
+      document.getElementById('overlay-erie').classList.remove('open');
+    };
+
+    window.guardarErie = async () => {
+      const especialidad = document.getElementById('erie-especialidad').value;
+      const provincia = document.getElementById('erie-provincia').value;
+
+      const btn = document.getElementById('btn-guardar-erie');
+      btn.disabled = true; btn.textContent = 'Guardando...';
+
+      try {
+        if (editingErieId) {
+          await updateDoc(doc(db, 'eries', editingErieId), { especialidad, provincia });
+          mostrarToast('ERIE actualizado.');
+        } else {
+          await addDoc(collection(db, 'eries'), { especialidad, provincia });
+          mostrarToast('ERIE creado.');
+        }
+        cerrarModalErie();
+        cargarEries();
+      } catch (e) { alert('Error: ' + e.message); }
+      btn.disabled = false; btn.textContent = 'Guardar';
+    };
+
+    window.borrarErie = async id => {
+      if (!confirm('¿Eliminar este ERIE de forma permanente?')) return;
+      try {
+        await deleteDoc(doc(db, 'eries', id));
+        mostrarToast('ERIE eliminado.');
+        cargarEries();
       } catch (e) { alert('Error al eliminar: ' + e.message); }
     };
 
@@ -5198,7 +5339,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     }
 
     /* ERBE specific positioning (collapsed) */
-    .marker-radial-item.erbe-focus {
+    .marker-radial-item.erbe-focus,
+    .marker-radial-item.erie-focus {
       position: absolute;
       bottom: calc(100% + 4px);
       left: 50%;
@@ -5208,7 +5350,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       pointer-events: none;
     }
 
-    .marker-radial-item.erbe-focus.has-crit {
+    .marker-radial-item.erbe-focus.has-crit,
+    .marker-radial-item.erie-focus.has-crit {
       bottom: calc(100% + 18px);
     }
 
@@ -5218,7 +5361,8 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     }
 
     /* === EXPANDED ORBITAL FLOWER STATE === */
-    .custom-marker.expanded .marker-radial-item.erbe-focus {
+    .custom-marker.expanded .marker-radial-item.erbe-focus,
+    .custom-marker.expanded .marker-radial-item.erie-focus {
       position: absolute;
       top: 18px;
       left: 35px;
@@ -5927,7 +6071,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.11.7
+          Versión V.4.12.0
         </div>
       </div>
 
@@ -5975,6 +6119,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
                 <option value="">Categoría...</option>
                 <option value="vehiculos">Vehículos</option>
                 <option value="erbes">ERBEs</option>
+                <option value="eries">ERIEs</option>
               </select>
               <select class="f-input f-select" id="r-item" style="flex:2; padding:4px; font-size:11px;">
                 <option value="">Recurso...</option>
@@ -6116,10 +6261,11 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Gestión de catálogos y dispositivos
             estructurales.</div>
         </div>
-        <div class="filter-tabs" id="tablas-subnav" style="width: 100%; max-width: 500px; display: flex;">
+        <div class="filter-tabs" id="tablas-subnav" style="width: 100%; max-width: 600px; display: flex;">
           <button class="ftab on" id="subnav-vehiculos" onclick="showTablaMaestra('vehiculos')"
             style="flex:1;">Vehículos</button>
           <button class="ftab" id="subnav-erbes" onclick="showTablaMaestra('erbes')" style="flex:1;">ERBEs</button>
+          <button class="ftab" id="subnav-eries" onclick="showTablaMaestra('eries')" style="flex:1;">ERIEs</button>
           <button class="ftab" id="subnav-jefes" onclick="showTablaMaestra('jefes')" style="flex:1;">Jefes de
             Operaciones</button>
         </div>
@@ -6160,6 +6306,25 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
               </tr>
             </thead>
             <tbody id="erbes-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Contenedor ERIEs -->
+      <div id="tabla-eries-container" style="display:none; flex-direction:column; flex:1; gap:16px;">
+        <div style="display:flex; justify-content:flex-end;">
+          <button class="btn-nueva" onclick="abrirModalErie()">+ Añadir ERIE</button>
+        </div>
+        <div class="users-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Especialidad</th>
+                <th>Provincia</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="eries-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -6484,7 +6649,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.4.11.7
+            Versión V.4.12.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
@@ -6585,6 +6750,49 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       <div class="modal-foot">
         <button class="btn-cancel-m" onclick="cerrarModalErbe()">Cancelar</button>
         <button class="btn-create-m" id="btn-guardar-erbe" onclick="guardarErbe()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  </div>
+
+  <div class="overlay" id="overlay-erie">
+    <div class="modal" style="width:420px;">
+      <div class="modal-head">
+        <div class="modal-title" id="modal-erie-title">Nuevo ERIE</div>
+        <button class="btn-close-dp" onclick="cerrarModalErie()">×</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <div class="field-lbl">Especialidad *</div>
+          <select class="f-input f-select" id="erie-especialidad" style="width:100%">
+            <option value="Asistencia Sanitaria">Asistencia Sanitaria</option>
+            <option value="Prepi">Prepi</option>
+            <option value="Albergue">Albergue</option>
+            <option value="Psicosocial">Psicosocial</option>
+            <option value="Comunicaciones y Coordinación">Comunicaciones y Coordinación</option>
+            <option value="Búsqueda y Salvamento en medio acuático">Búsqueda y Salvamento en medio acuático</option>
+            <option value="Búsqueda y Salvamento en medio terrestre">Búsqueda y Salvamento en medio terrestre</option>
+          </select>
+        </div>
+        <div class="field" id="erie-prov-row" style="margin-bottom: 0;">
+          <div class="field-lbl">Oficina / Provincia *</div>
+          <select class="f-input f-select" id="erie-provincia" style="width:100%">
+            <option value="Andalucía">Oficina Autonómica de Andalucía</option>
+            <option value="Almería">Oficina Provincial de Almería</option>
+            <option value="Cádiz">Oficina Provincial de Cádiz</option>
+            <option value="Córdoba">Oficina Provincial de Córdoba</option>
+            <option value="Granada">Oficina Provincial de Granada</option>
+            <option value="Huelva">Oficina Provincial de Huelva</option>
+            <option value="Jaén">Oficina Provincial de Jaén</option>
+            <option value="Málaga">Oficina Provincial de Málaga</option>
+            <option value="Sevilla">Oficina Provincial de Sevilla</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel-m" onclick="cerrarModalErie()">Cancelar</button>
+        <button class="btn-create-m" id="btn-guardar-erie" onclick="guardarErie()">Guardar</button>
       </div>
     </div>
   </div>
