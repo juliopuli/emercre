@@ -3,7 +3,7 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
 firebase.initializeApp({
-    apiKey: "__FIREBASE_API_KEY__",
+    apiKey: "AIzaSyAHtrxaBazArqa8znWsUIVYxTsS7zoOOmc",
     authDomain: "emercre.firebaseapp.com",
     projectId: "emercre",
     storageBucket: "emercre.firebasestorage.app",
