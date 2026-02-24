@@ -6320,6 +6320,146 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       body>div[style*="position: absolute"][style*="width: 1px"] {
         display: none !important;
       }
+
+      /* ═══════ V.5.5.1 — Detail Panel Mobile Compact ═══════ */
+
+      /* Nivel selector: compact single line */
+      .detail-panel>div:nth-child(2) {
+        padding: 4px 12px !important;
+      }
+
+      .nivel-selector {
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        gap: 0 !important;
+      }
+
+      .nsel-opt {
+        flex: 1 1 auto !important;
+        padding: 3px 6px !important;
+        font-size: 8px !important;
+        white-space: nowrap;
+      }
+
+      /* Info row: much more compact */
+      .dp-info-row {
+        padding: 6px 12px !important;
+        gap: 4px 8px !important;
+        grid-template-columns: 1fr 1fr !important;
+      }
+
+      .dp-info-item {
+        font-size: 8px !important;
+      }
+
+      .dp-info-item strong {
+        font-size: 9px !important;
+      }
+
+      /* Detail panel header: compact */
+      .dp-header {
+        padding: 8px 12px 6px !important;
+      }
+
+      .dp-scope-title {
+        font-size: 8px !important;
+        margin-bottom: 2px !important;
+      }
+
+      .dp-name {
+        font-size: 16px !important;
+      }
+
+      .dp-id {
+        font-size: 8px !important;
+      }
+
+      .dp-loc {
+        font-size: 10px !important;
+      }
+
+      /* Chips row: compact */
+      .dp-chips {
+        gap: 4px !important;
+      }
+
+      /* Recursos section: compact */
+      .dp-recursos {
+        padding: 4px 12px 6px !important;
+      }
+
+      /* Add action area: compact */
+      .dp-addaction {
+        padding: 6px 12px 8px !important;
+      }
+
+      .dp-addaction textarea.f-input {
+        min-height: 35px !important;
+        font-size: 11px !important;
+      }
+
+      /* Admin buttons row: compact */
+      .detail-panel>div:last-child {
+        padding: 6px 12px !important;
+      }
+
+      /* Timeline: more space */
+      .dp-timeline {
+        padding: 8px 12px !important;
+      }
+
+      .tl-text {
+        font-size: 11px !important;
+      }
+
+      .tl-author {
+        font-size: 9px !important;
+      }
+
+      .tl-ts {
+        font-size: 8px !important;
+      }
+
+      /* ═══════ V.5.5.1 — Sidebar Scroll Fix ═══════ */
+      .panel-left {
+        max-height: calc(100vh - 60px) !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+      }
+
+      .ops-list {
+        flex: 1 !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+        min-height: 0 !important;
+      }
+
+      /* ═══════ V.5.5.1 — Main View Width Containment ═══════ */
+      #section-operaciones {
+        overflow-x: hidden !important;
+        max-width: 100vw !important;
+      }
+
+      .panel-left {
+        max-width: 100vw !important;
+        box-sizing: border-box !important;
+      }
+
+      .panel-left-head {
+        flex-shrink: 0 !important;
+        padding: 10px 12px 8px !important;
+      }
+
+      .search-input {
+        font-size: 13px !important;
+        box-sizing: border-box !important;
+      }
+
+      /* Op cards: snug */
+      .op-card {
+        padding: 8px 10px !important;
+      }
     }
   </style>
 </head>
@@ -6512,7 +6652,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.5.5.0
+          Versión V.5.5.1
         </div>
       </div>
 
