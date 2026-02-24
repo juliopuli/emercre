@@ -658,7 +658,12 @@
         return;
       }
       try {
-        if (isManual) mostrarToast("Intentando activar notificaciones...");
+        if (isManual) {
+          if (!window.matchMedia('(display-mode: standalone)').matches && /iPhone|iPad|iPod/.test(navigator.userAgent)) {
+            mostrarToast("ℹ️ iOS requiere instalar la app (Añadir a pantalla de inicio) para recibir notificaciones.");
+          }
+          mostrarToast("Intentando activar notificaciones...");
+        }
 
         // 1. Registrar Service Worker (V.5.7.4: Ruta relativa para GitHub Pages)
         const registration = await navigator.serviceWorker.register('firebase-messaging-sw.js');
@@ -692,14 +697,15 @@
 
     window.diagNotificaciones = () => {
       const status = {
-        sw: 'serviceWorker' in navigator,
-        notif: 'Notification' in window,
-        perm: Notification.permission,
-        msgSupported: !!messaging,
-        isHTTPS: location.protocol === 'https:',
-        isPWA: window.matchMedia('(display-mode: standalone)').matches
+        'Soporte SW': 'serviceWorker' in navigator,
+        'Soporte Notif': 'Notification' in window,
+        'Permiso': Notification.permission,
+        'FCM Listo': !!messaging,
+        'HTTPS': location.protocol === 'https:',
+        'Modo PWA': window.matchMedia('(display-mode: standalone)').matches ? 'SÍ (Instalada)' : 'NO (Navegador)'
       };
-      alert(Object.entries(status).map(([k, v]) => `${k}: ${v}`).join('\n'));
+      const lines = Object.entries(status).map(([k, v]) => `${k}: ${v}`).join('\n');
+      alert("--- Diagnóstico Push ---\n" + lines);
     };    // Función para disparar la notificación (V.5.7.0)
     window.broadcastNuevaOperacion = async (op) => {
       console.log("Broadcasting nueva operación:", op.nombre);
@@ -1068,6 +1074,14 @@
                 const opProv = d.provincia;
                 if (myProv === 'Andalucía' || myProv === opProv) {
                   hasNewOp = true;
+                  // V.5.7.5: Alerta visual en primer plano
+                  mostrarToast(`📢 Nueva Operación: ${d.nombre}`);
+                  if (Notification.permission === 'granted') {
+                    new Notification('Nueva Operación', {
+                      body: `${d.creadoPorNombre} ha activado ${d.nombre} en ${d.provincia}`,
+                      icon: 'assets/logo_emercre.png'
+                    });
+                  }
                 }
                 ops[dId]._isNew = true;
               }
@@ -7179,7 +7193,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          Versión V.5.7.4 (SW Path Fixed)
+          Versión V.5.7.5 (Toast & PWA Check)
         </div>
       </div>
 
