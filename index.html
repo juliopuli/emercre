@@ -855,6 +855,50 @@
       suscribirNotificacionesChat();
       showSection('operaciones');
       if (gmap && mapReady) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
+
+      // ── MOBILE DRAWER POPULATION (V.5.5.4) ──────────────────────────
+      const dn = document.getElementById('drawer-user-name');
+      const dr = document.getElementById('drawer-user-role');
+      if (dn) dn.textContent = currentUserDoc.nombre || currentUser.email;
+      if (dr) dr.textContent = ROL_LABELS[currentRole] || currentRole;
+
+      // Oficina
+      const dOficina = document.getElementById('drawer-oficina-title');
+      const dProvWrap = document.getElementById('drawer-prov-selector-wrap');
+      const dProvSel = document.getElementById('drawer-prov-selector');
+      if (currentUserDoc.provincia && currentUserDoc.provincia !== 'Andalucía') {
+        if (dOficina) dOficina.textContent = `Oficina Provincial de ${currentUserDoc.provincia}`;
+        if (dProvWrap) dProvWrap.style.display = 'none';
+      } else {
+        if (dOficina) dOficina.textContent = 'Oficina Autonómica de Andalucía';
+        if (dProvWrap) dProvWrap.style.display = 'block';
+        if (dProvSel && dProvSel.options.length <= 1) {
+          PROVINCIAS.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p;
+            opt.textContent = `Oficina Provincial de ${p}`;
+            dProvSel.appendChild(opt);
+          });
+        }
+        if (dProvSel) dProvSel.value = selectedProvincia;
+      }
+
+      // Jefe de Guardia drawer
+      const dJefeVal = document.getElementById('drawer-jefe-guardia-val');
+      const dJefeSel = document.getElementById('drawer-jefe-guardia-sel');
+      if (canManageGuardia) {
+        if (dJefeVal) dJefeVal.style.display = 'none';
+        if (dJefeSel) dJefeSel.style.display = 'block';
+      } else {
+        if (dJefeVal) dJefeVal.style.display = 'block';
+        if (dJefeSel) dJefeSel.style.display = 'none';
+      }
+
+      // Floating nueva op button on mobile
+      const mobileNuevaBtn = document.getElementById('btn-mobile-nueva-op');
+      if (mobileNuevaBtn) {
+        mobileNuevaBtn.style.display = isAdmin ? 'flex' : 'none';
+      }
     }
 
     function detenerListeners() {
@@ -3176,7 +3220,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     }
 
     function refrescarTodosLosSelectsJefes() {
-      const selects = ['f-dir', 'fe-dir', 'f-org-sub-select', 'fe-org-sub-select', 'hdr-jefe-guardia-sel'];
+      const selects = ['f-dir', 'fe-dir', 'f-org-sub-select', 'fe-org-sub-select', 'hdr-jefe-guardia-sel', 'drawer-jefe-guardia-sel'];
       selects.forEach(sid => {
         const sel = document.getElementById(sid);
         if (!sel) return;
@@ -3199,7 +3243,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       const currentVal = sel.value;
       sel.innerHTML = '';
 
-      if (sid === 'hdr-jefe-guardia-sel') {
+      if (sid === 'hdr-jefe-guardia-sel' || sid === 'drawer-jefe-guardia-sel') {
         const optNone = document.createElement('option');
         optNone.value = "";
         optNone.textContent = "Seleccionar...";
@@ -3222,7 +3266,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       // Mantener selección si existía
       if (currentVal && Array.from(sel.options).some(o => o.value === currentVal)) {
         sel.value = currentVal;
-      } else if (sid === 'hdr-jefe-guardia-sel' && jefeGuardiaActual) {
+      } else if ((sid === 'hdr-jefe-guardia-sel' || sid === 'drawer-jefe-guardia-sel') && jefeGuardiaActual) {
         sel.value = jefeGuardiaActual;
       }
     }
@@ -3264,12 +3308,22 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           if (valEl) valEl.textContent = jefeGuardiaActual || 'Sin asignar';
           const sel = document.getElementById('hdr-jefe-guardia-sel');
           if (sel) sel.value = jefeGuardiaActual || '';
+          // Drawer sync (V.5.5.4)
+          const dVal = document.getElementById('drawer-jefe-guardia-val');
+          if (dVal) dVal.textContent = jefeGuardiaActual || 'Sin asignar';
+          const dSel = document.getElementById('drawer-jefe-guardia-sel');
+          if (dSel) dSel.value = jefeGuardiaActual || '';
         } else {
           jefeGuardiaActual = null;
           const valEl = document.getElementById('hdr-jefe-guardia-val');
           if (valEl) valEl.textContent = 'Sin asignar';
           const sel = document.getElementById('hdr-jefe-guardia-sel');
           if (sel) sel.value = '';
+          // Drawer sync (V.5.5.4)
+          const dVal = document.getElementById('drawer-jefe-guardia-val');
+          if (dVal) dVal.textContent = 'Sin asignar';
+          const dSel = document.getElementById('drawer-jefe-guardia-sel');
+          if (dSel) dSel.value = '';
         }
       });
     }
@@ -6469,6 +6523,13 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         padding: 8px 10px !important;
       }
     }
+
+    /* Hide mobile-only elements on desktop */
+    @media (min-width: 901px) {
+      #btn-mobile-nueva-op {
+        display: none !important;
+      }
+    }
   </style>
 </head>
 
@@ -6612,6 +6673,51 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <div class="logo-text">EmerCRE</div>
           <button class="btn-close-drawer" onclick="toggleMobileMenu()">✕</button>
         </div>
+
+        <!-- User Profile Section -->
+        <div id="drawer-user-section"
+          style="padding:16px 20px; border-bottom:1px solid var(--border); background:var(--bg-2);">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+            <div
+              style="width:36px; height:36px; border-radius:50%; background:var(--accent); display:flex; align-items:center; justify-content:center; color:white; font-size:16px; font-weight:700;">
+              👤</div>
+            <div>
+              <div id="drawer-user-name" style="font-size:14px; font-weight:600; color:var(--text-1);"></div>
+              <div id="drawer-user-role"
+                style="font-size:10px; color:var(--text-3); text-transform:uppercase; letter-spacing:0.05em;"></div>
+            </div>
+            <div class="live-dot" style="margin-left:auto;"></div>
+          </div>
+        </div>
+
+        <!-- Oficina / Provincia -->
+        <div id="drawer-oficina-section" style="padding:12px 20px; border-bottom:1px solid var(--border);">
+          <div
+            style="font-size:9px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px;">
+            Oficina</div>
+          <div id="drawer-oficina-title" style="font-size:13px; font-weight:600; color:var(--accent);"></div>
+          <div id="drawer-prov-selector-wrap" style="display:none; margin-top:6px;">
+            <select id="drawer-prov-selector" class="f-select" style="width:100%; padding:6px 8px; font-size:12px;"
+              onchange="changeProvincia(this.value)">
+              <option value="Andalucia">Oficina Autonomica de Andalucia</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Jefe de Guardia -->
+        <div id="drawer-guardia-section" style="padding:12px 20px; border-bottom:1px solid var(--border);">
+          <div
+            style="font-size:9px; font-weight:700; color:var(--text-3); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px;">
+            Jefe de Operaciones de Guardia</div>
+          <div id="drawer-jefe-guardia-val" style="font-size:13px; font-weight:600; color:var(--accent);">Cargando...
+          </div>
+          <select id="drawer-jefe-guardia-sel" class="f-select"
+            style="display:none; width:100%; padding:6px 8px; font-size:12px; margin-top:4px;"
+            onchange="window.cambiarJefeGuardia(this.value)">
+          </select>
+        </div>
+
+        <!-- Navigation -->
         <div class="drawer-links">
           <button class="drawer-item on" data-sec="operaciones" onclick="mobileShowSection('operaciones')">🗺
             Operaciones</button>
@@ -6622,11 +6728,20 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <button class="drawer-item" id="mnav-tablas" data-sec="tablas" onclick="mobileShowSection('tablas')"
             style="display:none">🗂 Tablas maestras</button>
         </div>
-        <div class="drawer-foot">
-          <button class="btn-logout" style="width:100%; padding:12px;" onclick="doLogout()">Cerrar Sesión</button>
+
+        <!-- Footer actions -->
+        <div class="drawer-foot" style="display:flex; flex-direction:column; gap:8px;">
+          <button onclick="abrirModalChangePass(); toggleMobileMenu();"
+            style="width:100%; padding:10px; background:var(--bg-2); border:1px solid var(--border-mid); color:var(--text-2); cursor:pointer; font-family:inherit; font-size:13px; font-weight:500; border-radius:4px; display:flex; align-items:center; justify-content:center; gap:8px;">🔑
+            Cambiar contrasena</button>
+          <button class="btn-logout" style="width:100%; padding:12px;" onclick="doLogout()">Cerrar Sesion</button>
         </div>
       </div>
     </div>
+
+    <!-- MOBILE: Floating Nueva Operacion button -->
+    <button id="btn-mobile-nueva-op" onclick="abrirModalOp()"
+      style="display:none; position:fixed; bottom:76px; right:16px; z-index:600; background:var(--accent); color:#fff; border:none; width:52px; height:52px; border-radius:50%; font-size:24px; font-weight:700; cursor:pointer; box-shadow:0 4px 15px rgba(0,0,0,0.3); align-items:center; justify-content:center;">+</button>
 
     <!-- OPERACIONES -->
     <div id="section-operaciones">
@@ -6660,7 +6775,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.5.5.3
+          Versión V.5.5.4
         </div>
       </div>
 
