@@ -13,19 +13,12 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Manejador en segundo plano
+// Manejador en segundo plano (V.5.10.1)
+// NOTA: NO llamar showNotification aquí. FCM ya muestra la notificación
+// automáticamente a partir de webpush.notification en el payload.
+// Si lo llamamos, se duplica.
 messaging.onBackgroundMessage((payload) => {
     console.log('[firebase-messaging-sw.js] Mensaje en segundo plano recibido:', payload);
-
-    const notificationTitle = payload.notification.title;
-    const notificationOptions = {
-        body: payload.notification.body,
-        icon: 'assets/logo_emercre.png', // V.5.8.7: Ruta relativa para GitHub Pages
-        data: payload.data,
-        tag: 'emercre-notif' // Evita duplicados
-    };
-
-    self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
 // Manejador de clics (V.5.8.7)
