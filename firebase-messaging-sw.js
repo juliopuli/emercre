@@ -20,9 +20,27 @@ messaging.onBackgroundMessage((payload) => {
     const notificationTitle = payload.notification.title;
     const notificationOptions = {
         body: payload.notification.body,
-        icon: '/assets/logo_emercre.png',
-        data: payload.data
+        icon: 'assets/logo_emercre.png', // V.5.8.7: Ruta relativa para GitHub Pages
+        data: payload.data,
+        tag: 'emercre-notif' // Evita duplicados
     };
 
     self.registration.showNotification(notificationTitle, notificationOptions);
+});
+
+// Manejador de clics (V.5.8.7)
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+            if (clientList.length > 0) {
+                let client = clientList[0];
+                for (let i = 0; i < clientList.length; i++) {
+                    if (clientList[i].focused) { client = clientList[i]; break; }
+                }
+                return client.focus();
+            }
+            return clients.openWindow('index.html');
+        })
+    );
 });
