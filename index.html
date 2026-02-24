@@ -412,6 +412,14 @@
       // 1. Filtrar usuarios por ámbito (provincia) y preferencia autonómica
       const filteredUsers = allUsersCache.filter(u => {
         if (u.uid === currentUser.uid) return false;
+
+        // NUEVA REGLA: Los Jefes de Operaciones activos siempre pueden verse entre sí
+        const amIJefe = Object.values(allJefesGuardiaCacheMap).includes(currentUserDoc.nombre);
+        const isOtherJefe = Object.values(allJefesGuardiaCacheMap).includes(u.nombre);
+        if (amIJefe && isOtherJefe) {
+          return true;
+        }
+
         const myProv = currentUserDoc.provincia;
         const userProv = u.provincia;
 
@@ -7253,7 +7261,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          Versión V.5.9.1 (Autonomic restricted visibility logic)
+          Versión V.5.9.2 (Global Jefes Chat Visibility)
         </div>
       </div>
 
