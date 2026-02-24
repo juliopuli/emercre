@@ -954,7 +954,8 @@
           { key: 'camiones', icon: 'assets/icons/truck.png' },
           { key: 'ambulancias', icon: 'assets/icons/ambulance.png' },
           { key: 'offroad', icon: 'assets/icons/offroad.png' },
-          { key: 'van', icon: 'assets/icons/van.png' }
+          { key: 'van', icon: 'assets/icons/van.png' },
+          { key: 'erbes', icon: 'assets/icons/erbe.svg' }
         ];
 
         types.forEach(t => {
@@ -1319,7 +1320,7 @@
       });
     }
 
-    let opcionesRecursosCache = { vehiculos: [] };
+    let opcionesRecursosCache = { vehiculos: [], erbes: [] };
 
     window.cargarOpcionesRecursos = async () => {
       const cat = document.getElementById('r-cat').value;
@@ -1345,6 +1346,19 @@
         filtered.forEach(v => {
           sel.innerHTML += `<option value="${v.id}">${v.indicativo} - ${v.tipo} (${v.matricula})</option>`;
         });
+      } else if (cat === 'erbes') {
+        const snap = await getDocs(collection(db, 'erbes'));
+        opcionesRecursosCache.erbes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        let filtered = opcionesRecursosCache.erbes.filter(e => {
+          const prov = e.provincia || 'Málaga';
+          return prov === currentOp.provincia;
+        });
+
+        filtered = filtered.filter(e => !currentAssignedIds.includes(e.id));
+
+        filtered.forEach(e => {
+          sel.innerHTML += `<option value="${e.id}">ERBE ${e.localidad} (${e.provincia})</option>`;
+        });
       }
     };
 
@@ -1362,6 +1376,9 @@
         if (cat === 'vehiculos') {
           const v = opcionesRecursosCache.vehiculos.find(x => x.id === itemId);
           if (v) recursoDesc = `🚗 ${v.indicativo} - ${v.tipo} (${v.matricula})`;
+        } else if (cat === 'erbes') {
+          const e = opcionesRecursosCache.erbes.find(x => x.id === itemId);
+          if (e) recursoDesc = `🏥 ERBE ${e.localidad}`;
         }
 
         if (recursoDesc) {
@@ -1388,17 +1405,22 @@
             const opSnap = await getDoc(opRef);
             const rSum = opSnap.data().recursosSummary || {};
 
-            const keyMap = {
-              'Camión': 'camiones',
-              'Ambulancia': 'ambulancias',
-              'Vehículo Todo terreno': 'offroad',
-              'Todo Terreno': 'offroad',
-              'Vehículo transporte personal': 'van',
-              'Vehículo de transporte mixto': 'van',
-              'Furgoneta': 'van'
-            };
-            const v = opcionesRecursosCache.vehiculos.find(x => x.id === itemId);
-            const key = keyMap[v.tipo] || 'otros';
+            let key = 'otros';
+            if (cat === 'vehiculos') {
+              const keyMap = {
+                'Camión': 'camiones',
+                'Ambulancia': 'ambulancias',
+                'Vehículo Todo terreno': 'offroad',
+                'Todo Terreno': 'offroad',
+                'Vehículo transporte personal': 'van',
+                'Vehículo de transporte mixto': 'van',
+                'Furgoneta': 'van'
+              };
+              const v = opcionesRecursosCache.vehiculos.find(x => x.id === itemId);
+              key = keyMap[v.tipo] || 'otros';
+            } else if (cat === 'erbes') {
+              key = 'erbes';
+            }
             rSum[key] = (rSum[key] || 0) + 1;
 
             await updateDoc(opRef, {
@@ -1438,6 +1460,8 @@
             else if (desc.includes('Ambulancia')) key = 'ambulancias';
             else if (desc.includes('Todo terreno') || desc.includes('Todo Terreno')) key = 'offroad';
             else if (desc.includes('Vehículo transporte personal') || desc.includes('Vehículo de transporte mixto') || desc.includes('Furgoneta')) key = 'van';
+          } else if (desc.includes('🏥 ERBE')) {
+            key = 'erbes';
           }
 
           if (rSum[key] > 0) rSum[key]--;
@@ -1474,6 +1498,7 @@
         else if (desc.includes('Ambulancia')) iconUrl = 'assets/icons/ambulance.png';
         else if (desc.includes('Todo terreno') || desc.includes('Todo Terreno')) iconUrl = 'assets/icons/offroad.png';
         else if (desc.includes('Vehículo transporte personal') || desc.includes('Vehículo de transporte mixto') || desc.includes('Furgoneta')) iconUrl = 'assets/icons/van.png';
+        else if (desc.includes('🏥 ERBE')) iconUrl = 'assets/icons/erbe.svg';
 
         const iconHtml = iconUrl ? `<img src="${iconUrl}" style="width:16px; height:16px; margin-right:6px; vertical-align:middle;">` : '';
         const btnDelete = canModify ? `<button onclick="desasignarRecurso('${r.id}', '${r.descripcion}')" style="background:none;border:none;color:var(--crit-1);cursor:pointer;font-size:14px;line-height:1;" title="Retirar">✕</button>` : '';
@@ -2439,10 +2464,14 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       const contVeh = document.getElementById('tabla-vehiculos-container');
       if (contVeh) contVeh.style.display = tabla === 'vehiculos' ? 'flex' : 'none';
 
+      const contErbes = document.getElementById('tabla-erbes-container');
+      if (contErbes) contErbes.style.display = tabla === 'erbes' ? 'flex' : 'none';
+
       const contJefes = document.getElementById('tabla-jefes-container');
       if (contJefes) contJefes.style.display = tabla === 'jefes' ? 'flex' : 'none';
 
       if (tabla === 'vehiculos') cargarVehiculos();
+      if (tabla === 'erbes') cargarErbes();
       if (tabla === 'jefes') cargarJefes();
     };
 
@@ -2454,6 +2483,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       suscribirGuardia();
       suscribirJefesSelect(); // Refrescar listas de jefes filtradas
       if (typeof cargarVehiculos === 'function') cargarVehiculos();
+      if (typeof cargarErbes === 'function') cargarErbes();
     };
 
     let editingVehiculoId = null;
@@ -2573,6 +2603,117 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         await deleteDoc(doc(db, 'vehiculos', id));
         mostrarToast('Vehículo eliminado.');
         cargarVehiculos();
+      } catch (e) { alert('Error al eliminar: ' + e.message); }
+    };
+
+    // ── GESTIÓN ERBES ────────────────────────────────────────────────
+    let editingErbeId = null;
+
+    async function cargarErbes() {
+      const snap = await getDocs(collection(db, 'erbes'));
+      const tbody = document.getElementById('erbes-tbody');
+      if (!tbody) return;
+      tbody.innerHTML = '';
+
+      const allErbes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const visible = allErbes.filter(e => {
+        const prov = e.provincia || 'Málaga';
+        return selectedProvincia === 'Andalucía' || prov === selectedProvincia;
+      });
+
+      visible.forEach(e => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><strong>ERBE ${e.localidad || '—'}</strong></td>
+          <td style="font-size:11px; color:var(--text-3);">${e.provincia || 'Málaga'}</td>
+          <td>
+            <button class="tbl-btn" onclick="editarErbe('${e.id}')">Editar</button>
+            <button class="tbl-btn danger" onclick="borrarErbe('${e.id}')">Eliminar</button>
+          </td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    window.abrirModalErbe = () => {
+      editingErbeId = null;
+      document.getElementById('modal-erbe-title').textContent = 'Nuevo ERBE';
+      const elLoc = document.getElementById('e-localidad');
+      if (elLoc) elLoc.value = '';
+
+      const provRow = document.getElementById('e-prov-row');
+      const provSel = document.getElementById('e-provincia');
+      if (currentUserDoc.provincia && currentUserDoc.provincia !== 'Andalucía') {
+        provRow.style.display = 'none';
+        provSel.value = currentUserDoc.provincia;
+      } else {
+        provRow.style.display = 'block';
+        provSel.value = selectedProvincia === 'Andalucía' ? 'Andalucía' : selectedProvincia;
+      }
+
+      document.getElementById('overlay-erbe').classList.add('open');
+      setTimeout(() => document.getElementById('e-localidad').focus(), 100);
+    };
+
+    window.editarErbe = async id => {
+      const snap = await getDoc(doc(db, 'erbes', id));
+      if (!snap.exists()) return;
+      const e = snap.data();
+      editingErbeId = id;
+      document.getElementById('modal-erbe-title').textContent = 'Editar ERBE';
+      document.getElementById('e-localidad').value = e.localidad || '';
+
+      const provRow = document.getElementById('e-prov-row');
+      const provSel = document.getElementById('e-provincia');
+      provSel.value = e.provincia || 'Málaga';
+      if (currentUserDoc.provincia && currentUserDoc.provincia !== 'Andalucía') {
+        provRow.style.display = 'none';
+      } else {
+        provRow.style.display = 'block';
+      }
+
+      document.getElementById('overlay-erbe').classList.add('open');
+      setTimeout(() => document.getElementById('e-localidad').focus(), 100);
+    };
+
+    window.cerrarModalErbe = () => {
+      document.getElementById('overlay-erbe').classList.remove('open');
+      editingErbeId = null;
+    };
+
+    window.guardarErbe = async () => {
+      const localidad = document.getElementById('e-localidad').value.trim();
+      if (!localidad) { alert('La localidad es obligatoria.'); return; }
+
+      const btn = document.getElementById('btn-guardar-erbe');
+      btn.disabled = true; btn.textContent = 'Guardando…';
+      try {
+        const provincia = document.getElementById('e-provincia').value;
+        if (editingErbeId) {
+          await updateDoc(doc(db, 'erbes', editingErbeId), {
+            localidad, provincia, actualizadoEn: serverTimestamp()
+          });
+          mostrarToast('ERBE actualizado.');
+        } else {
+          await addDoc(collection(db, 'erbes'), {
+            localidad, provincia,
+            creadoPor: currentUser.uid,
+            creadoEn: serverTimestamp(),
+            actualizadoEn: serverTimestamp()
+          });
+          mostrarToast('ERBE creado.');
+        }
+        cerrarModalErbe();
+        cargarErbes();
+      } catch (e) { alert('Error: ' + e.message); }
+      btn.disabled = false; btn.textContent = 'Guardar';
+    };
+
+    window.borrarErbe = async id => {
+      if (!confirm('¿Eliminar este ERBE de forma permanente?')) return;
+      try {
+        await deleteDoc(doc(db, 'erbes', id));
+        mostrarToast('ERBE eliminado.');
+        cargarErbes();
       } catch (e) { alert('Error al eliminar: ' + e.message); }
     };
 
@@ -5693,6 +5834,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
                 onchange="cargarOpcionesRecursos()">
                 <option value="">Categoría...</option>
                 <option value="vehiculos">Vehículos</option>
+                <option value="erbes">ERBEs</option>
               </select>
               <select class="f-input f-select" id="r-item" style="flex:2; padding:4px; font-size:11px;">
                 <option value="">Recurso...</option>
@@ -5834,9 +5976,10 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           <div style="font-size:12px;color:var(--text-3);margin-top:2px;">Gestión de catálogos y dispositivos
             estructurales.</div>
         </div>
-        <div class="filter-tabs" id="tablas-subnav" style="width: 100%; max-width: 400px; display: flex;">
+        <div class="filter-tabs" id="tablas-subnav" style="width: 100%; max-width: 500px; display: flex;">
           <button class="ftab on" id="subnav-vehiculos" onclick="showTablaMaestra('vehiculos')"
             style="flex:1;">Vehículos</button>
+          <button class="ftab" id="subnav-erbes" onclick="showTablaMaestra('erbes')" style="flex:1;">ERBEs</button>
           <button class="ftab" id="subnav-jefes" onclick="showTablaMaestra('jefes')" style="flex:1;">Jefes de
             Operaciones</button>
         </div>
@@ -5858,6 +6001,25 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
               </tr>
             </thead>
             <tbody id="vehiculos-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Contenedor ERBEs -->
+      <div id="tabla-erbes-container" style="display:none; flex-direction:column; flex:1; gap:16px;">
+        <div style="display:flex; justify-content:flex-end;">
+          <button class="btn-nueva" onclick="abrirModalErbe()">+ Añadir ERBE</button>
+        </div>
+        <div class="users-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Localidad</th>
+                <th>Provincia</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="erbes-tbody"></tbody>
           </table>
         </div>
       </div>
@@ -6247,6 +6409,39 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       <div class="modal-foot">
         <button class="btn-cancel-m" onclick="cerrarModalVehiculo()">Cancelar</button>
         <button class="btn-create-m" id="btn-guardar-vehiculo" onclick="guardarVehiculo()">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="overlay" id="overlay-erbe">
+    <div class="modal" style="width:420px;">
+      <div class="modal-head">
+        <div class="modal-title" id="modal-erbe-title">Nuevo ERBE</div>
+        <button class="btn-close-dp" onclick="cerrarModalErbe()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <div class="field-lbl">Localidad *</div>
+          <input class="f-input" id="e-localidad" placeholder="Ej: Dos Hermanas">
+        </div>
+        <div class="field" id="e-prov-row" style="margin-bottom: 0;">
+          <div class="field-lbl">Oficina / Provincia *</div>
+          <select class="f-input f-select" id="e-provincia" style="width:100%">
+            <option value="Andalucía">Oficina Autonómica de Andalucía</option>
+            <option value="Almería">Oficina Provincial de Almería</option>
+            <option value="Cádiz">Oficina Provincial de Cádiz</option>
+            <option value="Córdoba">Oficina Provincial de Córdoba</option>
+            <option value="Granada">Oficina Provincial de Granada</option>
+            <option value="Huelva">Oficina Provincial de Huelva</option>
+            <option value="Jaén">Oficina Provincial de Jaén</option>
+            <option value="Málaga">Oficina Provincial de Málaga</option>
+            <option value="Sevilla">Oficina Provincial de Sevilla</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel-m" onclick="cerrarModalErbe()">Cancelar</button>
+        <button class="btn-create-m" id="btn-guardar-erbe" onclick="guardarErbe()">Guardar</button>
       </div>
     </div>
   </div>
