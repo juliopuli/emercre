@@ -4457,11 +4457,12 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
     .users-table-wrap {
       background: #ffffff;
-      border: 1px solid var(--border-mid);
-      border-radius: 4px;
+      border: 1px solid rgba(0, 0, 0, 0.04);
+      border-radius: 12px;
       overflow-x: auto;
       max-width: 100%;
       -webkit-overflow-scrolling: touch;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
     }
 
     .nivel-selector {
@@ -5088,36 +5089,44 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     table {
       width: 100%;
       border-collapse: collapse;
+      border-spacing: 0;
     }
 
     thead tr {
-      background: var(--bg-2);
-      border-bottom: 2px solid var(--border-mid);
+      background: rgba(245, 245, 247, 0.6);
+      border-bottom: 1px solid rgba(0, 0, 0, 0.04);
     }
 
     th {
-      padding: 10px 14px;
+      padding: 12px 16px;
       text-align: left;
-      font-size: 10px;
-      font-weight: 700;
-      letter-spacing: 0.1em;
-      text-transform: uppercase;
-      color: var(--text-3);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-2);
+      text-transform: capitalize;
     }
 
     td {
-      padding: 10px 14px;
-      border-bottom: 1px solid var(--border);
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.04);
       font-size: 13px;
       vertical-align: middle;
+      color: var(--text-1);
+      transition: all 0.2s ease;
+    }
+
+    tr {
+      transition: all 0.2s ease-in-out;
     }
 
     tr:last-child td {
       border-bottom: none;
     }
 
-    tr:hover td {
-      background: var(--bg-2);
+    tr:hover {
+      background: var(--bg-1);
+      transform: scale(1.002);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
     }
 
     .rol-badge {
@@ -5166,29 +5175,32 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
     .tbl-btn {
       padding: 4px 10px;
-      background: var(--bg-2);
-      border: 1px solid var(--border-mid);
-      color: var(--text-2);
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-3);
       cursor: pointer;
       font-family: 'IBM Plex Sans', sans-serif;
       font-size: 11px;
       font-weight: 500;
-      border-radius: 2px;
+      border-radius: 4px;
       margin-right: 4px;
+      transition: all 0.2s ease;
     }
 
     .tbl-btn:hover {
-      background: var(--bg-3);
+      background: var(--bg-2);
+      color: var(--text-1);
+      border-color: var(--border-mid);
     }
 
     .tbl-btn.danger {
       color: var(--crit-1);
-      border-color: var(--crit-1-border);
     }
 
     .tbl-btn.danger:hover {
-      background: var(--crit-1);
-      color: #fff;
+      background: var(--crit-1-bg);
+      border-color: var(--crit-1-border);
+      color: var(--crit-1);
     }
 
     /* TOAST */
@@ -6101,7 +6113,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace;">
-          Versión V.4.12.4
+          Versión V.4.13.0
         </div>
       </div>
 
@@ -6679,7 +6691,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.4.12.4
+            Versión V.4.13.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
