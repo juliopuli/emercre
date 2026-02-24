@@ -2386,6 +2386,13 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         window.showTablaMaestra('vehiculos');
       }
       if (sec === 'operaciones' && gmap) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
+
+      // Toggle mobile FAB: only show on operaciones (V.5.5.7)
+      const fab = document.getElementById('btn-mobile-nueva-op');
+      if (fab) {
+        const isAdmin = currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'autonomica' || currentRole === 'provincial' || currentRole === 'manager';
+        fab.style.display = (sec === 'operaciones' && isAdmin && window.innerWidth < 900) ? 'flex' : 'none';
+      }
     };
 
     let unsubUsuarios = null;
@@ -5892,6 +5899,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       left: 0 !important;
       width: 100vw !important;
       height: 100vh !important;
+      height: 100dvh !important;
       background: rgba(0, 0, 0, 0.5);
       z-index: 5000;
       display: none;
@@ -5911,10 +5919,13 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       left: 0;
       bottom: 0;
       width: 280px;
+      max-height: 100vh;
+      max-height: 100dvh;
       background: var(--bg-1);
       box-shadow: 10px 0 30px rgba(0, 0, 0, 0.2);
       display: flex;
       flex-direction: column;
+      overflow-y: auto;
       transform: translateX(-100%);
       transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
@@ -6794,7 +6805,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          Versión V.5.5.6
+          Versión V.5.5.7
         </div>
       </div>
 
