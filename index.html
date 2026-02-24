@@ -670,16 +670,16 @@
           mostrarToast("Intentando activar notificaciones...");
         }
 
-        // 1. Registrar Service Worker (V.5.7.4: Ruta relativa para GitHub Pages)
-        const registration = await navigator.serviceWorker.register('firebase-messaging-sw.js');
-        console.log("SW registrado:", registration);
-
-        // 2. Solicitar permiso
+        // IMPRESCINDIBLE PARA SAFARI iOS: Pedir permiso de forma síncrona con la interacción de usuario, antes del await al SW.
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
           if (isManual) mostrarToast("⚠️ Permiso denegado. Actívalo en los ajustes del navegador.");
           return;
         }
+
+        // Registrar Service Worker (V.5.8.12: Ruta relativa para GitHub Pages)
+        const registration = await navigator.serviceWorker.register('./firebase-messaging-sw.js');
+        console.log("SW registrado:", registration);
 
         // 3. Obtener token
         const vapidKey = "BDwGvRdHh3oO7jdRD8B1vyl6ZAUcvh0P7Fsjhdwzd1XG2_YE0iaOdu_emr9XFdDz2ReN1nlDu1_ipGYjryHH5LQ";
@@ -7093,8 +7093,6 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         style="display:none">👥 Usuarios</button>
       <button class="nav-item" id="nav-tablas" data-sec="tablas" onclick="showSection('tablas')" style="display:none">🗂
         Tablas maestras</button>
-      <button class="nav-item" id="nav-notifs" onclick="setupNotifications(true)"
-        title="Forzar petición push en iOS/Safari">🔔 Activar Notificaciones</button>
     </nav>
 
     <!-- MOBILE MENU OVERLAY (Global) -->
@@ -7215,9 +7213,9 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             <span>Sin operaciones registradas.</span>
           </div>
         </div>
-        <div id="version-text"
-          style="position:absolute; bottom:12px; left:0; width:100%; text-align:center; font-size:10px; color:var(--text-4);">
-          Versión V.5.8.11 (WebPush Manual Auth)
+        <div
+          style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
+          Versión V.5.8.12 (WebPush Manual Auth)
         </div>
       </div>
 
