@@ -2699,7 +2699,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
     window.checkAutonomicScope = (val) => {
       const row = document.getElementById('u-todos-chats-row');
       if (row) {
-        row.style.display = val === 'Andalucía' ? 'flex' : 'none';
+        row.style.display = (val === 'Andalucía' && currentUserDoc.role === 'super_admin') ? 'flex' : 'none';
       }
     };
 
@@ -2807,14 +2807,17 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       const role = document.getElementById('u-role').value;
       const provincia = document.getElementById('u-provincia').value;
       const activo = document.getElementById('u-activo').value === 'true';
-      const aparecerEnTodosLosChats = document.getElementById('u-todos-chats').checked && provincia === 'Andalucía';
 
       if (!nombre || !email) { alert('Nombre y email son obligatorios.'); return; }
       const btn = document.getElementById('btn-guardar-user');
       btn.disabled = true; btn.textContent = 'Guardando…';
       try {
         if (editingUserId) {
-          await updateDoc(doc(db, 'users', editingUserId), { nombre, role, provincia, activo, aparecerEnTodosLosChats });
+          let updateData = { nombre, role, provincia, activo };
+          if (currentUserDoc.role === 'super_admin') {
+            updateData.aparecerEnTodosLosChats = document.getElementById('u-todos-chats').checked && provincia === 'Andalucía';
+          }
+          await updateDoc(doc(db, 'users', editingUserId), updateData);
           mostrarToast('Usuario actualizado.');
         } else {
           if (!pass || pass.length < 6) { alert('La contraseña debe tener al menos 6 caracteres.'); btn.disabled = false; btn.textContent = 'Guardar'; return; }
@@ -2827,11 +2830,15 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           );
           const data = await res.json();
           if (data.error) throw new Error(data.error.message);
-          await setDoc(doc(db, 'users', data.localId), {
-            nombre, email, role, provincia, activo, aparecerEnTodosLosChats,
+          let newData = {
+            nombre, email, role, provincia, activo,
             creadoPor: currentUser.uid,
             creadoEn: serverTimestamp()
-          });
+          };
+          if (currentUserDoc.role === 'super_admin') {
+            newData.aparecerEnTodosLosChats = document.getElementById('u-todos-chats').checked && provincia === 'Andalucía';
+          }
+          await setDoc(doc(db, 'users', data.localId), newData);
           mostrarToast('Usuario creado.');
         }
         cerrarModalUsuario();
@@ -7261,7 +7268,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          Versión V.5.9.2 (Global Jefes Chat Visibility)
+          Versión V.5.9.3 (Chat Auth Only SuperAdmin)
         </div>
       </div>
 
