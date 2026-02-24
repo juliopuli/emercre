@@ -2387,7 +2387,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       }
       if (sec === 'operaciones' && gmap) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
 
-      // Toggle mobile FAB: only show on operaciones (V.5.5.7)
+      // Toggle mobile FAB: only show on operaciones (V.5.5.8)
       const fab = document.getElementById('btn-mobile-nueva-op');
       if (fab) {
         const isAdmin = currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'autonomica' || currentRole === 'provincial' || currentRole === 'manager';
@@ -6137,12 +6137,57 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
       .users-toolbar {
         flex-direction: column;
         align-items: stretch;
-        gap: 15px;
+        gap: 10px;
+        margin-bottom: 12px !important;
+      }
+
+      .users-toolbar .btn-nueva {
+        width: 100%;
+        text-align: center;
+        padding: 10px !important;
       }
 
       #section-usuarios,
       #section-tablas {
-        padding: 12px;
+        padding: 12px !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch;
+        box-sizing: border-box !important;
+        max-width: 100vw !important;
+        height: calc(100vh - 60px) !important;
+        height: calc(100dvh - 60px) !important;
+      }
+
+      #section-usuarios .search-box,
+      #section-tablas .search-box {
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+      }
+
+      .users-table-wrap {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        max-width: 100% !important;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+      }
+
+      .users-table-wrap table {
+        min-width: 420px !important;
+      }
+
+      .tablas-pills {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+      }
+
+      .tablas-pill {
+        flex: 1 1 45% !important;
+        text-align: center;
+        padding: 8px 6px !important;
+        font-size: 11px !important;
       }
 
       .dp-header {
@@ -6805,7 +6850,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          Versión V.5.5.7
+          Versión V.5.5.8
         </div>
       </div>
 
