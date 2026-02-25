@@ -708,7 +708,7 @@
     window.addEventListener('click', actualizarActividad);
     window.addEventListener('keypress', actualizarActividad);
 
-    // ── NOTIFICACIONES PUSH (V.5.7.1 Debug) ────────────────────────────
+    // ── NOTIFICACIONES PUSH (V.5.11.1 Fix Android PWA) ────────────────────────────
     window.setupNotifications = async (isManual = false) => {
       if (!messaging) {
         if (isManual) mostrarToast("⚠️ El navegador no soporta notificaciones o no está en HTTPS.");
@@ -722,11 +722,16 @@
           mostrarToast("Intentando activar notificaciones...");
         }
 
-        // IMPRESCINDIBLE PARA SAFARI iOS: Pedir permiso de forma síncrona con la interacción de usuario, antes del await al SW.
-        const permission = await Notification.requestPermission();
+        // V.5.11.1: Si es automático, solo proceder si ya tenemos permiso concedido
+        // Esto evita que el diálogo de permisos bloquee Android en la instalación PWA
+        let permission = Notification.permission;
         if (permission !== 'granted') {
-          if (isManual) mostrarToast("⚠️ Permiso denegado. Actívalo en los ajustes del navegador.");
-          return;
+          if (!isManual) return; // Auto-call: no mostrar prompt, salir silenciosamente
+          permission = await Notification.requestPermission();
+          if (permission !== 'granted') {
+            mostrarToast("⚠️ Permiso denegado. Actívalo en los ajustes del navegador.");
+            return;
+          }
         }
 
         // Registrar Service Worker (V.5.8.12: Ruta relativa para GitHub Pages)
@@ -873,7 +878,8 @@
 
         mostrarApp();
         initApp();
-        setupNotifications(); // V.5.7.0
+        // V.5.11.1: Delay para evitar bloqueo en Android PWA install
+        setTimeout(() => { setupNotifications(); }, 2000);
         initNotifToggles(); // V.5.11.0
       } else {
         currentUser = null; currentRole = null;
@@ -7377,7 +7383,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.5.11.0
+          V.5.11.1
         </div>
       </div>
 
