@@ -670,10 +670,10 @@
           leidoPor: []
         });
 
-        // V.5.10.2: Push notification para mensajes privados
+        // V.5.11.0: Push notification para mensajes privados (con filtro notifChat)
         if (currentChatId !== 'general' && NOTIF_BRIDGE_URL) {
           const destUser = allUsersCache.find(u => u.uid === currentChatId);
-          if (destUser && destUser.fcmToken) {
+          if (destUser && destUser.fcmToken && destUser.notifChat !== false) {
             const senderName = currentUserDoc.nombre || currentUser.email;
             fetch(NOTIF_BRIDGE_URL, {
               method: 'POST',
@@ -752,17 +752,25 @@
       }
     }
 
-    window.diagNotificaciones = () => {
-      const status = {
-        'Soporte SW': 'serviceWorker' in navigator,
-        'Soporte Notif': 'Notification' in window,
-        'Permiso': Notification.permission,
-        'FCM Listo': !!messaging,
-        'HTTPS': location.protocol === 'https:',
-        'Modo PWA': window.matchMedia('(display-mode: standalone)').matches ? 'SÍ (Instalada)' : 'NO (Navegador)'
-      };
-      const lines = Object.entries(status).map(([k, v]) => `${k}: ${v}`).join('\n');
-      alert("--- Diagnóstico Push ---\n" + lines);
+    // V.5.11.0: Toggle notification preferences
+    window.toggleNotifPreference = async (type, enabled) => {
+      if (!currentUser) return;
+      const field = type === 'ops' ? 'notifOperaciones' : 'notifChat';
+      try {
+        await updateDoc(doc(db, 'users', currentUser.uid), { [field]: enabled });
+        currentUserDoc[field] = enabled;
+        mostrarToast(enabled ? '✅ Notificaciones activadas' : '🔕 Notificaciones desactivadas');
+      } catch (e) {
+        console.error('Error guardando preferencia:', e);
+        mostrarToast('❌ Error al guardar preferencia');
+      }
+    };
+
+    window.initNotifToggles = () => {
+      const opsToggle = document.getElementById('toggle-notif-ops');
+      const chatToggle = document.getElementById('toggle-notif-chat');
+      if (opsToggle) opsToggle.checked = currentUserDoc.notifOperaciones !== false;
+      if (chatToggle) chatToggle.checked = currentUserDoc.notifChat !== false;
     };    // Función para disparar la notificación push real (V.5.10.0)
     window.broadcastNuevaOperacion = async (op) => {
       console.log("Broadcasting nueva operación:", op.nombre);
@@ -786,6 +794,7 @@
           if (u.uid === currentUser.uid) return false; // No notificarme a mí mismo
           if (!u.fcmToken) return false; // Sin token = sin push
           if (!u.activo) return false; // Usuarios inactivos
+          if (u.notifOperaciones === false) return false; // V.5.11.0: Preferencia desactivada
           // Filtrar por provincia: notificar a los de esa provincia + autonómicos
           if (u.provincia === op.provincia || u.provincia === 'Andalucía') return true;
           return false;
@@ -865,6 +874,7 @@
         mostrarApp();
         initApp();
         setupNotifications(); // V.5.7.0
+        initNotifToggles(); // V.5.11.0
       } else {
         currentUser = null; currentRole = null;
         mostrarLogin();
@@ -7044,6 +7054,59 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         display: none !important;
       }
     }
+
+    /* ═══════ V.5.11.0 — Notification Toggle Rows ═══════ */
+    .drawer-notif-toggle {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.03) 0%, rgba(255, 255, 255, 0.06) 100%);
+      border: 1px solid var(--border-mid);
+      border-radius: 10px;
+      transition: all 0.25s ease;
+    }
+
+    .drawer-notif-toggle:hover {
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.09) 100%);
+      border-color: var(--accent);
+      box-shadow: 0 2px 12px rgba(200, 40, 40, 0.08);
+    }
+
+    .drawer-notif-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .drawer-notif-icon {
+      font-size: 20px;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-2);
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+
+    .drawer-notif-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-1);
+      line-height: 1.3;
+    }
+
+    .drawer-notif-desc {
+      font-size: 10px;
+      color: var(--text-3);
+      line-height: 1.3;
+      margin-top: 1px;
+    }
   </style>
 </head>
 
@@ -7247,17 +7310,33 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
 
         <!-- Footer actions -->
         <div class="drawer-foot" style="display:flex; flex-direction:column; gap:8px; flex-shrink:0;">
-          <button onclick="setupNotifications(true); toggleMobileMenu();"
-            style="width:100%; padding:10px; background:var(--bg-1); border:1px solid var(--accent); color:var(--text-1); cursor:pointer; font-family:inherit; font-size:13px; font-weight:700; border-radius:4px; display:flex; align-items:center; justify-content:center; gap:8px;">🔔
-            Activar Notificaciones</button>
+          <!-- V.5.11.0: Notification Toggles -->
+          <div class="drawer-notif-toggle">
+            <div class="drawer-notif-info">
+              <span class="drawer-notif-icon">🗺</span>
+              <div>
+                <div class="drawer-notif-title">Notificaciones de Operaciones</div>
+                <div class="drawer-notif-desc">Nuevas operaciones y actualizaciones</div>
+              </div>
+            </div>
+            <label class="switch"><input type="checkbox" id="toggle-notif-ops" checked
+                onchange="toggleNotifPreference('ops', this.checked)"><span class="slider"></span></label>
+          </div>
+          <div class="drawer-notif-toggle">
+            <div class="drawer-notif-info">
+              <span class="drawer-notif-icon">💬</span>
+              <div>
+                <div class="drawer-notif-title">Notificaciones de Chat</div>
+                <div class="drawer-notif-desc">Mensajes privados y generales</div>
+              </div>
+            </div>
+            <label class="switch"><input type="checkbox" id="toggle-notif-chat" checked
+                onchange="toggleNotifPreference('chat', this.checked)"><span class="slider"></span></label>
+          </div>
           <button onclick="abrirModalChangePass(); toggleMobileMenu();"
             style="width:100%; padding:10px; background:var(--bg-2); border:1px solid var(--border-mid); color:var(--text-2); cursor:pointer; font-family:inherit; font-size:13px; font-weight:500; border-radius:4px; display:flex; align-items:center; justify-content:center; gap:8px;">🔑
             Cambiar contrasena</button>
           <button class="btn-logout" style="width:100%; padding:12px;" onclick="doLogout()">Cerrar Sesion</button>
-          <div style="text-align:center; margin-top:4px;">
-            <a href="#" onclick="diagNotificaciones(); return false;"
-              style="font-size:10px; color:var(--text-4); text-decoration:none;">🛠 Diagnóstico Push</a>
-          </div>
         </div>
       </div>
     </div>
@@ -7298,7 +7377,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          Versión V.5.10.2 (Push para mensajes privados de chat)
+          V.5.11.0
         </div>
       </div>
 
