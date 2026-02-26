@@ -17,9 +17,9 @@ service cloud.firestore {
         request.auth.uid == userId
       );
       allow create: if logueado() && (
+        request.auth.uid == userId ||
         rol() == 'super_admin' || 
-        (rol() == 'manager' && request.resource.data.role in ['admin', 'usuario']) ||
-        request.auth.uid == userId
+        (rol() == 'manager' && request.resource.data.role in ['admin', 'usuario'])
       );
       allow delete: if logueado() && rol() == 'super_admin';
       
