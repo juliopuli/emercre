@@ -2414,17 +2414,16 @@ ${dataContext}
                     </tr>
                 </table>
 
-                <!-- Mapa Dinámico (Oculto si no hay coords) -->
-                ${op.coords ? `
-                <div style="border:1.5px solid #0b2241; border-radius:3px; margin-bottom:20px;">
-                    <div class="erie-th-light" style="padding:4px 8px; font-size:11px; border-bottom:1px solid #0b2241;">Ubicación de la Intervención</div>
-                    <div id="erie-dynamic-map" style="width:100%; height:250px; background:#e5e3df;"></div>
+                <!-- Vector Map Area -->
+                <div style="border:1.5px solid #0b2241; border-radius:3px; margin-bottom:20px; background:#fff; position:relative; overflow:hidden;">
+                    <div class="erie-th-light" style="padding:4px 8px; font-size:11px; border-bottom:1px solid #0b2241; display:flex; justify-content:space-between;">
+                        <span>Ubicación de la Intervención</span>
+                        <span style="color:#666;">${op.provincia ? op.provincia.toUpperCase() : 'ANDALUCÍA'}</span>
+                    </div>
+                    <div id="erie-vector-map" style="width:100%; height:280px; position:relative; display:flex; justify-content:center; align-items:center;">
+                        <!-- El SVG y los iconos se inyectarán aquí -->
+                    </div>
                 </div>
-                ` : `
-                <div class="erie-map-placeholder" style="text-align:center; padding:30px 0; border:1px dashed #ccc; margin-bottom:20px;">
-                     <span style="font-size:12px; color:#888;">Ubicación no registrada en mapa</span>
-                </div>
-                `}
 
                 <!-- Seguimiento -->
                 <table class="erie-log-table" style="width:100%; border-collapse:collapse; margin-bottom:20px; border: 1.5px solid #0b2241;">
@@ -2515,35 +2514,78 @@ ${dataContext}
 
         document.getElementById('overlay-ai-report').classList.add('open');
 
-        // 7. Renderizar Mapa Dinámico (si hay coords)
-        if (op.coords) {
-          setTimeout(() => {
-            const mapDiv = document.getElementById('erie-dynamic-map');
-            if (mapDiv && mapReady && google && google.maps) {
-              const pos = { lat: op.coords.lat, lng: op.coords.lng };
-              const reportMap = new google.maps.Map(mapDiv, {
-                center: pos,
-                zoom: 14,
-                mapId: 'bc56b7cd6850d53c', // Map ID para Advanced Markers
-                mapTypeId: 'roadmap',
-                disableDefaultUI: true,   // Sin controles para impresiones limpias
-                draggable: false,         // Estático
-                scrollwheel: false,
-                disableDoubleClickZoom: true
-              });
+        // 7. Renderizar Mapa Vectorial
+        const mapDiv = document.getElementById('erie-vector-map');
+        if (mapDiv) {
+          // Datos simplificados de las cajas delimitadoras (bounding boxes) [minLng, minLat, maxLng, maxLat]
+          const PROV_BBOX = {
+            'Almería': [-3.1415, 36.6710, -1.6300, 37.9348],
+            'Cádiz': [-6.4468, 35.9866, -5.1384, 37.0396],
+            'Córdoba': [-5.5684, 37.1852, -4.0152, 38.7301],
+            'Granada': [-4.3262, 36.6668, -2.4971, 38.0833],
+            'Huelva': [-7.5252, 36.7904, -6.1264, 38.2045],
+            'Jaén': [-4.3218, 37.4116, -2.5574, 38.5367],
+            'Málaga': [-5.6262, 36.3121, -3.7668, 37.2882],
+            'Sevilla': [-6.5186, 36.8398, -4.6190, 38.1991]
+          };
 
-              const t = TIPOS[op.tipo] || TIPOS.otro;
-              // Reutilizar la función nivelIcon existente para clonar el aspecto del marcador
-              const iconContent = window.nivelIcon ? window.nivelIcon(op, t) : document.createElement('div');
+          // Mapas SVG estáticos simplificados para siluetas de las provincias
+          const SVGS = {
+            'Málaga': '<svg viewBox="0 0 100 100" style="width:100%; height:100%; padding:20px; overflow:visible;"><path d="M10,80 Q30,85 45,95 Q55,90 60,85 Q75,90 85,75 Q95,60 90,45 Q80,25 65,20 Q50,15 35,25 Q20,35 15,55 Z" fill="#ebdfd0" stroke="#0b2241" stroke-width="0.5"/></svg>',
+            'Cádiz': '<svg viewBox="0 0 100 100" style="width:100%; height:100%; padding:20px; overflow:visible;"><path d="M40,90 Q50,95 65,85 Q80,65 90,45 Q75,30 65,15 Q45,20 30,35 Q15,55 20,75 Z" fill="#ebdfd0" stroke="#0b2241" stroke-width="0.5"/></svg>',
+            'Sevilla': '<svg viewBox="0 0 100 100" style="width:100%; height:100%; padding:20px; overflow:visible;"><path d="M30,85 Q45,95 65,85 Q85,75 90,55 Q80,35 60,20 Q40,15 25,35 Q10,55 15,75 Z" fill="#ebdfd0" stroke="#0b2241" stroke-width="0.5"/></svg>',
+            // Default fallback blob
+            'default': '<svg viewBox="0 0 100 100" style="width:100%; height:100%; padding:5px; overflow:visible;"><path d="M20,50 Q20,20 50,20 Q80,20 80,50 Q80,80 50,80 Q20,80 20,50 Z" fill="#ebdfd0" stroke="#0b2241" stroke-width="0.5"/></svg>'
+          };
 
-              new google.maps.marker.AdvancedMarkerElement({
-                position: pos,
-                map: reportMap,
-                content: iconContent,
-                title: op.nombre
-              });
+          const p = op.provincia || 'Andalucía';
+          // Inject base SVG
+          mapDiv.innerHTML = SVGS[p] || SVGS['default'];
+
+          if (op.coords && op.coords.lat && op.coords.lng && PROV_BBOX[p]) {
+            const bbox = PROV_BBOX[p];
+            // Project coordinates into percentages within the bbox.
+            // SVG paths are somewhat abstract here, so we map exactly to the 0-100% of the container
+            // Latitudes decrease as you go down (top is maxLat), Longitudes increase as you go right (left is minLng)
+            let pctX = ((op.coords.lng - bbox[0]) / (bbox[2] - bbox[0])) * 100;
+            let pctY = ((bbox[3] - op.coords.lat) / (bbox[3] - bbox[1])) * 100;
+
+            // Clamp just in case they placed it slightly outside the strict bounding box mathematically
+            pctX = Math.max(5, Math.min(95, pctX));
+            pctY = Math.max(5, Math.min(95, pctY));
+
+            // Extraer el HTML del marcador que da la función nivelIcon (es un nodo tipo 'div')
+            const t = TIPOS[op.tipo] || TIPOS.otro;
+            const iconOuter = document.createElement('div');
+            iconOuter.style.position = 'absolute';
+            iconOuter.style.left = `calc(${pctX}% - 14px)`;
+            iconOuter.style.top = `calc(${pctY}% - 14px)`;
+            iconOuter.style.zIndex = '10';
+
+            // Clonar el aspecto del marcador personalizado reutilizando la función del mapa principal
+            if (window.nivelIcon) {
+              const iconNode = window.nivelIcon(op, t);
+              iconOuter.appendChild(iconNode);
+
+              // Asegurarse de que el marcador principal no intente expandirse (comportamiento del AdvancedMarker original) 
+              // ni rompa el diseño absoluto fijando su propio wrapper interno
+              setTimeout(() => {
+                const customMarker = iconOuter.querySelector('.custom-marker');
+                if (customMarker) {
+                  customMarker.style.position = 'relative';
+                  customMarker.style.transform = 'scale(0.8)'; // Escalar un poco para el informe
+                }
+              }, 10);
+            } else {
+              iconOuter.innerHTML = `<div style="font-size:24px;">📍</div>`;
             }
-          }, 300); // Pequeño delay para asegurar que el DOM ha renderizado el div visible y con altura
+
+            mapDiv.appendChild(iconOuter);
+          } else if (!op.coords) {
+            mapDiv.innerHTML += '<div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#e3000f; font-weight:bold; font-size:12px; background:rgba(255,255,255,0.8); padding:4px 8px; border-radius:4px;">Sin coordenadas fijadas</div>';
+          } else {
+            mapDiv.innerHTML += '<div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#888; font-size:11px;">(Proyección de provincia no disp.)</div>';
+          }
         }
 
       } catch (e) {
