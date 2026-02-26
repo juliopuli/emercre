@@ -708,7 +708,7 @@
     window.addEventListener('click', actualizarActividad);
     window.addEventListener('keypress', actualizarActividad);
 
-    // ── NOTIFICACIONES PUSH (V.5.11.2 Fix iOS + Android) ────────────────────────────
+    // ── NOTIFICACIONES PUSH (V.5.11.3 Fix Android PWA + iOS) ────────────────────────────
     window.setupNotifications = async (isManual = false) => {
       if (!messaging) {
         if (isManual) mostrarToast("⚠️ El navegador no soporta notificaciones o no está en HTTPS.");
@@ -729,7 +729,7 @@
           return;
         }
 
-        // V.5.11.2: Timeout de seguridad para evitar bloqueo en Android PWA
+        // V.5.11.3: Timeout de seguridad extendido para evitar bloqueo en Android PWA
         const withTimeout = (promise, ms) => Promise.race([
           promise,
           new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout FCM')), ms))
@@ -737,9 +737,13 @@
 
         // Registrar Service Worker
         const registration = await withTimeout(
-          navigator.serviceWorker.register('./firebase-messaging-sw.js'), 10000
+          navigator.serviceWorker.register('./firebase-messaging-sw.js'), 20000
         );
         console.log("SW registrado:", registration);
+
+        // V.5.11.3: Esperar activamente a que el Service Worker esté listo (crítico en Android)
+        await navigator.serviceWorker.ready;
+        console.log("SW listo para recibir notificaciones.");
 
         // Obtener token FCM
         const vapidKey = "BDwGvRdHh3oO7jdRD8B1vyl6ZAUcvh0P7Fsjhdwzd1XG2_YE0iaOdu_emr9XFdDz2ReN1nlDu1_ipGYjryHH5LQ";
@@ -747,7 +751,7 @@
           getToken(messaging, {
             serviceWorkerRegistration: registration,
             vapidKey: vapidKey
-          }), 10000
+          }), 20000
         );
 
         if (token) {
