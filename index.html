@@ -2253,27 +2253,30 @@
           });
         }
 
-        // 3. Prompt estricto para Gemini
+        // 3. Prompt estricto para Gemini buscando JSON
         const prompt = `
 Eres un analista experto en gestión de emergencias y catástrofes de la plataforma EmerCRE.
-El usuario ha solicitado generar un informe final ejecutivo y bien estructurado que resuma esta intervención finalizada.
+El usuario ha solicitado extraer datos clave y generar un resumen ejecutivo de esta intervención finalizada.
 
-          INSTRUCCIONES:
-        1. Lee todos los datos base y el hilo cronológico de acciones.
-2. Genera un resumen ejecutivo en español, profesional, claro y neutro. 
-3. Estructura el informe usando etiquetas HTML simples compatibles(<h1>, <h2>, <p>, <ul>, <li>, <strong>) para poder renderizarlo en la web directamente. No envuelvas el resultado en \`\`\`html.
-          4. El informe debe contener estas secciones principales:
-          - Resumen Ejecutivo (situación general y desenlace)
-          - Recursos y Organización (organismos y directores involucrados)
-          - Cronología Destacada (los hitos más relevantes resumidos)
-          - Conclusión Final (estado actual, sin inventar datos que no estén)
-          Si faltan datos, indícalo de forma elegante.
+INSTRUCCIONES CRÍTICAS:
+1. Lee todos los datos base y el hilo cronológico de acciones aportados abajo.
+2. Genera un resumen ejecutivo en español, profesional, claro y neutro. (Campo "resumen_ejecutivo")
+3. Extrae, si es posible, el número de personas atendidas (desglosado en hombres, mujeres y menores). Si no hay datos claros o no se menciona, pon el string "-" en el campo correspondiente. (Campos "hombres", "mujeres", "menores")
+4. Extrae, si es posible, una lista breve (máximo 5 elementos cortos, ej: "1 camión", "2 TES") de los recursos humanos o materiales desplegados. Si no hay, devuelve un array vacío. (Campo "recursos")
+5. DEBES RESPONDER ÚNICAMENTE CON UN JSON VÁLIDO CON LA SIGUIENTE ESTRUCTURA ESTRICTA, SIN TEXTO ADICIONAL ANTES NI DESPUÉS (sin etiquetas markdown \`\`\`json):
+{
+  "resumen_ejecutivo": "El resumen en formato HTML estricto usando etiquetas simples (<h1>, <p>, <ul>...) con el desenlace y cronología destacada...",
+  "hombres": "15",
+  "mujeres": "-",
+  "menores": "2",
+  "recursos": ["100 Camas", "1 camión", "1 vehículo de transporte", "1 Jefe de Equipo", "2 TES"]
+}
 
-          DATOS DE LA INTERVENCIÓN:
-          ${dataContext}
-          `;
+DATOS DE LA INTERVENCIÓN:
+${dataContext}
+`;
 
-        // 4. Llamada a la API de Gemini
+        // 4. Llamada a la API de Gemini (forzando formato JSON)
         const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`;
 
         const response = await fetch(apiUrl, {
@@ -2283,9 +2286,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
             contents: [{ role: "user", parts: [{ text: prompt }] }],
             generationConfig: {
               temperature: 0.2,
-              topK: 40,
-              topP: 0.95,
-              maxOutputTokens: 8192,
+              responseMimeType: "application/json"
             }
           })
         });
@@ -2296,13 +2297,219 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         }
 
         const data = await response.json();
-        let textReport = data.candidates[0].content.parts[0].text;
+        let aiResultStr = data.candidates[0].content.parts[0].text;
 
         // Limpiamos posible formateo markdown
-        textReport = textReport.replace(/^```html\n?/, '').replace(/\n?```$/, '');
+        aiResultStr = aiResultStr.replace(/^```json\n?/, '').replace(/\n?```$/, '');
 
-        // 5. Mostrar en Modal
-        document.getElementById('ai-report-content').innerHTML = textReport;
+        let aiData;
+        try {
+          aiData = JSON.parse(aiResultStr);
+        } catch (parseErr) {
+          console.error("Error parseando respuesta JSON de Gemini:", aiResultStr);
+          aiData = {
+            resumen_ejecutivo: "<p><em>Error extrayendo los datos. Respuesta cruda:</em></p><p>" + aiResultStr + "</p>",
+            hombres: "-", mujeres: "-", menores: "-", recursos: []
+          };
+        }
+
+        // 5. Construcción de la Plantilla HTML (Estilo Cruz Roja ERIE)
+        let totalAtendidos = (parseInt(aiData.hombres) || 0) + (parseInt(aiData.mujeres) || 0) + (parseInt(aiData.menores) || 0);
+        if (totalAtendidos === 0 && (aiData.hombres === '-' && aiData.mujeres === '-' && aiData.menores === '-')) totalAtendidos = '-';
+
+        let fechaInicioStr = op.creadoEn?.toDate ? op.creadoEn.toDate().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';
+        let horaInicioStr = op.creadoEn?.toDate ? op.creadoEn.toDate().toLocaleString('es-ES', { hour: '2-digit', minute: '2-digit' }) + ' H' : '-';
+        let fechaFinStr = op.actualizadoEn?.toDate ? op.actualizadoEn.toDate().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '-';
+        let horaFinStr = op.actualizadoEn?.toDate ? op.actualizadoEn.toDate().toLocaleString('es-ES', { hour: '2-digit', minute: '2-digit' }) + ' H' : '-';
+
+        let recursosHtml = aiData.recursos && aiData.recursos.length > 0
+          ? aiData.recursos.map(r => `<div>${r}</div>`).join('')
+          : '<div>Sin datos extraídos</div>';
+
+        // Procesar las acciones para la taba "Seguimiento de Activación"
+        let tablaAccionesHtml = '';
+        if (snap.empty) {
+          tablaAccionesHtml = `<tr><td colspan="2" style="padding:10px; text-align:center;">Sin seguimiento registrado</td></tr>`;
+        } else {
+          let ultimoDia = '';
+          snap.forEach(doc => {
+            const a = doc.data();
+            if (!a.timestamp?.toDate) return;
+            const dDate = a.timestamp.toDate();
+            const diaStr = dDate.toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' }); // ex: 06/02/26
+            const horaStr = dDate.toLocaleString('es-ES', { hour: '2-digit', minute: '2-digit' });
+
+            if (diaStr !== ultimoDia) {
+              tablaAccionesHtml += `
+                        <tr>
+                            <td colspan="2" style="color:#d32f2f; font-weight:bold; font-size:11px; padding:4px 10px; border-bottom:1px solid #ddd; background:#fff;">
+                                ${diaStr}
+                            </td>
+                        </tr>
+                    `;
+              ultimoDia = diaStr;
+            }
+
+            tablaAccionesHtml += `
+                    <tr>
+                        <td style="width:60px; font-weight:bold; border-right:1px solid #ddd; padding:8px; vertical-align:top; font-size:12px; border-bottom:1px solid #ddd; background:#fff;">
+                            ${horaStr}
+                        </td>
+                        <td style="padding:8px; font-size:12px; line-height:1.4; border-bottom:1px solid #ddd; background:#fff; white-space: pre-wrap;">${a.texto}</td>
+                    </tr>
+                `;
+          });
+        }
+
+        const templateHtml = `
+            <div class="erie-report-wrapper">
+                
+                <!-- Cabecera Logos -->
+                <div class="erie-logo-header">
+                    <div style="flex:1"><img src="assets/cr_logo.png" style="height:35px; margin-right:10px; display:inline-block; vertical-align:middle; filter:grayscale(100%); mix-blend-mode:multiply; opacity:0.8;" onerror="this.style.display='none'">
+                    <span style="background:#e3000f; color:white; padding:3px 8px; font-weight:bold; font-size:15px; border-radius:3px; display:inline-block; vertical-align:middle; font-family:'IBM Plex Sans', sans-serif; letter-spacing:1px;">ERIE</span></div>
+                    <div style="text-align:right"><img src="assets/coa_logo.png" style="height:40px; filter:grayscale(100%); opacity:0.8;" onerror="this.style.display='none'"></div>
+                </div>
+
+                <!-- Bloque 1: Info General -->
+                <table class="erie-info-table">
+                    <tr>
+                        <td class="erie-th-dark" colspan="2">Informe de Activación Equipo de Respuesta Inmediata en Emergencias</td>
+                        <td style="color:#e3000f; font-weight:bold; font-size:10px; text-align:center; width:25%;">Intervención en<br>emergencias</td>
+                    </tr>
+                    <tr>
+                        <td class="erie-th-light">Nº Intervención</td>
+                        <td style="font-weight:bold; text-align:center;">${op.numeroIntervencion || 'S/N'}</td>
+                        <td class="erie-th-dark">Provincia: <span style="font-weight:normal;">${op.provincia?.toUpperCase() || ''}</span></td>
+                    </tr>
+                </table>
+
+                <div style="border:1.5px solid #0b2241; border-radius:3px; margin-bottom:12px; display:flex;">
+                    <div class="erie-th-dark" style="width:120px; border-right:1px solid #0b2241; display:flex; align-items:center; justify-content:center; text-align:center; padding:5px;">Motivo de la<br>activación:</div>
+                    <div style="flex:1; padding:8px 10px; font-size:12px;">${op.nombre}</div>
+                </div>
+
+                <table class="erie-info-table-2">
+                    <tr>
+                        <td class="erie-th-dark" style="width:20%">Fecha / Hora Inicio:</td>
+                        <td style="width:15%; color:#e3000f; font-weight:bold;">${fechaInicioStr}</td>
+                        <td style="width:15%; color:#e3000f; font-weight:bold;">${horaInicioStr}</td>
+                        <td class="erie-th-dark" style="width:20%">Fecha / Hora Fin:</td>
+                        <td style="width:15%; color:#e3000f; font-weight:bold;">${fechaFinStr}</td>
+                        <td style="width:15%; color:#e3000f; font-weight:bold;">${horaFinStr}</td>
+                    </tr>
+                    <tr>
+                        <td class="erie-th-dark">Organismo que solicita la activación:</td>
+                        <td colspan="5" style="text-transform:uppercase; font-size:11px;">${op.org || ''}</td>
+                    </tr>
+                    <tr>
+                        <td class="erie-th-dark">Teléfono:</td>
+                        <td colspan="2">-----------</td>
+                        <td class="erie-th-dark">Persona de<br>Contacto:</td>
+                        <td colspan="2" style="font-size:11px; text-transform:uppercase;">${op.dir || ''}</td>
+                    </tr>
+                    <tr>
+                        <td class="erie-th-dark">Dirección y localidad:</td>
+                        <td colspan="5" style="font-size:11px; text-transform:uppercase;">${op.loc || ''}</td>
+                    </tr>
+                </table>
+
+                <!-- Mapa placeholder -->
+                <div class="erie-map-placeholder" style="text-align:center; padding:30px 0;">
+                     <svg width="250" height="200" viewBox="0 0 100 100" style="opacity:0.3;">
+                         <polygon points="10,50 30,20 70,20 90,50 70,80 30,80" fill="#ccc" stroke="#666" stroke-width="2"/>
+                         <text x="50" y="55" font-family="sans-serif" font-size="8" text-anchor="middle" fill="#666">Mapa ${op.provincia || 'Ubicación'}</text>
+                         <circle cx="50" cy="50" r="3" fill="#e3000f"/>
+                     </svg>
+                </div>
+
+                <!-- Seguimiento -->
+                <table class="erie-log-table" style="width:100%; border-collapse:collapse; margin-bottom:20px; border: 1.5px solid #0b2241;">
+                    <thead>
+                        <tr>
+                            <th class="erie-th-dark" style="width:60px; text-align:center; padding:6px; border-right:1px solid #fff;">Hora</th>
+                            <th class="erie-th-dark" style="text-align:center; padding:6px;">Seguimiento de Activación</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${tablaAccionesHtml}
+                    </tbody>
+                </table>
+
+                <!-- Info Estadísticas -->
+                <table style="width:100%; border-collapse:collapse; margin-bottom:15px; border: 1.5px solid #0b2241;">
+                    <tr>
+                        <th colspan="4" class="erie-th-light" style="font-size:13px; padding:6px; border-bottom:1px solid #0b2241; text-align:center; position:relative;">
+                            Personas Atendidas
+                            <div style="position:absolute; right:10px; top:5px; bottom:5px; border:1.5px solid #0b2241; display:flex; align-items:center; justify-content:center; width:40px; font-weight:bold; background:#fff; color:#0b2241;">${totalAtendidos}</div>
+                        </th>
+                    </tr>
+                    <tr style="background:#fff;">
+                        <td style="width:33.3%; text-align:center; padding:5px; font-weight:bold; color:#d32f2f; border-right:1px solid #ccc; font-size:12px;">👴 Hombres<br><span style="color:#0b2241;">${aiData.hombres}</span></td>
+                        <td style="width:33.3%; text-align:center; padding:5px; font-weight:bold; color:#d32f2f; border-right:1px solid #ccc; font-size:12px;">👩 Mujeres<br><span style="color:#0b2241;">${aiData.mujeres}</span></td>
+                        <td style="width:33.3%; text-align:center; padding:5px; font-weight:bold; color:#d32f2f; font-size:12px;">👶 Menores<br><span style="color:#0b2241;">${aiData.menores}</span></td>
+                    </tr>
+                </table>
+
+                <table style="width:100%; border-collapse:collapse; margin-bottom:25px; border: 1.5px solid #0b2241;">
+                    <tr>
+                        <th class="erie-th-light" style="font-size:13px; padding:6px; border-bottom:1px solid #0b2241; text-align:center;">
+                            Recursos Desplegados
+                        </th>
+                    </tr>
+                    <tr style="background:#fff;">
+                        <td style="padding:10px; font-size:12px; column-count:2; column-gap:20px; line-height:1.6;">
+                            ${recursosHtml}
+                        </td>
+                    </tr>
+                </table>
+
+                <!-- Resumen Ejecutivo IA -->
+                <div style="margin-top:30px; border-top:2px dashed #ccc; padding-top:20px;">
+                    <div style="font-family:'Fraunces', serif; color:#0b2241; font-weight:bold; font-size:16px; margin-bottom:10px; display:flex; align-items:center; gap:8px;">
+                        <span>✨</span> Resumen Ejecutivo (IA)
+                    </div>
+                    <div class="ai-summary-content" style="font-size:13px; line-height:1.6; color:#444;">
+                        ${aiData.resumen_ejecutivo}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // 6. Mostrar en Modal modificando clases para estilo A4 si es necesario
+        const contentDiv = document.getElementById('ai-report-content');
+        contentDiv.innerHTML = templateHtml;
+
+        // Agregar inyección de estilos dinámica sólo para el print dentro del modal
+        if (!document.getElementById('erie-report-styles')) {
+          const style = document.createElement('style');
+          style.id = 'erie-report-styles';
+          style.innerHTML = `
+                .erie-report-wrapper { font-family: 'IBM Plex Sans', Arial, sans-serif; background: #fff; padding: 20px; color: #0b2241; max-width: 800px; margin: 0 auto; }
+                .erie-logo-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 2px solid #e3000f; padding-bottom: 10px; }
+                .erie-info-table, .erie-info-table-2 { width: 100%; border-collapse: collapse; margin-bottom: 12px; border: 1.5px solid #0b2241; }
+                .erie-info-table td, .erie-info-table-2 td { border: 1.5px solid #0b2241; padding: 4px 8px; font-size: 11px; }
+                .erie-th-dark { background-color: #0b2241; color: white; font-weight: bold; }
+                .erie-th-light { background-color: #f0f4f8; color: #0b2241; font-weight: bold; }
+                .ai-summary-content h1, .ai-summary-content h2, .ai-summary-content h3 { font-size: 14px; color: #0b2241; margin-top: 10px; margin-bottom: 5px; }
+                .ai-summary-content p { margin-bottom: 10px; }
+                .ai-summary-content ul { margin-left: 20px; margin-bottom: 10px; }
+                .ai-summary-content li { margin-bottom: 5px; }
+                
+                @media print {
+                    body * { visibility: hidden; }
+                    #overlay-ai-report, #overlay-ai-report * { visibility: visible; }
+                    #overlay-ai-report { position: absolute; left: 0; top: 0; width: 100%; background: #fff !important; }
+                    .modal { box-shadow: none !important; margin: 0 !important; width: 100% !important; max-width: 100% !important; border-radius: 0 !important; }
+                    .btn-close-dp, .modal-foot, .modal-title { display: none !important; }
+                    .erie-report-wrapper { padding: 0 !important; page-break-after: always; }
+                    .erie-th-dark { background-color: #0b2241 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                    .erie-th-light { background-color: #f0f4f8 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                }
+            `;
+          document.head.appendChild(style);
+        }
+
         document.getElementById('overlay-ai-report').classList.add('open');
 
       } catch (e) {
