@@ -853,7 +853,24 @@
           snap = await getDoc(doc(db, 'users', user.uid));
         } catch (e) { console.error("Error fetching user doc:", e); }
 
-        if (!snap || !snap.exists() || snap.data().activo === false) {
+        if (!snap || !snap.exists()) {
+          // El documento de Firestore fue borrado (usuario eliminado), pero la cuenta de Auth sigue existiendo.
+          // Lo recreamos automáticamente.
+          const defaultName = user.displayName || user.email.split('@')[0] || 'Usuario Recuperado';
+          await setDoc(doc(db, 'users', user.uid), {
+            nombre: defaultName,
+            email: user.email,
+            role: 'usuario',
+            provincia: 'Andalucía',
+            activo: true, // Se reactiva por defecto para que pueda entrar de nuevo
+            creadoPor: 'sistema_recuperacion',
+            creadoEn: serverTimestamp()
+          });
+          // Volver a leer el snap ya que lo hemos creado
+          snap = await getDoc(doc(db, 'users', user.uid));
+        }
+
+        if (snap.data().activo === false) {
           await signOut(auth);
           mostrarLoginErr('Usuario no autorizado o desactivado.');
           return;
@@ -2877,7 +2894,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         } else {
           if (!pass || pass.length < 6) { alert('La contraseña debe tener al menos 6 caracteres.'); btn.disabled = false; btn.textContent = 'Guardar'; return; }
           const res = await fetch(
-            `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=__FIREBASE_API_KEY__`,
+            `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${firebaseConfig.apiKey}`,
             {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ email, password: pass, returnSecureToken: true })
@@ -2897,7 +2914,13 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
           mostrarToast('Usuario creado.');
         }
         cerrarModalUsuario();
-      } catch (e) { alert('Error: ' + e.message); }
+      } catch (e) {
+        if (e.message === 'EMAIL_EXISTS') {
+          alert('Este correo ya está dado de alta. Al borrar un usuario, queda un rastro en Firebase. Dile al usuario que vuelva a iniciar sesión con su cuenta de siempre y nosotros reactivaremos su perfil.');
+        } else {
+          alert('Error: ' + e.message);
+        }
+      }
       btn.disabled = false; btn.textContent = 'Guardar';
     };
 
@@ -7392,7 +7415,7 @@ El usuario ha solicitado generar un informe final ejecutivo y bien estructurado 
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.5.11.3
+          V.5.11.4
         </div>
       </div>
 
