@@ -271,6 +271,45 @@
       mostrarToast(!isOn ? 'Capa de tráfico activada' : 'Capa de tráfico desactivada');
     };
 
+    let radarLayer = null;
+    window.toggleRadar = async () => {
+      const btn = document.getElementById('btn-toggle-radar');
+      const isOn = btn.classList.contains('active');
+
+      if (isOn) {
+        if (gmap) gmap.overlayMapTypes.clear();
+        radarLayer = null;
+        btn.classList.remove('active');
+        mostrarToast('Capa de radar desactivada');
+      } else {
+        btn.classList.add('active');
+        mostrarToast('Cargando radar meteorológico...');
+        try {
+          const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+          const data = await res.json();
+          const latestPath = data.radar.past[data.radar.past.length - 1].path;
+
+          radarLayer = new google.maps.ImageMapType({
+            getTileUrl: function (coord, zoom) {
+              return `https://tilecache.rainviewer.com${latestPath}/256/${zoom}/${coord.x}/${coord.y}/2/1_1.png`;
+            },
+            tileSize: new google.maps.Size(256, 256),
+            maxZoom: 18,
+            minZoom: 0,
+            opacity: 0.6,
+            name: "Radar"
+          });
+
+          if (gmap) gmap.overlayMapTypes.push(radarLayer);
+          mostrarToast('Capa de radar activada');
+        } catch (e) {
+          console.error("Error cargando radar:", e);
+          mostrarToast('Error al cargar la capa de radar');
+          btn.classList.remove('active');
+        }
+      }
+    };
+
     window.toggleDirections = () => {
       const panel = document.getElementById('map-routing-panel');
       panel.classList.toggle('open');
@@ -7641,7 +7680,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.5.12.1
+          V.5.13.0
         </div>
       </div>
 
@@ -7742,6 +7781,7 @@ ${dataContext}
         <div class="map-controls-floating">
           <button id="btn-toggle-traffic" class="map-btn-float" onclick="toggleTraffic()">🚦 Tráfico</button>
           <button id="btn-toggle-route" class="map-btn-float" onclick="toggleDirections()">🛣️ Rutas</button>
+          <button id="btn-toggle-radar" class="map-btn-float" onclick="toggleRadar()">🌧️ Radar</button>
           <div id="map-routing-panel" class="map-routing-panel">
             <div
               style="font-size:10px; font-weight:700; color:var(--text-3); text-transform:uppercase; margin-bottom:4px;">
@@ -8245,7 +8285,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.5.12.1
+            Versión V.5.13.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
