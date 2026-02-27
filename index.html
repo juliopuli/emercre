@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 
@@ -899,7 +898,7 @@
         if (currentUserDoc.provincia && currentUserDoc.provincia !== 'Andalucía') {
           selectedProvincia = currentUserDoc.provincia;
         } else {
-          selectedProvincia = 'Andalucía';
+          selectedProvincia = currentUserDoc.lastViewedProvincia || 'Andalucía';
         }
 
         // Registrar entrada y marcar online (No bloqueante)
@@ -3221,6 +3220,14 @@ ${dataContext}
 
     window.changeProvincia = (val) => {
       selectedProvincia = val;
+
+      if (currentUserDoc && currentUserDoc.provincia === 'Andalucía') {
+        currentUserDoc.lastViewedProvincia = val;
+        updateDoc(doc(db, 'users', currentUser.uid), {
+          lastViewedProvincia: val
+        }).catch(e => console.warn("Error saving prov preference:", e));
+      }
+
       renderSidebar();
       renderMapa();
       actualizarContadores();
