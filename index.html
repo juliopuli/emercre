@@ -271,6 +271,15 @@
       mostrarToast(!isOn ? 'Capa de tráfico activada' : 'Capa de tráfico desactivada');
     };
 
+    function getNormalizedCoord(coord, zoom) {
+      const y = coord.y;
+      let x = coord.x;
+      const tileRange = 1 << zoom;
+      if (y < 0 || y >= tileRange) return null;
+      if (x < 0 || x >= tileRange) x = ((x % tileRange) + tileRange) % tileRange;
+      return { x: x, y: y };
+    }
+
     let radarLayer = null;
     window.toggleRadar = async () => {
       const btn = document.getElementById('btn-toggle-radar');
@@ -291,10 +300,12 @@
 
           radarLayer = new google.maps.ImageMapType({
             getTileUrl: function (coord, zoom) {
-              return `https://tilecache.rainviewer.com${latestPath}/256/${zoom}/${coord.x}/${coord.y}/2/1_1.png`;
+              const normalized = getNormalizedCoord(coord, zoom);
+              if (!normalized) return null;
+              return `https://tilecache.rainviewer.com${latestPath}/256/${zoom}/${normalized.x}/${normalized.y}/2/1_1.png`;
             },
             tileSize: new google.maps.Size(256, 256),
-            maxZoom: 18,
+            maxZoom: 20,
             minZoom: 0,
             opacity: 0.6,
             name: "Radar"
