@@ -108,7 +108,7 @@
     let autocompleteDest = null;
     let unsubChatGlobal = null;
     let unsubChatDetail = null;
-    let currentChatId = 'general'; // 'general' o userId
+    let currentChatId = null; // userId
     let unreadMessages = {}; // id -> count
     let jefeGuardiaActual = null;
     let ops = {};
@@ -423,15 +423,12 @@
     };
 
     // ── CHAT LOGIC ─────────────────────────────────────────────────────
-    let unreadMessagesGeneral = 0;
     let unreadMessagesPrivados = {}; // uid -> count
     let lastMessageAt = {};
     let unsubUserPresence = null;
-    let unsubChatGeneralGlobal = null;
     let unsubChatPrivateGlobal = null;
 
     window.suscribirNotificacionesChat = () => {
-      if (unsubChatGeneralGlobal) unsubChatGeneralGlobal();
       if (unsubChatPrivateGlobal) unsubChatPrivateGlobal();
 
       const updateGlobalState = () => {
@@ -439,24 +436,7 @@
         renderChatList();
       };
 
-      // 1. Escuchar mensajes GENERAL (Sin limit ni orderBy para asegurar recibir los últimos sin índices)
-      const qGen = query(collection(db, 'chat_mensajes'), where('destinatarioId', '==', 'general'));
-      unsubChatGeneralGlobal = onSnapshot(qGen, snap => {
-        unreadMessagesGeneral = 0;
-        let latestTs = 0;
-        snap.forEach(doc => {
-          const m = doc.data();
-          const ts = m.timestamp?.toMillis ? m.timestamp.toMillis() : (Date.now());
-          latestTs = Math.max(latestTs, ts);
-          if (m.remitenteId !== currentUser.uid) {
-            if (!m.leidoPor || !m.leidoPor.includes(currentUser.uid)) unreadMessagesGeneral++;
-          }
-        });
-        if (latestTs > 0) lastMessageAt['general'] = latestTs;
-        updateGlobalState();
-      }, err => console.error("General Listener Error:", err));
-
-      // 2. Escuchar mensajes PRIVADOS (Sin limit ni orderBy)
+      // Escuchar mensajes PRIVADOS (Sin limit ni orderBy)
       const qPriv = query(
         collection(db, 'chat_mensajes'),
         or(where('destinatarioId', '==', currentUser.uid), where('remitenteId', '==', currentUser.uid))
@@ -467,11 +447,9 @@
           const m = doc.data();
           const ts = m.timestamp?.toMillis ? m.timestamp.toMillis() : (Date.now());
           const otherId = m.remitenteId === currentUser.uid ? m.destinatarioId : m.remitenteId;
-          if (otherId !== 'general') {
-            lastMessageAt[otherId] = Math.max(lastMessageAt[otherId] || 0, ts);
-            if (m.destinatarioId === currentUser.uid && !m.leido) {
-              unreadMessagesPrivados[otherId] = (unreadMessagesPrivados[otherId] || 0) + 1;
-            }
+          lastMessageAt[otherId] = Math.max(lastMessageAt[otherId] || 0, ts);
+          if (m.destinatarioId === currentUser.uid && !m.leido) {
+            unreadMessagesPrivados[otherId] = (unreadMessagesPrivados[otherId] || 0) + 1;
           }
         });
         updateGlobalState();
@@ -566,8 +544,7 @@
           jefeProv: jefeProv,
           lastAct: lastMessageAt[u.uid] || 0,
           unread: unreadMessagesPrivados[u.uid] || 0,
-          isOnline: isOnline,
-          isGeneral: false
+          isOnline: isOnline
         };
       });
 
@@ -577,14 +554,6 @@
 
       // 4. Crear lista final
       let items = [];
-      items.push({
-        id: 'general',
-        nombre: 'General',
-        sub: 'Todos los usuarios',
-        lastAct: lastMessageAt['general'] || 0,
-        unread: unreadMessagesGeneral,
-        isGeneral: true
-      });
       items = items.concat(jefeItems);
       items = items.concat(otherItems);
 
@@ -592,19 +561,7 @@
         const isActive = currentChatId === item.id;
         const badge = item.unread ? `<span class="chat-badge">${item.unread}</span>` : '';
 
-        if (item.isGeneral) {
-          return `
-            <div class="chat-item ${isActive ? 'active' : ''}" onclick="selectChat('general')">
-              <div class="chat-avatar chat-avatar-general">👥</div>
-              <div class="chat-item-info">
-                <div class="name">General</div>
-                <div class="status">Todos los usuarios</div>
-              </div>
-              ${badge}
-            </div>
-          `;
-        } else {
-          return `
+        return `
             <div class="chat-item ${isActive ? 'active' : ''}" onclick="selectChat('${item.id}')">
               <div class="chat-avatar chat-avatar-user">
                 ${item.initials}
@@ -619,7 +576,6 @@
               ${badge}
             </div>
           `;
-        }
       }).join('');
     }
 
@@ -648,7 +604,7 @@
           <div class="chat-placeholder">
             <div class="chat-placeholder-icon">💬</div>
             <h2>EmerCRE Chat</h2>
-            <p>Selecciona un contacto o el canal General para comenzar a chatear e intercambiar información operativa.</p>
+            <p>Selecciona un contacto para comenzar a chatear e intercambiar información operativa.</p>
           </div>
         `;
         return;
@@ -657,11 +613,11 @@
       if (chatHeader) chatHeader.style.display = 'flex';
       if (inputArea) inputArea.style.display = 'flex';
 
-      const item = id === 'general' ? { nombre: 'General' } : allUsersCache.find(u => u.uid === id);
+      const item = allUsersCache.find(u => u.uid === id);
       const name = item ? item.nombre : 'Chat';
       document.getElementById('chat-target-name').textContent = name;
       if (hdrAvatar) {
-        hdrAvatar.textContent = id === 'general' ? '👥' : getInitials(name);
+        hdrAvatar.textContent = getInitials(name);
       }
 
       suscribirChatDetalle(id);
@@ -673,18 +629,13 @@
       const msgsDiv = document.getElementById('chat-messages');
       msgsDiv.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-4);">Cargando mensajes...</div>';
 
-      let q;
-      if (chatId === 'general') {
-        q = query(collection(db, 'chat_mensajes'), where('destinatarioId', '==', 'general'));
-      } else {
-        // Chat privado: usamos 'or' para cubrir remitente/destinatario de forma segura con las reglas
-        q = query(collection(db, 'chat_mensajes'),
-          or(
-            and(where('remitenteId', '==', currentUser.uid), where('destinatarioId', '==', chatId)),
-            and(where('remitenteId', '==', chatId), where('destinatarioId', '==', currentUser.uid))
-          )
-        );
-      }
+      // Chat privado: usamos 'or' para cubrir remitente/destinatario de forma segura con las reglas
+      const q = query(collection(db, 'chat_mensajes'),
+        or(
+          and(where('remitenteId', '==', currentUser.uid), where('destinatarioId', '==', chatId)),
+          and(where('remitenteId', '==', chatId), where('destinatarioId', '==', currentUser.uid))
+        )
+      );
 
       unsubChatDetail = onSnapshot(q, async snap => {
         msgsDiv.innerHTML = '';
@@ -695,11 +646,9 @@
         docs.sort((a, b) => (a.timestamp?.toMillis ? a.timestamp.toMillis() : 0) - (b.timestamp?.toMillis ? b.timestamp.toMillis() : 0));
 
         docs.forEach(m => {
-          if (chatId !== 'general') {
-            const isRelated = (m.remitenteId === currentUser.uid && m.destinatarioId === chatId) ||
-              (m.remitenteId === chatId && m.destinatarioId === currentUser.uid);
-            if (!isRelated) return;
-          }
+          const isRelated = (m.remitenteId === currentUser.uid && m.destinatarioId === chatId) ||
+            (m.remitenteId === chatId && m.destinatarioId === currentUser.uid);
+          if (!isRelated) return;
 
           const isMe = m.remitenteId === currentUser.uid;
           const ts = m.timestamp?.toDate ? m.timestamp.toDate().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '...';
@@ -707,7 +656,6 @@
           const bubble = document.createElement('div');
           bubble.className = `msg-bubble ${isMe ? 'msg-sent' : 'msg-received'}`;
           bubble.innerHTML = `
-            ${!isMe && chatId === 'general' ? `<div style="font-size:11px; margin-bottom:4px; color:#128c7e; font-weight:700;">${m.remitenteNombre || 'Usuario'}</div>` : ''}
             <div>${m.texto}</div>
             <div class="msg-meta">
               <span></span>
@@ -717,16 +665,8 @@
           msgsDiv.appendChild(bubble);
 
           // Mark as read if not me
-          if (!isMe) {
-            if (chatId === 'general') {
-              if (!m.leidoPor || !m.leidoPor.includes(currentUser.uid)) {
-                batchToMark.push(updateDoc(doc(db, 'chat_mensajes', m.id), {
-                  leidoPor: arrayUnion(currentUser.uid)
-                }));
-              }
-            } else if (!m.leido) {
-              batchToMark.push(updateDoc(doc(db, 'chat_mensajes', m.id), { leido: true }));
-            }
+          if (!isMe && !m.leido) {
+            batchToMark.push(updateDoc(doc(db, 'chat_mensajes', m.id), { leido: true }));
           }
         });
         if (snap.empty) {
@@ -759,7 +699,7 @@
         });
 
         // V.5.11.0: Push notification para mensajes privados (con filtro notifChat)
-        if (currentChatId !== 'general' && NOTIF_BRIDGE_URL) {
+        if (currentChatId && NOTIF_BRIDGE_URL) {
           const destUser = allUsersCache.find(u => u.uid === currentChatId);
           if (destUser && destUser.fcmToken && destUser.notifChat !== false) {
             const senderName = currentUserDoc.nombre || currentUser.email;
@@ -1011,7 +951,6 @@
         mostrarLogin();
         detenerListeners();
         if (unsubUserPresence) unsubUserPresence();
-        if (unsubChatGeneralGlobal) unsubChatGeneralGlobal();
         if (unsubChatPrivateGlobal) unsubChatPrivateGlobal();
       }
     });
@@ -1263,7 +1202,6 @@
       if (unsubGuardia) { unsubGuardia(); unsubGuardia = null; }
       if (unsubGlobalJefes) { unsubGlobalJefes(); unsubGlobalJefes = null; }
       // Clean chat listeners (V.4.5.1)
-      if (unsubChatGeneralGlobal) { unsubChatGeneralGlobal(); unsubChatGeneralGlobal = null; }
       if (unsubChatPrivateGlobal) { unsubChatPrivateGlobal(); unsubChatPrivateGlobal = null; }
       if (unsubUserPresence) { unsubUserPresence(); unsubUserPresence = null; }
       if (unsubChatDetail) { unsubChatDetail(); unsubChatDetail = null; }
@@ -4802,11 +4740,6 @@ ${dataContext}
       position: relative;
     }
 
-    .chat-avatar-general {
-      background: linear-gradient(135deg, #128c7e, #25d366);
-      color: white;
-    }
-
     .chat-avatar-user {
       background: var(--bg-3);
       color: var(--text-2);
@@ -7679,7 +7612,7 @@ ${dataContext}
               <span class="drawer-notif-icon">💬</span>
               <div>
                 <div class="drawer-notif-title">Notificaciones de Chat</div>
-                <div class="drawer-notif-desc">Mensajes privados y generales</div>
+                <div class="drawer-notif-desc">Mensajes directos</div>
               </div>
             </div>
             <label class="switch"><input type="checkbox" id="toggle-notif-chat" checked
@@ -7729,7 +7662,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.5.13.2
+          V.5.13.3
         </div>
       </div>
 
@@ -7868,7 +7801,7 @@ ${dataContext}
         <div class="chat-main">
           <div id="chat-header" class="chat-header" style="display:none;">
             <div class="chat-header-avatar" id="chat-header-avatar"></div>
-            <h3 id="chat-target-name">General</h3>
+            <h3 id="chat-target-name">Chat</h3>
           </div>
           <div class="chat-messages" id="chat-messages">
             <!-- Cargado dinámicamente -->
@@ -8334,7 +8267,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.5.13.2
+            Versión V.5.13.3
           </div>
         </div>
         <div class="field" id="j-prov-row">
