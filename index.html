@@ -2006,8 +2006,8 @@
       document.getElementById('dp-fin-btn').style.display = (isAdmin && !isFinalizada) ? 'inline-flex' : 'none';
       document.getElementById('dp-ai-btn').style.display = isFinalizada ? 'inline-flex' : 'none';
 
-      document.getElementById('dp-admin-btns').style.display = isSA ? 'flex' : 'none';
-      document.getElementById('dp-reabrir-btn').style.display = (isSA && isFinalizada) ? 'inline-flex' : 'none';
+      document.getElementById('dp-admin-btns').style.display = (isAdmin) ? 'flex' : 'none';
+      document.getElementById('dp-reabrir-btn').style.display = (isAdmin && isFinalizada) ? 'inline-flex' : 'none';
 
       // Deshabilitar selector de nivel si está finalizada
       document.querySelectorAll('.nsel-opt').forEach(b => {
@@ -2236,8 +2236,9 @@
       if (!confirm('¿Reabrir esta operación? Volverá a estar activa y escribible.')) return;
       try {
         const autorNombre = currentUserDoc.nombre || currentUser.email;
+        const roleLabel = ROL_LABELS[currentRole] || currentRole;
         await addDoc(collection(db, 'operaciones', selOpId, 'acciones'), {
-          texto: 'Operación reabierta por super_admin.',
+          texto: `Operación reabierta por ${roleLabel}.`,
           prioridad: 'Media',
           autor: autorNombre,
           uid: currentUser.uid,
@@ -7451,9 +7452,14 @@ ${dataContext}
       </div>
       <div class="hdr-div"></div>
       <div style="display:flex; align-items:center; gap:10px;">
-        <div id="clock"
-          style="font-family:'IBM Plex Mono',monospace; font-size:22px; font-weight:700; color:var(--accent); letter-spacing:1px;">
-          --:--:--</div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end;">
+          <div id="date"
+            style="font-size:10px; font-weight:600; color:var(--text-3); text-transform:lowercase; margin-bottom:-4px;">
+            --</div>
+          <div id="clock"
+            style="font-family:'IBM Plex Mono',monospace; font-size:22px; font-weight:700; color:var(--accent); letter-spacing:1px;">
+            --:--:--</div>
+        </div>
       </div>
       <div class="hdr-right">
         <!-- Jefe de Guardia -->
@@ -8267,7 +8273,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.5.13.3
+            Versión V.5.14.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
@@ -8541,8 +8547,14 @@ ${dataContext}
 
   <script>
     setInterval(() => {
-      const el = document.getElementById('clock');
-      if (el) el.textContent = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const now = new Date();
+      const elClock = document.getElementById('clock');
+      if (elClock) elClock.textContent = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const elDate = document.getElementById('date');
+      if (elDate) {
+        let dateStr = now.toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        elDate.textContent = dateStr;
+      }
     }, 1000);
   </script>
 </body>
