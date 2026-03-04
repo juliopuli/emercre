@@ -296,7 +296,7 @@
       }
     };
 
-    window.toggleVehicleVisibility = (id, visible) => {
+    window.toggleVehicleVisibility = async (id, visible) => {
       visibleVehicles[id] = visible;
 
       // V.5.17.1: Guardar preferencia persistente
@@ -306,13 +306,13 @@
 
       // V.5.17.8: Si se marca un vehículo y es el único/primero, lanzamos carga inmediata
       if (visible) {
-        cargarVehiculosOysta();
+        await cargarVehiculosOysta();
       }
 
       if (oystaMarkers[id]) {
         oystaMarkers[id].setMap(visible ? gmap : null);
       }
-      renderMapa(true); // V.5.20.3: Forzar recalcular zoom
+      renderMapa(true); // V.5.20.3 / V.6.1.6: Forzar recalcular zoom una vez cargados
     };
 
 
