@@ -1,0 +1,80 @@
+// CONFIGURACIÓN
+const OYSTA_USER = 'jupumo';
+const OYSTA_PASS = 'Jozelito2010';
+const VEHICLE_IDS = [40693, 54559, 40702, 40367, 54432, 62660, 63089, 54426, 6110, 8590, 54397, 54404, 54402, 54569, 54433];
+
+function doGet() {
+  try {
+    const data = getOystaPositions();
+    return ContentService.createTextOutput(JSON.stringify(data))
+      .setMimeType(ContentService.MimeType.JSON);
+  } catch (e) {
+    return ContentService.createTextOutput(JSON.stringify({ error: e.toString() }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function getOystaPositions() {
+  // 1. LOGIN (Parámetros corregidos V5)
+  const loginUrl = 'https://myoystacar.com/BACKEND/json/login/login.php';
+  const loginPayload = {
+    login_usuario: OYSTA_USER,
+    login_contrasenya: OYSTA_PASS,
+    login_acceso: 'true'
+  };
+  
+  const options = {
+    method: 'post',
+    payload: loginPayload,
+    followRedirects: false 
+  };
+  
+  let response = UrlFetchApp.fetch(loginUrl, options);
+  let cookieHeader = response.getAllHeaders()['Set-Cookie'];
+  
+  if (!cookieHeader) {
+     options.followRedirects = true;
+     response = UrlFetchApp.fetch(loginUrl, options);
+     cookieHeader = response.getAllHeaders()['Set-Cookie'];
+  }
+
+  const cookie = Array.isArray(cookieHeader) ? cookieHeader.join('; ') : cookieHeader;
+  
+  // 2. GET POSITIONS
+  const posUrl = 'https://myoystacar.com/BACKEND/json/dashboard/ultima_posicion.php';
+  const posPayload = {
+    ids_vehiculos: VEHICLE_IDS.join(',')
+  };
+  
+  const posOptions = {
+    method: 'post',
+    headers: { 'Cookie': cookie },
+    payload: posPayload
+  };
+  
+  const posResponse = UrlFetchApp.fetch(posUrl, posOptions);
+  const content = posResponse.getContentText();
+  
+  let rawData;
+  try {
+    rawData = JSON.parse(content);
+  } catch (e) {
+     throw new Error("Oysta response invalid JSON: " + content.substring(0, 100));
+  }
+
+  let list = Array.isArray(rawData) ? rawData : (rawData ? Object.values(rawData) : []);
+
+  const vehicles = list
+    .filter(v => v && v.vehiculo && v.gps)
+    .map(v => ({
+      id: v.vehiculo.id_vehiculo,
+      name: v.vehiculo.identificador,
+      lat: v.gps.latitud,
+      lng: v.gps.longitud,
+      speed: v.gps.velocidad,
+      status: v.estado_vehiculo ? v.estado_vehiculo.descripcion : 'S/D',
+      last_pos: v.gps.fecha_gps
+    }));
+    
+  return { vehicles };
+}
