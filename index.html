@@ -121,8 +121,8 @@
     let ops = {};
     let editingUserId = null;
 
-    // ── CONFIGURACIÓN PUENTE NOTIFICACIONES (V.5.10.0) ─────────────────
-    const OYSTA_BRIDGE_URL = "https://script.google.com/macros/s/AKfycbw3-xw3BPvvHIagopXlcvd4fzHgSs_BUlv6-CbiP4ZhtivoIiltxx1QkcS6d7AF45f2/exec";
+    // ── CONFIGURACIÓN PUENTE NOTIFICACIONES (V.6.1.5) ─────────────────
+    // OYSTA_BRIDGE_URL eliminada del frontend (V.6.1.5): ahora se usa Cloud Function autenticada.
 
 
     // Helper visibilidad (V.3.4.1)
@@ -429,7 +429,7 @@
         mostrarToast('Capa de ferrocarril activada');
       }
     };
-    console.log("EmerCRE V.6.1.4.0 Loaded");
+    console.log("EmerCRE V.6.1.5.0 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -795,13 +795,14 @@
 
           const bubble = document.createElement('div');
           bubble.className = `msg-bubble ${isMe ? 'msg-sent' : 'msg-received'}`;
-          bubble.innerHTML = `
-            <div>${m.texto}</div>
-            <div class="msg-meta">
-              <span></span>
-              <span>${ts}</span>
-            </div>
-          `;
+          // V.6.1.5: Sanitización XSS — textContent en lugar de innerHTML para el texto del usuario
+          const msgText = document.createElement('div');
+          msgText.textContent = m.texto;
+          const msgMeta = document.createElement('div');
+          msgMeta.className = 'msg-meta';
+          msgMeta.innerHTML = `<span></span><span>${ts}</span>`;
+          bubble.appendChild(msgText);
+          bubble.appendChild(msgMeta);
           msgsDiv.appendChild(bubble);
 
           // Mark as read if not me
@@ -1706,9 +1707,9 @@
         return;
       }
 
-      // V.5.17.4: Gating total en la propia función
-      if (!OYSTA_BRIDGE_URL || !gmap || !mapReady || !currentUserDoc?.canSeeVehicles) {
-        console.log(`[Oysta] Gating failed: OYSTA_BRIDGE_URL=${!!OYSTA_BRIDGE_URL}, gmap=${!!gmap}, mapReady=${mapReady}, canSeeVehicles=${currentUserDoc?.canSeeVehicles}`);
+      // V.6.1.5: Gating total en la propia función (no depende de OYSTA_BRIDGE_URL en frontend)
+      if (!gmap || !mapReady || !currentUserDoc?.canSeeVehicles) {
+        console.log(`[Oysta] Gating failed: gmap=${!!gmap}, mapReady=${mapReady}, canSeeVehicles=${currentUserDoc?.canSeeVehicles}`);
         return;
       }
 
@@ -1725,10 +1726,11 @@
 
       try {
         if (statusText) statusText.textContent = "Sincronizando...";
-        const resp = await fetch(OYSTA_BRIDGE_URL);
-        if (!resp.ok) throw new Error("Fetch failed with status " + resp.status);
-        const data = await resp.json();
-        console.log(`[Oysta] Fetch successful, received ${data?.vehicles?.length} vehicles.`);
+        // V.6.1.5: Usar Cloud Function autenticada en vez de fetch directo al GAS
+        const getOystaVehiclesFn = httpsCallable(functions, 'getOystaVehicles');
+        const result = await getOystaVehiclesFn();
+        const data = result.data;
+        console.log(`[Oysta] Cloud Function successful, received ${data?.vehicles?.length} vehicles.`);
 
         if (!data || !data.vehicles) {
           if (statusText) statusText.textContent = "Error de datos";
@@ -2439,10 +2441,20 @@
         ? op.creadoEn.toDate().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
         : '—';
       ir.innerHTML = '';
-      if (op.dir) ir.innerHTML += `<div class="dp-info-item"><strong>${op.dir}</strong>Jefe de Operaciones</div>`;
-      if (op.org) ir.innerHTML += `<div class="dp-info-item"><strong>${op.org}</strong>Solicitado por</div>`;
-      if (op.creadoPorNombre) ir.innerHTML += `<div class="dp-info-item"><strong>${op.creadoPorNombre}</strong>Creado por</div>`;
-      ir.innerHTML += `<div class="dp-info-item"><strong>${ts}</strong>Inicio</div>`;
+      // V.6.1.5: Sanitización XSS — usar textContent para campos de usuario
+      function addInfoItem(container, value, label) {
+        const item = document.createElement('div');
+        item.className = 'dp-info-item';
+        const strong = document.createElement('strong');
+        strong.textContent = value;
+        item.appendChild(strong);
+        item.appendChild(document.createTextNode(label));
+        container.appendChild(item);
+      }
+      if (op.dir) addInfoItem(ir, op.dir, 'Jefe de Operaciones');
+      if (op.org) addInfoItem(ir, op.org, 'Solicitado por');
+      if (op.creadoPorNombre) addInfoItem(ir, op.creadoPorNombre, 'Creado por');
+      addInfoItem(ir, ts, 'Inicio');
 
       // Campo autor readonly
       document.getElementById('a-autor').value = currentUserDoc.nombre || currentUser.email;
