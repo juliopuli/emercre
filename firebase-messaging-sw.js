@@ -2,6 +2,11 @@
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
+// ── CACHE VERSIONING ──────────────────────────────────────────────────────────
+// Cambia este valor cada vez que hagas una nueva versión para limpiar el caché
+// antiguo y forzar que los clientes descarguen los archivos actualizados.
+const CACHE_VERSION = 'emercre-v6.1.3';
+
 firebase.initializeApp({
     apiKey: "AIzaSyAHtrxaBazArqa8znWsUIVYxTsS7zoOOmc",
     authDomain: "emercre.firebaseapp.com",
@@ -14,9 +19,52 @@ firebase.initializeApp({
 const messaging = firebase.messaging();
 
 // Tomar el control inmediatamente sin esperar a que se cierren todas las ventanas
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', event => event.waitUntil(clients.claim()));
+self.addEventListener('install', (event) => {
+    self.skipWaiting();
+});
 
+// Al activar: eliminar todos los cachés antiguos y tomar control de los clientes
+self.addEventListener('activate', (event) => {
+    event.waitUntil(
+        caches.keys().then((cacheNames) => {
+            return Promise.all(
+                cacheNames
+                    .filter((name) => name !== CACHE_VERSION)
+                    .map((name) => {
+                        console.log('[SW] Eliminando caché antiguo:', name);
+                        return caches.delete(name);
+                    })
+            );
+        }).then(() => clients.claim())
+    );
+});
+
+
+// ── ESTRATEGIA DE CACHÉ: NETWORK-FIRST PARA HTML ─────────────────────────────
+// Para las peticiones de navegación (el index.html), siempre intentamos primero
+// la red para asegurarnos de cargar la versión más reciente desplegada en GitHub Pages.
+// Solo si la red falla, usamos la caché como respaldo.
+self.addEventListener('fetch', (event) => {
+    // Solo interceptar peticiones de navegación (HTML)
+    if (event.request.mode === 'navigate') {
+        event.respondWith(
+            fetch(event.request)
+                .then((response) => {
+                    // Respuesta de red exitosa: guardar en caché y devolver
+                    const responseClone = response.clone();
+                    caches.open(CACHE_VERSION).then((cache) => {
+                        cache.put(event.request, responseClone);
+                    });
+                    return response;
+                })
+                .catch(() => {
+                    // Sin red: usar caché si existe
+                    return caches.match(event.request);
+                })
+        );
+    }
+    // El resto de peticiones (JS, CSS, APIs) las dejamos pasar sin modificar
+});
 
 // Manejador en segundo plano
 messaging.onBackgroundMessage((payload) => {
