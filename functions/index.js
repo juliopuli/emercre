@@ -3,7 +3,7 @@ const admin = require("firebase-admin");
 
 admin.initializeApp();
 
-// 0. Oysta Vehicles Proxy (V.6.1.5 - Autenticado, URL oculta en servidor)
+// 0. Oysta Vehicles Proxy (V.6.2.0 - Autenticado, URL oculta en servidor)
 exports.getOystaVehicles = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError(
@@ -28,7 +28,7 @@ exports.getOystaVehicles = functions.https.onCall(async (data, context) => {
     }
 });
 
-// 1. Gemini Content Generator Function (V.6.1.3)
+// 1. Gemini Content Generator Function (V.6.2.0)
 exports.generateGeminiContent = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError(
@@ -71,7 +71,7 @@ exports.generateGeminiContent = functions.https.onCall(async (data, context) => 
     }
 });
 
-// 2. Push Notifications Function (V.6.1.3 - Fixed mobile delivery)
+// 2. Push Notifications Function (V.6.2.0 - Fixed mobile delivery)
 exports.sendPushNotification = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError(
