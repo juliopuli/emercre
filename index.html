@@ -1128,7 +1128,7 @@
     function cargarGoogleMaps() {
       const script = document.createElement('script');
       const apiKey = "AIzaSyAHtrxaBazArqa8znWsUIVYxTsS7zoOOmc";
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,marker&callback=initGoogleMap&language=es&loading=async`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,marker&callback=initGoogleMap&language=es`;
       script.async = true;
       script.defer = true;
       document.head.appendChild(script);
