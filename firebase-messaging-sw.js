@@ -5,7 +5,7 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-com
 // ── CACHE VERSIONING ──────────────────────────────────────────────────────────
 // Cambia este valor cada vez que hagas una nueva versión para limpiar el caché
 // antiguo y forzar que los clientes descarguen los archivos actualizados.
-const CACHE_VERSION = 'emercre-v6.1.3';
+const CACHE_VERSION = 'emercre-v6.1.4';
 
 firebase.initializeApp({
     apiKey: "AIzaSyAHtrxaBazArqa8znWsUIVYxTsS7zoOOmc",
@@ -66,9 +66,30 @@ self.addEventListener('fetch', (event) => {
     // El resto de peticiones (JS, CSS, APIs) las dejamos pasar sin modificar
 });
 
-// Manejador en segundo plano
+// Manejador en segundo plano — DEBE mostrar la notificación explícitamente
+// (en Android Chrome, si no llamamos showNotification, no aparece nada)
 messaging.onBackgroundMessage((payload) => {
-    console.log('[firebase-messaging-sw.js] Mensaje en segundo plano recibido:', payload);
+    console.log('[SW] Mensaje en segundo plano recibido:', payload);
+
+    const notifTitle = payload.notification?.title
+        || payload.data?.title
+        || 'EmerCRE';
+
+    const notifBody = payload.notification?.body
+        || payload.data?.body
+        || '';
+
+    const notifOptions = {
+        body: notifBody,
+        icon: 'https://juliopuli.github.io/emercre/assets/logo_emercre.png',
+        badge: 'https://juliopuli.github.io/emercre/assets/logo_emercre.png',
+        tag: 'emercre-operacion',
+        renotify: true,
+        requireInteraction: true,
+        data: payload.data || {}
+    };
+
+    self.registration.showNotification(notifTitle, notifOptions);
 });
 
 // Manejador de clics (V.6.0.7)
