@@ -315,89 +315,7 @@
       renderMapa(true); // V.5.20.3: Forzar recalcular zoom
     };
 
-    const radarTileCache = new Map();
-    class RadarMapType {
-      constructor(path) {
-        this.path = path;
-        this.tileSize = new google.maps.Size(256, 256);
-        this.maxZoom = 24;
-        this.name = "Radar";
-      }
-      getTile(coord, z, ownerDocument) {
-        // fetchZ = 6 ensures we use very few tiles, avoiding 429 and 403 errors.
-        // Also it's extremely fast as the whole world is only a few dozen tiles.
-        const fetchZ = Math.min(z, 6);
-        const power = z - fetchZ;
-        const numTilesFetch = 1 << fetchZ;
-        const xFetch = coord.x >> power;
-        const yFetch = coord.y >> power;
-        const normalizedX = (xFetch % numTilesFetch + numTilesFetch) % numTilesFetch;
 
-        if (yFetch < 0 || yFetch >= numTilesFetch) return ownerDocument.createElement('div');
-
-        const canvas = ownerDocument.createElement('canvas');
-        canvas.width = 256;
-        canvas.height = 256;
-        const ctx = canvas.getContext('2d');
-        ctx.imageSmoothingEnabled = false;
-
-        const tileKey = `${this.path}_256_${fetchZ}_${normalizedX}_${yFetch}`;
-        let img = radarTileCache.get(tileKey);
-        if (!img) {
-          img = new Image();
-          // NO usamos crossOrigin para evitar bloqueos CORS si no es necesario leer pixels
-          img.src = `https://tilecache.rainviewer.com${this.path}/256/${fetchZ}/${normalizedX}/${yFetch}/2/1_1.png`;
-          radarTileCache.set(tileKey, img);
-        }
-
-        const draw = () => {
-          if (!img.naturalWidth) return;
-          const subSize = 256 / Math.pow(2, power);
-          const sx = (coord.x % Math.pow(2, power)) * subSize;
-          const sy = (coord.y % Math.pow(2, power)) * subSize;
-          ctx.clearRect(0, 0, 256, 256);
-          ctx.globalAlpha = 0.65;
-          ctx.drawImage(img, sx, sy, subSize, subSize, 0, 0, 256, 256);
-        };
-
-        if (img.complete && img.naturalWidth !== 0) {
-          draw();
-        } else {
-          img.onload = draw;
-          img.onerror = () => { console.warn("[Radar] Error loading tile:", img.src); };
-        }
-
-        return canvas;
-      }
-      releaseTile(tile) { }
-    }
-
-    let radarLayer = null;
-    window.toggleRadar = async () => {
-      const btn = document.getElementById('btn-toggle-radar');
-      const isOn = btn.classList.contains('active');
-      if (isOn) {
-        if (gmap) gmap.overlayMapTypes.clear();
-        radarLayer = null;
-        btn.classList.remove('active');
-        mostrarToast('Capa de radar desactivada');
-      } else {
-        btn.classList.add('active');
-        mostrarToast('Cargando radar meteorológico...');
-        try {
-          const res = await fetch('https://api.rainviewer.com/public/weather-maps.json');
-          const data = await res.json();
-          const latestPath = data.radar.past[data.radar.past.length - 1].path;
-          radarLayer = new RadarMapType(latestPath);
-          if (gmap) gmap.overlayMapTypes.push(radarLayer);
-          mostrarToast('Capa de radar activada');
-        } catch (e) {
-          console.error("Error cargando radar:", e);
-          mostrarToast('Error al cargar la capa de radar');
-          btn.classList.remove('active');
-        }
-      }
-    };
 
     let railwayLayer = null;
     window.toggleRailway = () => {
@@ -8486,7 +8404,7 @@ ${dataContext}
           <button id="btn-toggle-traffic" class="map-btn-float" onclick="toggleTraffic()">🚦 Tráfico</button>
           <button id="btn-toggle-vehicles" class="map-btn-float" onclick="toggleVehiclesPanel()">🚐 Vehículos</button>
           <button id="btn-toggle-route" class="map-btn-float" onclick="toggleDirections()">🛣️ Rutas</button>
-          <button id="btn-toggle-radar" class="map-btn-float" onclick="toggleRadar()">🌧️ Radar</button>
+
           <button id="btn-toggle-railway" class="map-btn-float" onclick="toggleRailway()">🛤️ Ferrocarril</button>
           <div id="map-vehicles-panel" class="map-vehicles-panel">
             <div class="panel-header">
