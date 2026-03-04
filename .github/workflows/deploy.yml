@@ -3,7 +3,7 @@ name: Deploy SIGECA to GitHub Pages
 on:
   push:
     branches:
-      - master   # Rama principal del repositorio
+      - main     # Rama de despliegue (GitHub Pages protegida a esta rama)
 
 permissions:
   contents: read
