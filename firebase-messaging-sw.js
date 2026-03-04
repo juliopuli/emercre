@@ -1,4 +1,4 @@
-// Firebase Messaging Service Worker (V.6.0.7)
+// Firebase Messaging Service Worker (V.6.1.2)
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
