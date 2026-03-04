@@ -1370,7 +1370,7 @@
       // Oysta Integration (V.5.15.0)
       // V.5.17.3: Condicionar carga por permiso de usuario
       const vehicleBtn = document.getElementById('btn-toggle-vehicles');
-      if (OYSTA_BRIDGE_URL && currentUserDoc.canSeeVehicles) {
+      if (currentUserDoc.canSeeVehicles) {
         if (vehicleBtn) vehicleBtn.style.display = 'flex'; // V.5.17.5
         suscribirVehiculosLocales(); // V.5.17.0
         // V.5.17.10: Si la caché está vacía, forzamos una carga inicial única para poblar la lista
@@ -1684,7 +1684,7 @@
       // V.5.15.0: Asegurar que los vehículos Oysta se ven tras renderizar el mapa
       // V.5.17.4: Gating robusto
       // V.5.17.11: Si no hay vehículos en el panel, forzamos una carga para poblar la lista
-      if (OYSTA_BRIDGE_URL && currentUserDoc.canSeeVehicles) {
+      if (currentUserDoc.canSeeVehicles) {
         const listContainer = document.getElementById('oysta-vehicle-list');
         // V.5.17.13: El placeholder "Cargando..." cuenta como 1 hijo, así que <=1 significa vacío
         const listEmpty = !listContainer || listContainer.children.length <= 1;
