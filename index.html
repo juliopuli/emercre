@@ -7,8 +7,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <link rel="apple-touch-icon" href="assets/logo_emercre.png?v=6.5.1">
-  <link rel="icon" type="image/png" href="assets/logo_emercre.png?v=6.5.1">
+  <link rel="apple-touch-icon" href="assets/logo_emercre.png?v=6.5.2">
+  <link rel="icon" type="image/png" href="assets/logo_emercre.png?v=6.5.2">
   <link rel="manifest" href="manifest.json">
   <title>EmerCRE — Sistema de Gestión de Catástrofes</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -130,8 +130,8 @@
     let ops = {};
     let editingUserId = null;
 
-    // ── CONFIGURACIÓN PUENTE NOTIFICACIONES (V.6.5.1) ─────────────────
-    // OYSTA_BRIDGE_URL eliminada del frontend (V.6.5.1): ahora se usa Cloud Function autenticada.
+    // ── CONFIGURACIÓN PUENTE NOTIFICACIONES (V.6.5.2) ─────────────────
+    // OYSTA_BRIDGE_URL eliminada del frontend (V.6.5.2): ahora se usa Cloud Function autenticada.
 
 
     // Helper visibilidad (V.3.4.1)
@@ -356,7 +356,7 @@
         mostrarToast('Capa de ferrocarril activada');
       }
     };
-    console.log("EmerCRE V.6.5.1 Loaded");
+    console.log("EmerCRE V.6.5.2 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -5469,23 +5469,23 @@ ${dataContext}
 
     #section-preventivos .panel-right {
       flex: 1;
-      display: flex;
-      flex-direction: column;
       position: relative;
+      height: 100%;
     }
 
     #preventivos-map {
-      flex: 1;
       height: 100%;
       width: 100%;
     }
 
-    /* Modales Preventivos pegados a la izquierda (V.6.5.1) */
+    /* Modales Preventivos pegados a la izquierda (V.6.5.2) */
     #overlay-preventivo-main,
     #overlay-preventivo-dia,
     #overlay-preventivo-intervencion {
       justify-content: flex-start;
       padding-left: 320px;
+      backdrop-filter: none;
+      /* Eliminamos el blur si resulta extraño con el padding */
     }
 
     /* Switch Toggle */
@@ -8787,7 +8787,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.6.5.1
+          V.6.5.2
         </div>
       </div>
 
@@ -9025,8 +9025,9 @@ ${dataContext}
 
       <div class="panel-right">
         <!-- Mapa Principal de Preventivos -->
-        <div id="preventivos-map-control" class="map-controls">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div id="preventivos-map-control" class="map-controls-floating">
+          <div
+            style="background:rgba(255,255,255,0.9); backdrop-filter:blur(8px); border:1px solid var(--border-mid); border-radius:12px; padding:12px; width:260px; box-shadow:var(--shadow-lg); display:flex; flex-direction:column; gap:8px;">
             <div style="font-weight:600; margin-bottom:12px; font-size:14px; color:var(--text-1);">🗺️ Capas del Mapa -
               Preventivos</div>
             <button id="btn-prev-refresh-map" class="btn-icon" title="Refrescar vista"
