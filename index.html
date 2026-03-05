@@ -4744,6 +4744,20 @@ ${dataContext}
       diasList.style.display = 'block';
 
       cargarSubpreventivos(id);
+
+      // Precargar vehículos de la provincia en cache global para usar en iconos y detalles
+      window.globalVehiculos = window.globalVehiculos || {};
+      const qV = query(collection(db, 'vehiculos'), where('provincia', '==', p.provincia || 'Andalucía'));
+      getDocs(qV).then(snapV => {
+        snapV.docs.forEach(dv => {
+          window.globalVehiculos[dv.id] = dv.data();
+        });
+        // Si ya hay un subpreventivo seleccionado, re-renderizar para mostrar iconos
+        if (typeof currentPreventivoDiaId !== 'undefined' && currentPreventivoDiaId) {
+          const recCont = document.getElementById('prev-recursos-dia-container');
+          if (recCont) selectSubpreventivo(currentPreventivoDiaId);
+        }
+      }).catch(e => console.error("Error cargando vehículos:", e));
     };
 
     window.backToPreventivosList = () => {
@@ -4810,10 +4824,21 @@ ${dataContext}
       } else {
         recList.innerHTML = snapV.docs.map(dv => {
           const v = dv.data();
+          window.globalVehiculos = window.globalVehiculos || {};
+          window.globalVehiculos[dv.id] = v; // save to cache
+
+          let iconUrl = 'assets/icons/van.png'; // default
+          if (v.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
+          else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
+          else if (v.tipo === 'Vehículo Todo terreno' || v.tipo === 'Todo Terreno') iconUrl = 'assets/icons/offroad.png';
+          else if (v.tipo === 'Vehículo transporte personal' || v.tipo === 'Vehículo de transporte mixto') iconUrl = 'assets/icons/van.png';
+
           return `
             <label style="display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer;">
               <input type="checkbox" name="prev-recurso-v" value="${dv.id}">
-              <span style="font-size:13px;">${v.nombre} (${v.matricula || 'SIN MAT'})</span>
+              <img src="${iconUrl}" style="width:16px; height:16px;">
+              <span style="font-size:13px; font-weight:600;">${v.indicativo || 'SIN IND'}</span>
+              <span style="font-size:11px; color:var(--text-3);">(${v.matricula || 'SIN MAT'})</span>
             </label>
           `;
         }).join('');
@@ -4857,7 +4882,19 @@ ${dataContext}
       // Renderizar recursos del día
       const recCont = document.getElementById('prev-recursos-dia-container');
       recCont.innerHTML = (d.recursos || []).map(rvId => {
-        // Buscar nombre en cache global de vehículos si existe o simplemente ID
+        const v = window.globalVehiculos && window.globalVehiculos[rvId];
+        if (v) {
+          let iconUrl = 'assets/icons/van.png'; // default
+          if (v.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
+          else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
+          else if (v.tipo === 'Vehículo Todo terreno' || v.tipo === 'Todo Terreno') iconUrl = 'assets/icons/offroad.png';
+          else if (v.tipo === 'Vehículo transporte personal' || v.tipo === 'Vehículo de transporte mixto') iconUrl = 'assets/icons/van.png';
+
+          return `<span class="badge-tipo" style="background:var(--bg-3); color:var(--text-1); font-size:11px; display:inline-flex; align-items:center; gap:4px; margin-right:4px; padding:2px 6px; border-radius:4px;">
+            <img src="${iconUrl}" style="width:14px; height:14px;">
+            ${v.indicativo || 'SIN IND'}
+          </span>`;
+        }
         return `<span class="badge-tipo" style="background:var(--bg-3); color:var(--text-1); font-size:10px;">🚗 ${rvId}</span>`;
       }).join('');
 
@@ -4919,7 +4956,24 @@ ${dataContext}
                 <span style="font-size:10px; font-weight:700; color:var(--text-3);">${i.timestamp?.toDate ? i.timestamp.toDate().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
               </div>
               <div style="margin-top:8px; display:flex; gap:4px; flex-wrap:wrap;">
-                ${(i.recursosAsignados || []).map(r => `<span style="font-size:9px; background:var(--bg-2); padding:2px 6px; border:1px solid var(--border-mid); border-radius:3px; color:var(--text-2);">🚑 ${r}</span>`).join('')}
+                ${(i.recursosAsignados || []).map(r => {
+            const v = window.globalVehiculos && window.globalVehiculos[r];
+            let iconUrl = 'assets/icons/van.png'; // default
+            let label = r;
+            if (v) {
+              if (v.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
+              else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
+              else if (v.tipo === 'Vehículo Todo terreno' || v.tipo === 'Todo Terreno') iconUrl = 'assets/icons/offroad.png';
+              else if (v.tipo === 'Vehículo transporte personal' || v.tipo === 'Vehículo de transporte mixto') iconUrl = 'assets/icons/van.png';
+              label = v.indicativo || 'SIN IND';
+            } else {
+              return `<span style="font-size:9px; background:var(--bg-2); padding:2px 6px; border:1px solid var(--border-mid); border-radius:3px; color:var(--text-2);">🚗 ${r}</span>`;
+            }
+            return `<span style="font-size:9px; background:var(--bg-2); padding:2px 6px; border:1px solid var(--border-mid); border-radius:3px; color:var(--text-2); display:inline-flex; align-items:center; gap:3px;">
+                    <img src="${iconUrl}" style="width:10px; height:10px;">
+                    ${label}
+                  </span>`;
+          }).join('')}
               </div>
             </div>
           `;
@@ -4975,12 +5029,30 @@ ${dataContext}
       if (!d || !d.recursos || d.recursos.length === 0) {
         recList.innerHTML = '<div style="font-size:11px; color:var(--text-4);">No hay recursos asignados a este día.</div>';
       } else {
-        recList.innerHTML = d.recursos.map(rvId => `
-          <label style="display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer;">
-            <input type="checkbox" name="prev-int-recurso-v" value="${rvId}">
-            <span style="font-size:13px;">${rvId}</span>
-          </label>
-        `).join('');
+        recList.innerHTML = d.recursos.map(rvId => {
+          const v = window.globalVehiculos && window.globalVehiculos[rvId];
+          if (v) {
+            let iconUrl = 'assets/icons/van.png'; // default
+            if (v.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
+            else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
+            else if (v.tipo === 'Vehículo Todo terreno' || v.tipo === 'Todo Terreno') iconUrl = 'assets/icons/offroad.png';
+            else if (v.tipo === 'Vehículo transporte personal' || v.tipo === 'Vehículo de transporte mixto') iconUrl = 'assets/icons/van.png';
+            return `
+              <label style="display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer;">
+                <input type="checkbox" name="prev-int-recurso-v" value="${rvId}">
+                <img src="${iconUrl}" style="width:16px; height:16px;">
+                <span style="font-size:13px; font-weight:600;">${v.indicativo || 'SIN IND'}</span>
+                <span style="font-size:11px; color:var(--text-3);">(${v.matricula || 'SIN MAT'})</span>
+              </label>
+            `;
+          }
+          return `
+            <label style="display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer;">
+              <input type="checkbox" name="prev-int-recurso-v" value="${rvId}">
+              <span style="font-size:13px;">🚗 ${rvId}</span>
+            </label>
+          `;
+        }).join('');
       }
 
       document.getElementById('overlay-preventivo-intervencion').style.display = 'flex';
@@ -9592,7 +9664,7 @@ ${dataContext}
 
   <!-- MODAL PREVENTIVO MAIN -->
   <div class="overlay" id="overlay-preventivo-main" style="display:none;" onclick="clickOutsidePrevMain(event)">
-    <div class="modal-dp">
+    <div class="modal">
       <div class="modal-head">
         <div class="modal-title">Alta Preventivo</div>
         <button class="btn-close-dp" onclick="cerrarModalPreventivoMain()">✕</button>
@@ -9650,7 +9722,7 @@ ${dataContext}
 
   <!-- MODAL PREVENTIVO DIA -->
   <div class="overlay" id="overlay-preventivo-dia" style="display:none;" onclick="clickOutsidePrevDia(event)">
-    <div class="modal-dp">
+    <div class="modal">
       <div class="modal-head">
         <div class="modal-title">Añadir Día / Subpreventivo</div>
         <button class="btn-close-dp" onclick="cerrarModalPreventivoDia()">✕</button>
@@ -9683,7 +9755,7 @@ ${dataContext}
 
   <!-- MODAL PREVENTIVO INTERVENCION -->
   <div class="overlay" id="overlay-preventivo-intervencion" style="display:none;" onclick="clickOutsidePrevInt(event)">
-    <div class="modal-dp">
+    <div class="modal">
       <div class="modal-head">
         <div class="modal-title">Nueva Intervención</div>
         <button class="btn-close-dp" onclick="cerrarModalPreventivoIntervencion()">✕</button>
@@ -9856,7 +9928,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.6.5.0
+            Versión V.6.6.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
