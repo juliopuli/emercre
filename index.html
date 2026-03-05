@@ -1029,6 +1029,26 @@
         // V.5.17.8: Se deshabilitada la persistencia de visibilidad al inicio
         // para asegurar que todos los vehículos empiecen desmarcados y no lancen peticiones automáticas.
 
+        // Update Navigation Menu based on access
+        const accesoEmergencias = currentUserDoc.accesoEmergencias !== false; // true by default for backwards compatibility
+        const accesoPreventivos = currentUserDoc.accesoPreventivos === true;
+
+        const navOps = document.getElementById('nav-operaciones');
+        const navPrev = document.getElementById('nav-preventivos');
+        const mnavOps = document.getElementById('mnav-operaciones');
+        const mnavPrev = document.getElementById('mnav-preventivos');
+
+        if (navOps) navOps.style.display = accesoEmergencias ? 'flex' : 'none';
+        if (mnavOps) mnavOps.style.display = accesoEmergencias ? 'flex' : 'none';
+        if (navPrev) navPrev.style.display = accesoPreventivos ? 'flex' : 'none';
+        if (mnavPrev) mnavPrev.style.display = accesoPreventivos ? 'flex' : 'none';
+
+        if (accesoEmergencias) {
+          showSection('operaciones');
+        } else if (accesoPreventivos) {
+          showSection('preventivos');
+        }
+
         mostrarApp();
         initApp();
         // V.5.11.1: Delay para evitar bloqueo en Android PWA install
@@ -3256,6 +3276,9 @@ ${dataContext}
     window.showSection = sec => {
       document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
       document.getElementById('section-operaciones').style.display = sec === 'operaciones' ? 'flex' : 'none';
+      if (document.getElementById('section-preventivos')) {
+        document.getElementById('section-preventivos').style.display = sec === 'preventivos' ? 'flex' : 'none';
+      }
       document.getElementById('section-usuarios').style.display = sec === 'usuarios' ? 'flex' : 'none';
       if (document.getElementById('section-tablas')) {
         document.getElementById('section-tablas').style.display = sec === 'tablas' ? 'flex' : 'none';
@@ -3438,6 +3461,8 @@ ${dataContext}
       document.getElementById('u-activo').value = 'true';
       document.getElementById('u-todos-chats').checked = true; // Por defecto checked
       document.getElementById('u-can-see-vehicles').checked = false; // V.5.17.3: Por defecto desmarcado
+      document.getElementById('u-acc-emergencias').checked = true;
+      document.getElementById('u-acc-preventivos').checked = false;
       document.getElementById('u-pass-row').style.display = 'flex';
       checkAutonomicScope(provSel.value);
       document.getElementById('overlay-user').classList.add('open');
@@ -3506,6 +3531,10 @@ ${dataContext}
       document.getElementById('u-todos-chats').checked = u.aparecerEnTodosLosChats !== false;
       // V.5.17.3: Cargar permiso de vehículos
       document.getElementById('u-can-see-vehicles').checked = !!u.canSeeVehicles;
+
+      document.getElementById('u-acc-emergencias').checked = u.accesoEmergencias !== false; // True por defecto (retrocompatibilidad)
+      document.getElementById('u-acc-preventivos').checked = !!u.accesoPreventivos;
+
       document.getElementById('u-pass-row').style.display = 'none';
       checkAutonomicScope(provSel.value);
       document.getElementById('overlay-user').classList.add('open');
@@ -3531,6 +3560,8 @@ ${dataContext}
         if (editingUserId) {
           let updateData = { nombre, role, provincia, activo };
           updateData.canSeeVehicles = document.getElementById('u-can-see-vehicles').checked; // V.5.17.3
+          updateData.accesoEmergencias = document.getElementById('u-acc-emergencias').checked;
+          updateData.accesoPreventivos = document.getElementById('u-acc-preventivos').checked;
           if (currentUserDoc.role === 'super_admin') {
             updateData.aparecerEnTodosLosChats = document.getElementById('u-todos-chats').checked && provincia === 'Andalucía';
           }
@@ -3550,6 +3581,8 @@ ${dataContext}
           let newData = {
             nombre, email, role, provincia, activo,
             canSeeVehicles: document.getElementById('u-can-see-vehicles').checked, // V.5.17.3
+            accesoEmergencias: document.getElementById('u-acc-emergencias').checked,
+            accesoPreventivos: document.getElementById('u-acc-preventivos').checked,
             creadoPor: currentUser.uid,
             creadoEn: serverTimestamp()
           };
@@ -8155,7 +8188,10 @@ ${dataContext}
     </header>
 
     <nav class="app-nav">
-      <button class="nav-item on" data-sec="operaciones" onclick="showSection('operaciones')">🗺 Operaciones</button>
+      <button class="nav-item on" id="nav-operaciones" data-sec="operaciones" onclick="showSection('operaciones')">🚨
+        Emergencias</button>
+      <button class="nav-item" id="nav-preventivos" data-sec="preventivos" onclick="showSection('preventivos')"
+        style="display:none">⚕️ Preventivos</button>
       <button class="nav-item" data-sec="chat" onclick="showSection('chat')">💬 Chat <span
           id="nav-chat-badge"></span></button>
       <button class="nav-item" id="nav-usuarios" data-sec="usuarios" onclick="showSection('usuarios')"
@@ -8217,12 +8253,14 @@ ${dataContext}
           </select>
         </div>
 
-        <!-- Navigation -->
         <div class="drawer-links">
-          <button class="drawer-item on" data-sec="operaciones" onclick="mobileShowSection('operaciones')">🗺
-            Operaciones</button>
+          <button class="drawer-item on" id="mnav-operaciones" data-sec="operaciones"
+            onclick="mobileShowSection('operaciones')">🚨 Emergencias</button>
+          <button class="drawer-item" id="mnav-preventivos" data-sec="preventivos"
+            onclick="mobileShowSection('preventivos')" style="display:none">⚕️ Preventivos</button>
           <button class="drawer-item" data-sec="chat" onclick="mobileShowSection('chat')">💬 Chat <span
               id="mnav-chat-badge"></span></button>
+          id="mnav-chat-badge"></span></button>
           <button class="drawer-item" id="mnav-usuarios" data-sec="usuarios" onclick="mobileShowSection('usuarios')"
             style="display:none">👥 Usuarios</button>
           <button class="drawer-item" id="mnav-tablas" data-sec="tablas" onclick="mobileShowSection('tablas')"
@@ -8462,8 +8500,16 @@ ${dataContext}
         </div>
 
         <div class="pick-banner" id="pick-banner">📍 Haz clic en el mapa para fijar la ubicación</div>
-        <div id="map"></div>
       </div>
+    </div>
+
+    <!-- PREVENTIVOS -->
+    <div id="section-preventivos"
+      style="display:none; flex:1; flex-direction:column; align-items:center; justify-content:center; padding: 20px;">
+      <div style="font-size: 48px; opacity: 0.5; margin-bottom: 16px;">⚕️</div>
+      <h2 style="color: var(--text-2);">Módulo de Preventivos</h2>
+      <p style="color: var(--text-3); text-align: center; max-width: 400px;">Esta sección está en construcción. Aquí se
+        gestionarán próximamente los dispositivos de riesgo previsible.</p>
     </div>
 
     <!-- CHAT SECTION -->
@@ -8871,61 +8917,95 @@ ${dataContext}
         <button class="btn-close-dp" onclick="cerrarModalUsuario()">✕</button>
       </div>
       <div class="modal-body">
-        <div class="field">
+        <div class="field"
+          style="border-bottom: 1px solid var(--border-mid); padding-bottom: 12px; margin-bottom: 12px;">
+          <div style="font-size: 14px; font-weight: 600; color: var(--accent); margin-bottom: 8px;">Datos Personales
+          </div>
           <div class="field-lbl">Nombre completo *</div>
-          <input class="f-input" id="u-nombre" placeholder="Nombre y apellidos">
-        </div>
-        <div class="field">
+          <input class="f-input" id="u-nombre" placeholder="Nombre y apellidos" style="margin-bottom: 10px;">
+
           <div class="field-lbl">Email *</div>
-          <input class="f-input" id="u-email" type="email" placeholder="usuario@organismo.es">
-        </div>
-        <div class="field" id="u-pass-row">
-          <div class="field-lbl">Contraseña inicial *</div>
-          <input class="f-input" id="u-pass" type="password" placeholder="Mínimo 6 caracteres">
-        </div>
-        <div class="field-row">
-          <div class="field" style="flex:1;">
-            <div class="field-lbl">Rol</div>
-            <select class="f-input f-select" id="u-role" style="width:100%">
-              <!-- Las opciones se cargan dinámicamente según permiso -->
-            </select>
-          </div>
-          <div class="field" style="flex:1;">
-            <div class="field-lbl">Perfil / Provincia</div>
-            <select class="f-input f-select" id="u-provincia" style="width:100%"
-              onchange="checkAutonomicScope(this.value)">
-              <option value="Andalucía">Oficina Autonómica de Andalucía</option>
-              <option value="Almería">Oficina Provincial de Almería</option>
-              <option value="Cádiz">Oficina Provincial de Cádiz</option>
-              <option value="Córdoba">Oficina Provincial de Córdoba</option>
-              <option value="Granada">Oficina Provincial de Granada</option>
-              <option value="Huelva">Oficina Provincial de Huelva</option>
-              <option value="Jaén">Oficina Provincial de Jaén</option>
-              <option value="Málaga">Oficina Provincial de Málaga</option>
-              <option value="Sevilla">Oficina Provincial de Sevilla</option>
-            </select>
+          <input class="f-input" id="u-email" type="email" placeholder="usuario@organismo.es"
+            style="margin-bottom: 10px;">
+
+          <div id="u-pass-row">
+            <div class="field-lbl">Contraseña inicial *</div>
+            <input class="f-input" id="u-pass" type="password" placeholder="Mínimo 6 caracteres">
           </div>
         </div>
-        <div class="field">
-          <div class="field-lbl">Estado</div>
+
+        <div class="field"
+          style="border-bottom: 1px solid var(--border-mid); padding-bottom: 12px; margin-bottom: 12px;">
+          <div style="font-size: 14px; font-weight: 600; color: var(--accent); margin-bottom: 8px;">Puesto y Ubicación
+          </div>
+          <div class="field-row" style="margin-bottom: 10px;">
+            <div class="field" style="flex:1;">
+              <div class="field-lbl">Rol</div>
+              <select class="f-input f-select" id="u-role" style="width:100%">
+                <!-- Las opciones se cargan dinámicamente según permiso -->
+              </select>
+            </div>
+            <div class="field" style="flex:1;">
+              <div class="field-lbl">Perfil / Provincia</div>
+              <select class="f-input f-select" id="u-provincia" style="width:100%"
+                onchange="checkAutonomicScope(this.value)">
+                <option value="Andalucía">Oficina Autonómica de Andalucía</option>
+                <option value="Almería">Oficina Provincial de Almería</option>
+                <option value="Cádiz">Oficina Provincial de Cádiz</option>
+                <option value="Córdoba">Oficina Provincial de Córdoba</option>
+                <option value="Granada">Oficina Provincial de Granada</option>
+                <option value="Huelva">Oficina Provincial de Huelva</option>
+                <option value="Jaén">Oficina Provincial de Jaén</option>
+                <option value="Málaga">Oficina Provincial de Málaga</option>
+                <option value="Sevilla">Oficina Provincial de Sevilla</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field-lbl">Estado de la cuenta</div>
           <select class="f-input f-select" id="u-activo" style="width:100%">
-            <option value="true">Activo</option>
-            <option value="false">Inactivo</option>
+            <option value="true">Activa</option>
+            <option value="false">Inactiva (Acceso bloqueado)</option>
           </select>
         </div>
-        <div class="field" id="u-todos-chats-row"
-          style="display:none; margin-top:12px; align-items:center; gap:8px; padding:12px; background:var(--bg-2); border-radius:6px; border:1px solid var(--border-mid);">
-          <input type="checkbox" id="u-todos-chats" style="width:18px; height:18px; cursor:pointer;" checked>
-          <label for="u-todos-chats"
-            style="font-size:13px; font-weight:600; color:var(--text-1); cursor:pointer;">Aparecer en los chats de todas
-            las provincias</label>
-        </div>
-        <div class="field"
-          style="margin-top:8px; align-items:center; gap:8px; padding:12px; background:var(--bg-2); border-radius:6px; border:1px solid var(--border-mid); display:flex;">
-          <input type="checkbox" id="u-can-see-vehicles" style="width:18px; height:18px; cursor:pointer;">
-          <label for="u-can-see-vehicles"
-            style="font-size:13px; font-weight:600; color:var(--text-1); cursor:pointer;">Puede ver vehículos
-            GeoLocalizados</label>
+
+        <div class="field">
+          <div style="font-size: 14px; font-weight: 600; color: var(--accent); margin-bottom: 8px;">Permisos Adicionales
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div
+              style="display:flex; align-items:center; gap:8px; padding:10px 12px; background:var(--bg-2); border-radius:6px; border:1px solid var(--border-mid);">
+              <input type="checkbox" id="u-acc-emergencias" style="width:18px; height:18px; cursor:pointer;" checked>
+              <label for="u-acc-emergencias"
+                style="font-size:13px; font-weight:600; color:var(--text-1); cursor:pointer; flex: 1;">Acceso a
+                Emergencias</label>
+            </div>
+
+            <div
+              style="display:flex; align-items:center; gap:8px; padding:10px 12px; background:var(--bg-2); border-radius:6px; border:1px solid var(--border-mid);">
+              <input type="checkbox" id="u-acc-preventivos" style="width:18px; height:18px; cursor:pointer;">
+              <label for="u-acc-preventivos"
+                style="font-size:13px; font-weight:600; color:var(--text-1); cursor:pointer; flex: 1;">Acceso a
+                Preventivos</label>
+            </div>
+
+            <div
+              style="display:flex; align-items:center; gap:8px; padding:10px 12px; background:var(--bg-2); border-radius:6px; border:1px solid var(--border-mid);">
+              <input type="checkbox" id="u-can-see-vehicles" style="width:18px; height:18px; cursor:pointer;">
+              <label for="u-can-see-vehicles"
+                style="font-size:13px; font-weight:600; color:var(--text-1); cursor:pointer; flex: 1;">Ver vehículos
+                Geolocalizados</label>
+            </div>
+
+            <div id="u-todos-chats-row"
+              style="display:none; align-items:center; gap:8px; padding:10px 12px; background:var(--bg-2); border-radius:6px; border:1px solid var(--border-mid);">
+              <input type="checkbox" id="u-todos-chats" style="width:18px; height:18px; cursor:pointer;" checked>
+              <label for="u-todos-chats"
+                style="font-size:13px; font-weight:600; color:var(--text-1); cursor:pointer; flex: 1;">Aparecer en los
+                chats de todas las provincias</label>
+            </div>
+          </div>
         </div>
       </div>
       <div class="modal-foot">
@@ -8953,7 +9033,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.6.2.0
+            Versión V.6.3.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
