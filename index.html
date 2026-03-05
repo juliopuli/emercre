@@ -9007,6 +9007,23 @@ ${dataContext}
         </div>
         <div class="field-row">
           <div class="field" style="flex:1;">
+            <div class="field-lbl">Fecha de inicio *</div>
+            <input type="date" class="f-input" id="prev-main-fecha-ini" style="width:100%"
+              onchange="calcularDiasPreventivo()">
+          </div>
+          <div class="field" style="flex:1;">
+            <div class="field-lbl">Fecha de fin</div>
+            <input type="date" class="f-input" id="prev-main-fecha-fin" style="width:100%"
+              onchange="calcularDiasPreventivo()">
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field" style="flex:1;">
+            <div class="field-lbl">Número de días</div>
+            <input class="f-input" id="prev-main-dias" type="number" readonly
+              style="width:100%; background:var(--bg-2); color:var(--text-3);" placeholder="Auto-calculado">
+          </div>
+          <div class="field" style="flex:1;">
             <div class="field-lbl">Región / Provincia</div>
             <select class="f-input f-select" id="prev-main-provincia" style="width:100%"
               onchange="checkAutonomicScope(this.value, 'prev-main-jefe')">
@@ -9242,7 +9259,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.6.4.0
+            Versión V.6.4.1
           </div>
         </div>
         <div class="field" id="j-prov-row">
@@ -9588,6 +9605,28 @@ ${dataContext}
     }
     function cerrarModalPreventivoMain() { document.getElementById('overlay-preventivo-main').style.display = 'none'; }
     function clickOutsidePrevMain(e) { if (e.target.id === 'overlay-preventivo-main') cerrarModalPreventivoMain(); }
+    function calcularDiasPreventivo() {
+      const f1 = document.getElementById('prev-main-fecha-ini').value;
+      const f2 = document.getElementById('prev-main-fecha-fin').value;
+      const fDias = document.getElementById('prev-main-dias');
+
+      if (f1) {
+        if (!f2) {
+          fDias.value = 1;
+        } else {
+          const d1 = new Date(f1);
+          const d2 = new Date(f2);
+          const mSegs = d2.getTime() - d1.getTime();
+          if (mSegs < 0) {
+            fDias.value = '';
+            return;
+          }
+          fDias.value = Math.floor(mSegs / (1000 * 3600 * 24)) + 1;
+        }
+      } else {
+        fDias.value = '';
+      }
+    }
     function guardarPreventivoMain() {
       const nombre = document.getElementById('prev-main-nombre').value.trim();
       if (!nombre) return alert('El nombre es obligatorio');
