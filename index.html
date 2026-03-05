@@ -2540,17 +2540,23 @@
 
     window.toggleGlobalCerradas = (checked) => {
       mostrarCerradas = checked;
+
+      // V.7.0.23: Sincronizar todos los toggles de la app
+      document.querySelectorAll('input[type="checkbox"][onchange*="toggleGlobalCerradas"]').forEach(cb => {
+        cb.checked = checked;
+      });
+
       renderSidebar();
       renderMapa();
       // V.7.0.23: Refrescar preventivos y días si están cargados
-      renderPreventivosList(lastPreventivosSnap);
-      if (currentPreventivoId) {
-        renderSubpreventivosList(lastSubpreventivosSnap, currentPreventivoId);
+      if (lastPreventivosSnap) renderPreventivosList(lastPreventivosSnap);
+      if (currentPreventivoId && lastSubpreventivosSnap) {
+        renderSubpreventivosList(lastSubpreventivosSnap, currentPreventivoId, null);
       }
       // V.7.0.23/23: También re-renderizar intervenciones si el panel está abierto
-      if (document.getElementById('preventivos-detail-panel').classList.contains('open')) {
+      if (document.getElementById('preventivos-detail-panel')?.classList.contains('open')) {
         activeIntManageId = null; // V.7.0.23: Forzar colapso al cambiar visibilidad
-        renderPreventivoIntervenciones(lastIntervencionesSnap);
+        if (lastIntervencionesSnap) renderPreventivoIntervenciones(lastIntervencionesSnap);
       }
     };
 
@@ -5136,7 +5142,9 @@ ${dataContext}
           mostrarToast('Día actualizado');
         } else {
           await addDoc(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos'), {
-            nombre, fecha, recursos, creadoEn: serverTimestamp()
+            nombre, fecha, recursos,
+            abierta: true, // V.7.0.23: Por defecto abierto
+            creadoEn: serverTimestamp()
           });
           mostrarToast('Día añadido');
         }
@@ -5712,6 +5720,9 @@ ${dataContext}
           comentarios: [...comms, closureComm],
           actualizadoEn: serverTimestamp()
         });
+
+        if (newStatus === false) activeIntManageId = null; // V.7.0.23: Colapsar al cerrar
+
         mostrarToast(newStatus ? 'Intervención reabierta' : 'Intervención cerrada');
       } catch (e) { console.error(e); }
     };
