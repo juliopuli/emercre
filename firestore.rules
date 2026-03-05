@@ -44,19 +44,19 @@ service cloud.firestore {
 
     match /preventivos/{prevId} {
       allow read: if logueado();
-      allow create: if logueado() && rol() in ['super_admin', 'manager', 'admin'];
-      allow update: if logueado() && rol() in ['super_admin', 'manager', 'admin', 'usuario'];
+      allow create: if logueado() && rol() in ['super_admin', 'manager', 'admin', 'autonomica', 'provincial'];
+      allow update: if logueado() && rol() in ['super_admin', 'manager', 'admin', 'usuario', 'autonomica', 'provincial'];
       allow delete: if logueado() && rol() == 'super_admin';
       
       match /subpreventivos/{subId} {
         allow read: if logueado();
         allow create, update: if logueado();
-        allow delete: if logueado() && rol() in ['super_admin', 'manager', 'admin'];
+        allow delete: if logueado() && rol() in ['super_admin', 'manager', 'admin', 'autonomica', 'provincial'];
 
         match /intervenciones/{intId} {
           allow read: if logueado();
           allow create, update: if logueado();
-          allow delete: if logueado() && rol() in ['super_admin', 'manager', 'admin'];
+          allow delete: if logueado() && rol() in ['super_admin', 'manager', 'admin', 'autonomica', 'provincial'];
         }
       }
     }

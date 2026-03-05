@@ -7,8 +7,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <link rel="apple-touch-icon" href="assets/logo_emercre.png?v=6.5.0">
-  <link rel="icon" type="image/png" href="assets/logo_emercre.png?v=6.5.0">
+  <link rel="apple-touch-icon" href="assets/logo_emercre.png?v=6.5.1">
+  <link rel="icon" type="image/png" href="assets/logo_emercre.png?v=6.5.1">
   <link rel="manifest" href="manifest.json">
   <title>EmerCRE — Sistema de Gestión de Catástrofes</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -130,8 +130,8 @@
     let ops = {};
     let editingUserId = null;
 
-    // ── CONFIGURACIÓN PUENTE NOTIFICACIONES (V.6.5.0) ─────────────────
-    // OYSTA_BRIDGE_URL eliminada del frontend (V.6.5.0): ahora se usa Cloud Function autenticada.
+    // ── CONFIGURACIÓN PUENTE NOTIFICACIONES (V.6.5.1) ─────────────────
+    // OYSTA_BRIDGE_URL eliminada del frontend (V.6.5.1): ahora se usa Cloud Function autenticada.
 
 
     // Helper visibilidad (V.3.4.1)
@@ -356,7 +356,7 @@
         mostrarToast('Capa de ferrocarril activada');
       }
     };
-    console.log("EmerCRE V.6.5.0 Loaded");
+    console.log("EmerCRE V.6.5.1 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -4492,7 +4492,7 @@ ${dataContext}
     };
 
     // ==========================================
-    // MÓDULO DE PREVENTIVOS - LÓGICA (V.6.5.0)
+    // MÓDULO DE PREVENTIVOS - LÓGICA (V.6.5.1)
     // ==========================================
 
     window.initMapPreventivos = () => {
@@ -5467,10 +5467,25 @@ ${dataContext}
       position: relative;
     }
 
+    #section-preventivos .panel-right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
     #preventivos-map {
       flex: 1;
       height: 100%;
       width: 100%;
+    }
+
+    /* Modales Preventivos pegados a la izquierda (V.6.5.1) */
+    #overlay-preventivo-main,
+    #overlay-preventivo-dia,
+    #overlay-preventivo-intervencion {
+      justify-content: flex-start;
+      padding-left: 320px;
     }
 
     /* Switch Toggle */
@@ -8772,7 +8787,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.6.5.0
+          V.6.5.1
         </div>
       </div>
 
