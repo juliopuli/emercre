@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main     # Rama de despliegue (GitHub Pages protegida a esta rama)
+  workflow_dispatch:
 
 permissions:
   contents: read
