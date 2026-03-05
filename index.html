@@ -115,6 +115,15 @@
     let autocompleteDest = null;
     let unsubChatGlobal = null;
     let unsubChatDetail = null;
+    let unsubPreventivos = null;
+    let unsubSubpreventivos = null;
+    let unsubIntervenciones = null;
+    let preventivosCache = {};
+    let subpreventivosCache = {};
+    let currentPreventivoId = null;
+    let currentPreventivoDiaId = null;
+    let mapPreventivos = null;
+    let markersPreventivos = {};
     let currentChatId = null; // userId
     let unreadMessages = {}; // id -> count
     let jefeGuardiaActual = null;
@@ -3278,6 +3287,11 @@ ${dataContext}
       document.getElementById('section-operaciones').style.display = sec === 'operaciones' ? 'flex' : 'none';
       if (document.getElementById('section-preventivos')) {
         document.getElementById('section-preventivos').style.display = sec === 'preventivos' ? 'flex' : 'none';
+        if (sec === 'preventivos') {
+          initMapPreventivos();
+          refreshPreventivosMap();
+          cargarPreventivos();
+        }
       }
       document.getElementById('section-usuarios').style.display = sec === 'usuarios' ? 'flex' : 'none';
       if (document.getElementById('section-tablas')) {
@@ -4476,6 +4490,416 @@ ${dataContext}
         setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
       }
     };
+
+    // ==========================================
+    // MÓDULO DE PREVENTIVOS - LÓGICA (V.6.4.2)
+    // ==========================================
+
+    window.initMapPreventivos = () => {
+      if (mapPreventivos) return;
+      const mapDiv = document.getElementById('preventivos-map');
+      if (!mapDiv) return;
+
+      mapPreventivos = new google.maps.Map(mapDiv, {
+        center: { lat: 37.3891, lng: -5.9845 }, // Sevilla por defecto
+        zoom: 7,
+        mapId: 'bc56b7cd6850d53c',
+        mapTypeId: 'roadmap',
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false
+      });
+      // Layer controls for preventivos map
+      window.refreshPreventivosMap = () => {
+        if (mapPreventivos) google.maps.event.trigger(mapPreventivos, 'resize');
+      };
+    };
+
+    window.cargarPreventivos = () => {
+      if (unsubPreventivos) unsubPreventivos();
+      const q = query(collection(db, 'preventivos'), orderBy('creadoEn', 'desc'));
+      unsubPreventivos = onSnapshot(q, snap => {
+        const list = document.getElementById('preventivos-list');
+        if (!list) return;
+
+        if (snap.empty) {
+          list.innerHTML = `
+            <div class="empty-msg show">
+              <div style="font-size:28px;opacity:0.4">🗓️</div>
+              <span>Sin preventivos registrados.</span>
+            </div>
+          `;
+          return;
+        }
+
+        list.innerHTML = snap.docs.map(doc => {
+          const p = doc.data();
+          const id = doc.id;
+          preventivosCache[id] = p;
+          const fechaRange = p.fechaInicio ? `${p.fechaInicio} al ${p.fechaFin || '?'}` : 'Sin fecha';
+          return `
+            <div class="op-card" onclick="selectPreventivo('${id}')">
+              <div class="op-card-head">
+                 <div class="op-card-title">${p.nombre}</div>
+                 <div class="badge-tipo" style="background:var(--accent); color:#fff;">${p.dias || 1} d</div>
+              </div>
+              <div class="op-card-body">
+                <div class="op-card-row">📍 ${p.provincia || 'Andalucía'}</div>
+                <div class="op-card-row">📅 ${fechaRange}</div>
+              </div>
+            </div>
+          `;
+        }).join('');
+      });
+    };
+
+    window.abrirModalPreventivoMain = () => {
+      document.getElementById('prev-main-nombre').value = '';
+      document.getElementById('prev-main-fecha-ini').value = '';
+      document.getElementById('prev-main-fecha-fin').value = '';
+      document.getElementById('prev-main-dias').value = '';
+      if (window.checkAutonomicScope) window.checkAutonomicScope(currentUserDoc.provincia || 'Andalucía', 'prev-main-jefe');
+      document.getElementById('overlay-preventivo-main').style.display = 'flex';
+      setTimeout(() => document.getElementById('prev-main-nombre').focus(), 100);
+    };
+
+    window.cerrarModalPreventivoMain = () => {
+      document.getElementById('overlay-preventivo-main').style.display = 'none';
+    };
+
+    window.calcularDiasPreventivo = () => {
+      const f1 = document.getElementById('prev-main-fecha-ini').value;
+      const f2 = document.getElementById('prev-main-fecha-fin').value;
+      const fDias = document.getElementById('prev-main-dias');
+      if (f1) {
+        if (!f2) fDias.value = 1;
+        else {
+          const d1 = new Date(f1);
+          const d2 = new Date(f2);
+          const diff = d2.getTime() - d1.getTime();
+          if (diff < 0) { fDias.value = ''; return; }
+          fDias.value = Math.floor(diff / (1000 * 3600 * 24)) + 1;
+        }
+      } else fDias.value = '';
+    };
+
+    window.guardarPreventivoMain = async () => {
+      const nombre = document.getElementById('prev-main-nombre').value.trim();
+      if (!nombre) return alert('El nombre es obligatorio');
+      const fIni = document.getElementById('prev-main-fecha-ini').value;
+      const fFin = document.getElementById('prev-main-fecha-fin').value;
+      const dias = parseInt(document.getElementById('prev-main-dias').value) || 1;
+      const prov = document.getElementById('prev-main-provincia').value;
+      const jefe = document.getElementById('prev-main-jefe').value;
+
+      try {
+        await addDoc(collection(db, 'preventivos'), {
+          nombre,
+          fechaInicio: fIni,
+          fechaFin: fFin,
+          dias,
+          provincia: prov,
+          jefeDispositivo: jefe,
+          creadoEn: serverTimestamp(),
+          creadorId: currentUser.uid,
+          creadorNombre: currentUserDoc.nombre
+        });
+        cerrarModalPreventivoMain();
+        mostrarToast('Preventivo creado correctamente.');
+      } catch (e) { alert('Error: ' + e.message); }
+    };
+
+    window.selectPreventivo = (id) => {
+      currentPreventivoId = id;
+      const p = preventivosCache[id];
+      document.getElementById('preventivos-list').style.display = 'none';
+      document.getElementById('btn-nuevo-prev').style.display = 'none';
+
+      const bread = document.getElementById('prev-breadcrumb');
+      bread.style.display = 'block';
+      document.getElementById('prev-breadcrumb-sep').style.display = 'none';
+
+      const diasList = document.getElementById('preventivos-dias-list');
+      diasList.style.display = 'block';
+
+      cargarSubpreventivos(id);
+    };
+
+    window.backToPreventivosList = () => {
+      currentPreventivoId = null;
+      currentPreventivoDiaId = null;
+      if (unsubSubpreventivos) unsubSubpreventivos();
+      if (unsubIntervenciones) unsubIntervenciones();
+
+      document.getElementById('preventivos-list').style.display = 'block';
+      document.getElementById('btn-nuevo-prev').style.display = 'block';
+      document.getElementById('preventivos-dias-list').style.display = 'none';
+      document.getElementById('preventivos-intervenciones-list').style.display = 'none';
+      document.getElementById('prev-breadcrumb').style.display = 'none';
+    };
+
+    function cargarSubpreventivos(pId) {
+      if (unsubSubpreventivos) unsubSubpreventivos();
+      const q = query(collection(db, 'preventivos', pId, 'subpreventivos'), orderBy('fecha', 'asc'));
+      unsubSubpreventivos = onSnapshot(q, snap => {
+        const cont = document.getElementById('prev-dias-container');
+        if (!cont) return;
+        if (snap.empty) {
+          cont.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-4);">No hay días configurados aún.</div>';
+          return;
+        }
+        cont.innerHTML = snap.docs.map(doc => {
+          const d = doc.data();
+          const id = doc.id;
+          subpreventivosCache[id] = d;
+          return `
+            <div class="op-card" onclick="selectSubpreventivo('${id}')">
+              <div class="op-card-head">
+                <div class="op-card-title">${d.nombre}</div>
+                <div style="font-size:11px; color:var(--text-3);">${d.fecha}</div>
+              </div>
+              <div style="font-size:11px; color:var(--accent); margin-top:4px;">
+                🚗 ${d.recursos?.length || 0} vehículos asignados
+              </div>
+            </div>
+          `;
+        }).join('');
+      });
+    }
+
+    window.abrirModalPreventivoDia = async () => {
+      if (!currentPreventivoId) return;
+      document.getElementById('prev-dia-nombre').value = '';
+      document.getElementById('prev-dia-fecha').value = '';
+
+      const recList = document.getElementById('prev-dia-recursos-list');
+      recList.innerHTML = 'Cargando vehículos...';
+
+      // Cargar vehículos de la misma provincia
+      const p = preventivosCache[currentPreventivoId];
+      const qV = query(collection(db, 'vehiculos'), where('provincia', '==', p.provincia || 'Andalucía'));
+      const snapV = await getDocs(qV);
+      if (snapV.empty) {
+        recList.innerHTML = '<div style="font-size:11px; color:var(--text-4);">No hay vehículos en esta provincia.</div>';
+      } else {
+        recList.innerHTML = snapV.docs.map(dv => {
+          const v = dv.data();
+          return `
+            <label style="display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer;">
+              <input type="checkbox" name="prev-recurso-v" value="${dv.id}">
+              <span style="font-size:13px;">${v.nombre} (${v.matricula || 'SIN MAT'})</span>
+            </label>
+          `;
+        }).join('');
+      }
+
+      document.getElementById('overlay-preventivo-dia').style.display = 'flex';
+    };
+
+    window.cerrarModalPreventivoDia = () => document.getElementById('overlay-preventivo-dia').style.display = 'none';
+
+    window.guardarPreventivoDia = async () => {
+      const nombre = document.getElementById('prev-dia-nombre').value.trim();
+      const fecha = document.getElementById('prev-dia-fecha').value;
+      if (!nombre || !fecha) return alert('Nombre y fecha son obligatorios');
+
+      const selectedRecs = Array.from(document.querySelectorAll('input[name="prev-recurso-v"]:checked')).map(i => i.value);
+
+      try {
+        await addDoc(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos'), {
+          nombre,
+          fecha,
+          recursos: selectedRecs,
+          creadoEn: serverTimestamp()
+        });
+        cerrarModalPreventivoDia();
+        mostrarToast('Día añadido.');
+      } catch (e) { alert('Error: ' + e.message); }
+    };
+
+    window.selectSubpreventivo = (id) => {
+      currentPreventivoDiaId = id;
+      const d = subpreventivosCache[id];
+      document.getElementById('preventivos-dias-list').style.display = 'none';
+
+      const breadSep = document.getElementById('prev-breadcrumb-sep');
+      breadSep.style.display = 'inline';
+      document.getElementById('prev-breadcrumb-dia').textContent = d.nombre;
+
+      document.getElementById('preventivos-intervenciones-list').style.display = 'block';
+
+      // Renderizar recursos del día
+      const recCont = document.getElementById('prev-recursos-dia-container');
+      recCont.innerHTML = (d.recursos || []).map(rvId => {
+        // Buscar nombre en cache global de vehículos si existe o simplemente ID
+        return `<span class="badge-tipo" style="background:var(--bg-3); color:var(--text-1); font-size:10px;">🚗 ${rvId}</span>`;
+      }).join('');
+
+      cargarIntervenciones(currentPreventivoId, id);
+    };
+
+    window.backToPreventivoDias = () => {
+      currentPreventivoDiaId = null;
+      if (unsubIntervenciones) unsubIntervenciones();
+      clearPreventivoMarkers();
+      document.getElementById('preventivos-dias-list').style.display = 'block';
+      document.getElementById('preventivos-intervenciones-list').style.display = 'none';
+      document.getElementById('prev-breadcrumb-sep').style.display = 'none';
+    };
+
+    function cargarIntervenciones(pId, dId) {
+      if (unsubIntervenciones) unsubIntervenciones();
+      const q = query(collection(db, 'preventivos', pId, 'subpreventivos', dId, 'intervenciones'), orderBy('timestamp', 'desc'));
+      unsubIntervenciones = onSnapshot(q, snap => {
+        const cont = document.getElementById('prev-intervenciones-container');
+        if (!cont) return;
+
+        clearPreventivoMarkers();
+
+        if (snap.empty) {
+          cont.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-4);">Sin intervenciones registradas este día.</div>';
+          return;
+        }
+
+        const bounds = new google.maps.LatLngBounds();
+        let hasCoords = false;
+
+        cont.innerHTML = snap.docs.map(doc => {
+          const i = doc.data();
+          const markerId = doc.id;
+
+          if (i.coords) {
+            hasCoords = true;
+            bounds.extend(i.coords);
+            addInterventionMarker(markerId, i);
+          }
+
+          const prioColor = { verde: '#2ecc71', amarillo: '#f1c40f', rojo: '#e74c3c', negro: '#000' }[i.prioridad] || '#95a5a6';
+
+          return `
+            <div class="op-card" style="border-left: 4px solid ${prioColor};">
+              <div class="op-card-head">
+                <div class="op-card-title">${i.descripcion}</div>
+                <div style="font-size:10px; color:var(--text-3);">${i.timestamp?.toDate ? i.timestamp.toDate().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+              </div>
+              <div style="font-size:11px; color:var(--text-3); margin-top:4px;">📍 ${i.direccion || 'Sin dirección'}</div>
+              <div style="margin-top:6px; display:flex; gap:4px; flex-wrap:wrap;">
+                ${(i.recursosAsignados || []).map(r => `<span style="font-size:9px; background:var(--bg-2); padding:2px 4px; border-radius:3px;">${r}</span>`).join('')}
+              </div>
+            </div>
+          `;
+        }).join('');
+
+        if (hasCoords && mapPreventivos) {
+          mapPreventivos.fitBounds(bounds);
+          if (mapPreventivos.getZoom() > 16) mapPreventivos.setZoom(16);
+        }
+      });
+    }
+
+    function clearPreventivoMarkers() {
+      Object.values(markersPreventivos).forEach(m => m.map = null);
+      markersPreventivos = {};
+    }
+
+    function addInterventionMarker(id, i) {
+      if (!mapPreventivos || !i.coords) return;
+
+      const pin = new google.maps.marker.PinElement({
+        background: { verde: '#2ecc71', amarillo: '#f1c40f', rojo: '#e74c3c', negro: '#000' }[i.prioridad] || '#95a5a6',
+        borderColor: '#fff',
+        glyphColor: '#fff',
+        scale: 1.0
+      });
+
+      markersPreventivos[id] = new google.maps.marker.AdvancedMarkerElement({
+        position: i.coords,
+        map: mapPreventivos,
+        content: pin.element,
+        title: i.descripcion
+      });
+    }
+
+    window.abrirModalPreventivoIntervencion = () => {
+      document.getElementById('prev-int-desc').value = '';
+      document.getElementById('prev-int-dir').value = '';
+      document.getElementById('prev-int-prio').value = 'verde';
+      document.getElementById('prev-int-coords').innerText = 'Sin coordenadas fijadas.';
+      pickedCoordsPrev = null;
+
+      const recList = document.getElementById('prev-int-recursos-list');
+      const d = subpreventivosCache[currentPreventivoDiaId];
+      if (!d || !d.recursos || d.recursos.length === 0) {
+        recList.innerHTML = '<div style="font-size:11px; color:var(--text-4);">No hay recursos asignados a este día.</div>';
+      } else {
+        recList.innerHTML = d.recursos.map(rvId => `
+          <label style="display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer;">
+            <input type="checkbox" name="prev-int-recurso-v" value="${rvId}">
+            <span style="font-size:13px;">${rvId}</span>
+          </label>
+        `).join('');
+      }
+
+      document.getElementById('overlay-preventivo-intervencion').style.display = 'flex';
+    };
+
+    let pickedCoordsPrev = null;
+    window.prepararPinIntervencion = () => {
+      if (!mapPreventivos) return;
+      cerrarModalPreventivoIntervencion();
+      mostrarToast('Haz clic en el mapa de preventivos para situar la intervención');
+      mapPreventivos.getDiv().style.cursor = 'crosshair';
+
+      const listener = mapPreventivos.addListener('click', e => {
+        pickedCoordsPrev = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+        google.maps.event.removeListener(listener);
+        mapPreventivos.getDiv().style.cursor = '';
+
+        document.getElementById('overlay-preventivo-intervencion').style.display = 'flex';
+        document.getElementById('prev-int-coords').innerText = `Ubicación fijada: ${pickedCoordsPrev.lat.toFixed(5)}, ${pickedCoordsPrev.lng.toFixed(5)}`;
+      });
+    };
+
+    window.cerrarModalPreventivoIntervencion = () => document.getElementById('overlay-preventivo-intervencion').style.display = 'none';
+
+    window.guardarPreventivoIntervencion = async () => {
+      const desc = document.getElementById('prev-int-desc').value.trim();
+      if (!desc) return alert('La descripción es obligatoria');
+
+      const prio = document.getElementById('prev-int-prio').value;
+      const dir = document.getElementById('prev-int-dir').value;
+      const recs = Array.from(document.querySelectorAll('input[name="prev-int-recurso-v"]:checked')).map(i => i.value);
+
+      try {
+        await addDoc(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones'), {
+          descripcion: desc,
+          prioridad: prio,
+          direccion: dir,
+          recursosAsignados: recs,
+          coords: pickedCoordsPrev,
+          timestamp: serverTimestamp()
+        });
+        cerrarModalPreventivoIntervencion();
+        mostrarToast('Intervención registrada.');
+      } catch (e) { alert('Error: ' + e.message); }
+    };
+
+    window.handleSearchPreventivos = (q) => {
+      document.getElementById('prev-search-clear').style.display = q ? 'block' : 'none';
+      const cards = document.querySelectorAll('#preventivos-list .op-card');
+      cards.forEach(c => {
+        const txt = c.textContent.toLowerCase();
+        c.style.display = txt.includes(q.toLowerCase()) ? 'block' : 'none';
+      });
+    };
+
+    window.clearSearchPreventivos = () => {
+      const i = document.getElementById('prev-search');
+      i.value = '';
+      window.handleSearchPreventivos('');
+      i.focus();
+    };
+
 
     // Sobreescribir el renderDetalle y cerrarDetalle para manejar el botón de mapa en mobile
     const originalAbrirDetalle = window.abrirDetalle;
@@ -9259,7 +9683,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.6.4.2
+            Versión V.6.5.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
@@ -9556,169 +9980,8 @@ ${dataContext}
       }
     }, 1000);
   </script>
-  <script>
-    // ==========================================
-    // MÓDULO DE PREVENTIVOS - LÓGICA
-    // ==========================================
-    let mapPreventivos = null;
-    let markersPreventivos = [];
-
-    // Estado actual de navegación en Preventivos
-    let currentPreventivoId = null;
-    let currentPreventivoDiaId = null;
-
-    // Inicialización del Mapa de Preventivos
-    function initMapPreventivos() {
-      if (mapPreventivos) return; // Ya inicializado
-
-      const mapContainer = document.getElementById('preventivos-map');
-      if (!mapContainer) return;
-
-      mapPreventivos = new google.maps.Map(mapContainer, {
-        center: { lat: 40.4168, lng: -3.7038 }, // Centro por defecto (España)
-        zoom: 6,
-        mapTypeId: 'roadmap',
-        mapTypeControl: false,
-        streetViewControl: false,
-        fullscreenControl: true,
-        styles: [
-          { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }
-        ]
-      });
-
-      // TODO: Añadir capas de tráfico y vehículos si es necesario
-    }
-
-    // Funciones de refresco de UI de Preventivos (Mapas y Listas)
-    function refreshPreventivosMap() {
-      if (mapPreventivos) {
-        google.maps.event.trigger(mapPreventivos, 'resize');
-      }
-    }
-
-    // MODAL PREVENTIVOS MAIN
-    function abrirModalPreventivoMain() {
-      document.getElementById('prev-main-nombre').value = '';
-      if (window.checkAutonomicScope) window.checkAutonomicScope('Andalucía', 'prev-main-jefe');
-      document.getElementById('overlay-preventivo-main').style.display = 'flex';
-      setTimeout(() => document.getElementById('prev-main-nombre').focus(), 100);
-    }
-    function cerrarModalPreventivoMain() { document.getElementById('overlay-preventivo-main').style.display = 'none'; }
-    function clickOutsidePrevMain(e) { if (e.target.id === 'overlay-preventivo-main') cerrarModalPreventivoMain(); }
-    function calcularDiasPreventivo() {
-      const f1 = document.getElementById('prev-main-fecha-ini').value;
-      const f2 = document.getElementById('prev-main-fecha-fin').value;
-      const fDias = document.getElementById('prev-main-dias');
-
-      if (f1) {
-        if (!f2) {
-          fDias.value = 1;
-        } else {
-          const d1 = new Date(f1);
-          const d2 = new Date(f2);
-          const mSegs = d2.getTime() - d1.getTime();
-          if (mSegs < 0) {
-            fDias.value = '';
-            return;
-          }
-          fDias.value = Math.floor(mSegs / (1000 * 3600 * 24)) + 1;
-        }
-      } else {
-        fDias.value = '';
-      }
-    }
-    function guardarPreventivoMain() {
-      const nombre = document.getElementById('prev-main-nombre').value.trim();
-      if (!nombre) return alert('El nombre es obligatorio');
-      // Lógica de guardado Firebase (Pendiente)
-      console.log('Guardar Preventivo:', nombre);
-      cerrarModalPreventivoMain();
-    }
-
-    // MODAL PREVENTIVO DÍA
-    function abrirModalPreventivoDia() {
-      if (!currentPreventivoId) return alert('Selecciona un preventivo primero');
-      document.getElementById('prev-dia-nombre').value = '';
-      document.getElementById('prev-dia-fecha').value = '';
-      // TODO: Cargar y renderizar checkboxes de vehículos disponibles
-      document.getElementById('overlay-preventivo-dia').style.display = 'flex';
-      setTimeout(() => document.getElementById('prev-dia-nombre').focus(), 100);
-    }
-    function cerrarModalPreventivoDia() { document.getElementById('overlay-preventivo-dia').style.display = 'none'; }
-    function clickOutsidePrevDia(e) { if (e.target.id === 'overlay-preventivo-dia') cerrarModalPreventivoDia(); }
-    function guardarPreventivoDia() {
-      const nombre = document.getElementById('prev-dia-nombre').value.trim();
-      if (!nombre) return alert('El nombre es obligatorio');
-      // Lógica de guardado Firebase (Pendiente)
-      console.log('Guardar Día:', nombre);
-      cerrarModalPreventivoDia();
-    }
-
-    // MODAL PREVENTIVO INTERVENCIÓN
-    function abrirModalPreventivoIntervencion() {
-      if (!currentPreventivoDiaId) return alert('Selecciona un día del preventivo primero');
-      document.getElementById('prev-int-desc').value = '';
-      document.getElementById('prev-int-dir').value = '';
-      document.getElementById('prev-int-prio').value = 'verde';
-      document.getElementById('prev-int-coords').innerText = 'Sin coordenadas fijadas.';
-      // TODO: Limpiar coordenadas temporales y cargar checkboxes de recursos del día
-      document.getElementById('overlay-preventivo-intervencion').style.display = 'flex';
-      setTimeout(() => document.getElementById('prev-int-desc').focus(), 100);
-    }
-    function cerrarModalPreventivoIntervencion() { document.getElementById('overlay-preventivo-intervencion').style.display = 'none'; }
-    function clickOutsidePrevInt(e) { if (e.target.id === 'overlay-preventivo-intervencion') cerrarModalPreventivoIntervencion(); }
-    function guardarPreventivoIntervencion() {
-      const desc = document.getElementById('prev-int-desc').value.trim();
-      if (!desc) return alert('La descripción es obligatoria');
-      // Lógica de guardado Firebase (Pendiente)
-      console.log('Guardar Intervención:', desc);
-      cerrarModalPreventivoIntervencion();
-    }
-    function prepararPinIntervencion() {
-      alert('Funcionalidad de Pin de Intervencion (Pendiente)');
-    }
-
-    // Navegación Preventivos UI (Listados y Breadcrumbs)
-    function backToPreventivosList() {
-      document.getElementById('preventivos-list').style.display = 'block';
-      document.getElementById('preventivos-dias-list').style.display = 'none';
-      document.getElementById('preventivos-intervenciones-list').style.display = 'none';
-      document.getElementById('prev-breadcrumb').style.display = 'none';
-      document.getElementById('btn-nuevo-prev').style.display = 'block';
-      currentPreventivoId = null;
-      currentPreventivoDiaId = null;
-    }
-
-    function backToPreventivoDias() {
-      document.getElementById('preventivos-list').style.display = 'none';
-      document.getElementById('preventivos-dias-list').style.display = 'block';
-      document.getElementById('preventivos-intervenciones-list').style.display = 'none';
-      document.getElementById('prev-breadcrumb-sep').style.display = 'none';
-      document.getElementById('btn-nuevo-prev').style.display = 'none';
-      currentPreventivoDiaId = null;
-    }
-
-    // Capas Map Preventivos
-    function togglePreventivosTraffic(show) {
-      console.log('Toggle Preventivos Traffic:', show);
-    }
-    function togglePreventivosVehicles(show) {
-      console.log('Toggle Preventivos Vehicles:', show);
-    }
-
-    // Búsqueda Preventivos
-    function handleSearchPreventivos(q) {
-      const clr = document.getElementById('prev-search-clear');
-      clr.style.display = q ? 'block' : 'none';
-      // Lógica de filtrado visual pendiente
-    }
-    function clearSearchPreventivos() {
-      const el = document.getElementById('prev-search');
-      el.value = '';
-      handleSearchPreventivos('');
-      el.focus();
-    }
-  </script>
+  <script src="app.js"></script>
+</body>
 </body>
 
 </html>
