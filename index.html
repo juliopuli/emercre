@@ -5348,26 +5348,41 @@ ${dataContext}
           }
         });
 
+        const getVehiclePriority = (type) => {
+          if (type === 'Ambulancia') return 1;
+          if (type?.includes('Terreno')) return 2;
+          if (type?.includes('transporte') || type === 'Van') return 3;
+          if (type === 'Camión') return 4;
+          return 5;
+        };
+
         recList.innerHTML = `
           <div style="display:flex; flex-wrap:wrap; gap:6px;">
-            ${d.recursos.filter(rvId => !occupiedResources.has(rvId) || (iEdit?.recursosAsignados || []).includes(rvId)).map(rvId => {
-          const v = window.globalVehiculos && window.globalVehiculos[rvId];
-          const isSelected = (iEdit?.recursosAsignados || []).includes(rvId);
+            ${d.recursos
+            .filter(rvId => !occupiedResources.has(rvId) || (iEdit?.recursosAsignados || []).includes(rvId))
+            .sort((a, b) => {
+              const va = window.globalVehiculos && window.globalVehiculos[a];
+              const vb = window.globalVehiculos && window.globalVehiculos[b];
+              return getVehiclePriority(va?.tipo) - getVehiclePriority(vb?.tipo);
+            })
+            .map(rvId => {
+              const v = window.globalVehiculos && window.globalVehiculos[rvId];
+              const isSelected = (iEdit?.recursosAsignados || []).includes(rvId);
 
-          let iconUrl = 'assets/icons/van.png';
-          if (v?.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
-          else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
-          else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/offroad.png';
+              let iconUrl = 'assets/icons/van.png';
+              if (v?.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
+              else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
+              else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/offroad.png';
 
-          return `
-                <div class="prev-int-res-card" data-id="${rvId}" data-selected="${isSelected}"
-                     style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:${isSelected ? 'var(--accent)' : 'var(--bg-1)'}; color:${isSelected ? '#fff' : 'var(--text-1)'}; border:1px solid ${isSelected ? 'var(--accent)' : 'var(--border-mid)'}; border-radius:6px; cursor:pointer; transition:all 0.2s;"
-                     onclick="this.dataset.selected=(this.dataset.selected==='true'?'false':'true'); this.style.background=(this.dataset.selected==='true'?'var(--accent)':'var(--bg-1)'); this.style.color=(this.dataset.selected==='true'?'#fff':'var(--text-1)'); this.style.borderColor=(this.dataset.selected==='true'?'var(--accent)':'var(--border-mid)');">
-                  <img src="${iconUrl}" style="width:14px; height:14px; filter:${isSelected ? 'brightness(0) invert(1)' : 'none'};">
-                  <span style="font-size:12px; font-weight:600;">${v?.indicativo || rvId}</span>
-                </div>
-              `;
-        }).join('')}
+              return `
+                  <div class="prev-int-res-card" data-id="${rvId}" data-selected="${isSelected}"
+                       style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:${isSelected ? 'var(--accent)' : 'var(--bg-1)'}; color:${isSelected ? '#fff' : 'var(--text-1)'}; border:1px solid ${isSelected ? 'var(--accent)' : 'var(--border-mid)'}; border-radius:6px; cursor:pointer; transition:all 0.2s;"
+                       onclick="this.dataset.selected=(this.dataset.selected==='true'?'false':'true'); this.style.background=(this.dataset.selected==='true'?'var(--accent)':'var(--bg-1)'); this.style.color=(this.dataset.selected==='true'?'#fff':'var(--text-1)'); this.style.borderColor=(this.dataset.selected==='true'?'var(--accent)':'var(--border-mid)');">
+                    <img src="${iconUrl}" style="width:14px; height:14px; filter:${isSelected ? 'brightness(0) invert(1)' : 'none'};">
+                    <span style="font-size:12px; font-weight:600;">${v?.indicativo || rvId}</span>
+                  </div>
+                `;
+            }).join('')}
           </div>
         `;
       }
