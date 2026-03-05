@@ -8504,12 +8504,96 @@ ${dataContext}
     </div>
 
     <!-- PREVENTIVOS -->
-    <div id="section-preventivos"
-      style="display:none; flex:1; flex-direction:column; align-items:center; justify-content:center; padding: 20px;">
-      <div style="font-size: 48px; opacity: 0.5; margin-bottom: 16px;">⚕️</div>
-      <h2 style="color: var(--text-2);">Módulo de Preventivos</h2>
-      <p style="color: var(--text-3); text-align: center; max-width: 400px;">Esta sección está en construcción. Aquí se
-        gestionarán próximamente los dispositivos de riesgo previsible.</p>
+    <div id="section-preventivos" style="display:none;">
+      <div class="panel-left">
+        <div class="panel-left-head">
+          <div class="search-box">
+            <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input type="text" id="prev-search" class="search-input" placeholder="Buscar preventivos..."
+              oninput="handleSearchPreventivos(this.value)">
+            <button id="prev-search-clear" class="search-clear" onclick="clearSearchPreventivos()"
+              style="display:none;">&times;</button>
+          </div>
+          <button id="btn-nuevo-prev" class="btn-nueva" onclick="abrirModalPreventivoMain()"
+            style="margin-top: 10px; width: 100%;">+ Nuevo Preventivo</button>
+        </div>
+
+        <div id="prev-breadcrumb"
+          style="display:none; padding: 10px 16px; background: var(--bg-2); border-bottom: 1px solid var(--border-mid); font-size: 13px; font-weight: 500;">
+          <a href="#" onclick="backToPreventivosList()" style="color: var(--accent); text-decoration: none;">🗓️
+            Preventivos</a>
+          <span id="prev-breadcrumb-sep" style="display:none;">/ <a href="#" id="prev-breadcrumb-dia"
+              onclick="backToPreventivoDias()" style="color: var(--accent); text-decoration: none;">Semana
+              Santa</a></span>
+        </div>
+
+        <!-- Listado de Preventivos Principales -->
+        <div class="ops-list" id="preventivos-list">
+          <div class="empty-msg show" id="empty-msg-prev">
+            <div style="font-size:28px;opacity:0.4">🗓️</div>
+            <span>Sin preventivos registrados.</span>
+          </div>
+        </div>
+
+        <!-- Listado de Días (Subpreventivos) de un Preventivo -->
+        <div class="ops-list" id="preventivos-dias-list" style="display: none;">
+          <div
+            style="padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+            <div style="font-weight: 600; color: var(--text-2);">Días del evento</div>
+            <button class="btn-nueva" style="padding: 4px 10px; font-size: 12px;" onclick="abrirModalPreventivoDia()">+
+              Añadir Día</button>
+          </div>
+          <div id="prev-dias-container"></div>
+        </div>
+
+        <!-- Listado de Intervenciones de un Día -->
+        <div class="ops-list" id="preventivos-intervenciones-list" style="display: none;">
+          <div style="padding: 12px 16px; background: var(--bg-2); border-bottom: 1px solid var(--border);">
+            <div style="font-weight: 600; color: var(--text-2); margin-bottom: 8px;">Recursos del Día:</div>
+            <div id="prev-recursos-dia-container" style="display: flex; flex-wrap: wrap; gap: 4px;"></div>
+          </div>
+          <div
+            style="padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
+            <div style="font-weight: 600; color: var(--text-2);">Intervenciones</div>
+            <button class="btn-nueva" style="padding: 4px 10px; font-size: 12px;"
+              onclick="abrirModalPreventivoIntervencion()">+ Intervención</button>
+          </div>
+          <div id="prev-intervenciones-container"></div>
+          <div class="empty-msg" id="empty-msg-prev-int" style="display:none;">
+            <div style="font-size:28px;opacity:0.4">📋</div>
+            <span>Sin intervenciones en este día.</span>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="panel-right">
+        <!-- Mapa Principal de Preventivos -->
+        <div id="preventivos-map-control" class="map-controls">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-weight:600; margin-bottom:12px; font-size:14px; color:var(--text-1);">🗺️ Capas del Mapa -
+              Preventivos</div>
+            <button id="btn-prev-refresh-map" class="btn-icon" title="Refrescar vista"
+              onclick="refreshPreventivosMap()">🔄</button>
+          </div>
+          <div class="field" style="margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="prev-layer-traffic" onchange="togglePreventivosTraffic(this.checked)">
+            <label for="prev-layer-traffic">Estado del Tráfico en directo</label>
+          </div>
+          <div class="field" style="margin-bottom:8px; display:flex; align-items:center; gap:8px;">
+            <input type="checkbox" id="prev-layer-vehicles" onchange="togglePreventivosVehicles(this.checked)">
+            <label for="prev-layer-vehicles">GeoLocalización de vehículos (Oysta)</label>
+          </div>
+        </div>
+
+        <div class="pick-banner" id="prev-pick-banner">📍 Haz clic en el mapa para fijar la ubicación de la intervención
+        </div>
+        <div id="preventivos-map"></div>
+      </div>
     </div>
 
     <!-- CHAT SECTION -->
@@ -8909,6 +8993,131 @@ ${dataContext}
     </div>
   </div>
 
+  <!-- MODAL PREVENTIVO MAIN -->
+  <div class="overlay" id="overlay-preventivo-main" style="display:none;" onclick="clickOutsidePrevMain(event)">
+    <div class="modal-dp">
+      <div class="modal-head">
+        <div class="modal-title">Alta Preventivo</div>
+        <button class="btn-close-dp" onclick="cerrarModalPreventivoMain()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <div class="field-lbl">Nombre del preventivo *</div>
+          <input class="f-input" id="prev-main-nombre" placeholder="Ej: Semana Santa 2026" autocomplete="off">
+        </div>
+        <div class="field-row">
+          <div class="field" style="flex:1;">
+            <div class="field-lbl">Región / Provincia</div>
+            <select class="f-input f-select" id="prev-main-provincia" style="width:100%"
+              onchange="checkAutonomicScope(this.value, 'prev-main-jefe')">
+              <option value="Andalucía">Andalucía</option>
+              <option value="Almería">Almería</option>
+              <option value="Cádiz">Cádiz</option>
+              <option value="Córdoba">Córdoba</option>
+              <option value="Granada">Granada</option>
+              <option value="Huelva">Huelva</option>
+              <option value="Jaén">Jaén</option>
+              <option value="Málaga">Málaga</option>
+              <option value="Sevilla">Sevilla</option>
+            </select>
+          </div>
+          <div class="field" style="flex:1;">
+            <div class="field-lbl">Jefe de Dispositivo</div>
+            <select class="f-input f-select" id="prev-main-jefe" style="width:100%"></select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel" onclick="cerrarModalPreventivoMain()">Cancelar</button>
+        <button class="btn-reg" onclick="guardarPreventivoMain()">Crear Preventivo</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL PREVENTIVO DIA -->
+  <div class="overlay" id="overlay-preventivo-dia" style="display:none;" onclick="clickOutsidePrevDia(event)">
+    <div class="modal-dp">
+      <div class="modal-head">
+        <div class="modal-title">Añadir Día / Subpreventivo</div>
+        <button class="btn-close-dp" onclick="cerrarModalPreventivoDia()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <div class="field-lbl">Nombre del Subpreventivo *</div>
+          <input class="f-input" id="prev-dia-nombre" placeholder="Ej: Lunes Santo" autocomplete="off">
+        </div>
+        <div class="field-row">
+          <div class="field" style="flex:1;">
+            <div class="field-lbl">Fecha del evento</div>
+            <input type="date" class="f-input" id="prev-dia-fecha" style="width:100%">
+          </div>
+        </div>
+        <div class="field">
+          <div class="field-lbl" style="margin-bottom: 8px;">Asignar Recursos Disponibles (Vehículos) *</div>
+          <div id="prev-dia-recursos-list"
+            style="max-height: 150px; overflow-y: auto; border: 1px solid var(--border-mid); border-radius: 6px; padding: 8px; background: var(--bg-1);">
+            <!-- Checkboxes generados dinámicamente -->
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel" onclick="cerrarModalPreventivoDia()">Cancelar</button>
+        <button class="btn-reg" onclick="guardarPreventivoDia()">Guardar Día</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL PREVENTIVO INTERVENCION -->
+  <div class="overlay" id="overlay-preventivo-intervencion" style="display:none;" onclick="clickOutsidePrevInt(event)">
+    <div class="modal-dp">
+      <div class="modal-head">
+        <div class="modal-title">Nueva Intervención</div>
+        <button class="btn-close-dp" onclick="cerrarModalPreventivoIntervencion()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <div class="field-lbl">Tipo / Descripción *</div>
+          <input class="f-input" id="prev-int-desc" placeholder="Ej: Persona desvanecida" autocomplete="off">
+        </div>
+        <div class="field">
+          <div class="field-lbl">Dirección aproximada</div>
+          <input class="f-input" id="prev-int-dir" placeholder="Calle/Zona..." autocomplete="off">
+        </div>
+        <div class="field">
+          <div class="field-lbl">Prioridad</div>
+          <select class="f-input f-select" id="prev-int-prio" style="width:100%">
+            <option value="verde">🟢 Leve (Verde)</option>
+            <option value="amarillo">🟡 Moderada (Amarillo)</option>
+            <option value="rojo">🔴 Grave (Rojo)</option>
+            <option value="negro">⚫ Crítica (Negro)</option>
+          </select>
+        </div>
+
+        <div class="field" style="margin-top: 12px; border-top: 1px dashed var(--border-mid); padding-top: 12px;">
+          <div class="field-lbl" style="display:flex; justify-content:space-between; align-items:center;">
+            Ubicación en Mapa
+            <button class="btn-nueva" style="padding:4px 8px; font-size:11px;" id="btn-prev-pin">Poner pin</button>
+          </div>
+          <div style="font-size:12px; color:var(--text-3); margin-top:4px;" id="prev-int-coords">Sin coordenadas
+            fijadas.</div>
+        </div>
+
+        <div class="field" style="margin-top: 12px; border-top: 1px dashed var(--border-mid); padding-top: 12px;">
+          <div class="field-lbl" style="margin-bottom: 8px;">Asignar Recursos a la intervención</div>
+          <div id="prev-int-recursos-list"
+            style="max-height: 120px; overflow-y: auto; border: 1px solid var(--border-mid); border-radius: 6px; padding: 8px; background: var(--bg-1);">
+            <!-- Mostrará SOLO los recursos del subpreventivo seleccionados mediante checkboxes -->
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel" onclick="cerrarModalPreventivoIntervencion()">Cancelar</button>
+        <button class="btn-reg" onclick="guardarPreventivoIntervencion()">Registrar Intervención</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL USUARIO -->
   <div class="overlay" id="overlay-user">
     <div class="modal" style="width:420px;">
@@ -9033,7 +9242,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.6.3.2
+            Versión V.6.4.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
@@ -9329,6 +9538,147 @@ ${dataContext}
         elDate.textContent = `${capitalizedWeekday}, ${day}/${month}/${year}`;
       }
     }, 1000);
+  </script>
+  <script>
+    // ==========================================
+    // MÓDULO DE PREVENTIVOS - LÓGICA
+    // ==========================================
+    let mapPreventivos = null;
+    let markersPreventivos = [];
+
+    // Estado actual de navegación en Preventivos
+    let currentPreventivoId = null;
+    let currentPreventivoDiaId = null;
+
+    // Inicialización del Mapa de Preventivos
+    function initMapPreventivos() {
+      if (mapPreventivos) return; // Ya inicializado
+
+      const mapContainer = document.getElementById('preventivos-map');
+      if (!mapContainer) return;
+
+      mapPreventivos = new google.maps.Map(mapContainer, {
+        center: { lat: 40.4168, lng: -3.7038 }, // Centro por defecto (España)
+        zoom: 6,
+        mapTypeId: 'roadmap',
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: true,
+        styles: [
+          { featureType: "poi", elementType: "labels", stylers: [{ visibility: "off" }] }
+        ]
+      });
+
+      // TODO: Añadir capas de tráfico y vehículos si es necesario
+    }
+
+    // Funciones de refresco de UI de Preventivos (Mapas y Listas)
+    function refreshPreventivosMap() {
+      if (mapPreventivos) {
+        google.maps.event.trigger(mapPreventivos, 'resize');
+      }
+    }
+
+    // MODAL PREVENTIVOS MAIN
+    function abrirModalPreventivoMain() {
+      document.getElementById('prev-main-nombre').value = '';
+      if (window.checkAutonomicScope) window.checkAutonomicScope('Andalucía', 'prev-main-jefe');
+      document.getElementById('overlay-preventivo-main').style.display = 'flex';
+      setTimeout(() => document.getElementById('prev-main-nombre').focus(), 100);
+    }
+    function cerrarModalPreventivoMain() { document.getElementById('overlay-preventivo-main').style.display = 'none'; }
+    function clickOutsidePrevMain(e) { if (e.target.id === 'overlay-preventivo-main') cerrarModalPreventivoMain(); }
+    function guardarPreventivoMain() {
+      const nombre = document.getElementById('prev-main-nombre').value.trim();
+      if (!nombre) return alert('El nombre es obligatorio');
+      // Lógica de guardado Firebase (Pendiente)
+      console.log('Guardar Preventivo:', nombre);
+      cerrarModalPreventivoMain();
+    }
+
+    // MODAL PREVENTIVO DÍA
+    function abrirModalPreventivoDia() {
+      if (!currentPreventivoId) return alert('Selecciona un preventivo primero');
+      document.getElementById('prev-dia-nombre').value = '';
+      document.getElementById('prev-dia-fecha').value = '';
+      // TODO: Cargar y renderizar checkboxes de vehículos disponibles
+      document.getElementById('overlay-preventivo-dia').style.display = 'flex';
+      setTimeout(() => document.getElementById('prev-dia-nombre').focus(), 100);
+    }
+    function cerrarModalPreventivoDia() { document.getElementById('overlay-preventivo-dia').style.display = 'none'; }
+    function clickOutsidePrevDia(e) { if (e.target.id === 'overlay-preventivo-dia') cerrarModalPreventivoDia(); }
+    function guardarPreventivoDia() {
+      const nombre = document.getElementById('prev-dia-nombre').value.trim();
+      if (!nombre) return alert('El nombre es obligatorio');
+      // Lógica de guardado Firebase (Pendiente)
+      console.log('Guardar Día:', nombre);
+      cerrarModalPreventivoDia();
+    }
+
+    // MODAL PREVENTIVO INTERVENCIÓN
+    function abrirModalPreventivoIntervencion() {
+      if (!currentPreventivoDiaId) return alert('Selecciona un día del preventivo primero');
+      document.getElementById('prev-int-desc').value = '';
+      document.getElementById('prev-int-dir').value = '';
+      document.getElementById('prev-int-prio').value = 'verde';
+      document.getElementById('prev-int-coords').innerText = 'Sin coordenadas fijadas.';
+      // TODO: Limpiar coordenadas temporales y cargar checkboxes de recursos del día
+      document.getElementById('overlay-preventivo-intervencion').style.display = 'flex';
+      setTimeout(() => document.getElementById('prev-int-desc').focus(), 100);
+    }
+    function cerrarModalPreventivoIntervencion() { document.getElementById('overlay-preventivo-intervencion').style.display = 'none'; }
+    function clickOutsidePrevInt(e) { if (e.target.id === 'overlay-preventivo-intervencion') cerrarModalPreventivoIntervencion(); }
+    function guardarPreventivoIntervencion() {
+      const desc = document.getElementById('prev-int-desc').value.trim();
+      if (!desc) return alert('La descripción es obligatoria');
+      // Lógica de guardado Firebase (Pendiente)
+      console.log('Guardar Intervención:', desc);
+      cerrarModalPreventivoIntervencion();
+    }
+    function prepararPinIntervencion() {
+      alert('Funcionalidad de Pin de Intervencion (Pendiente)');
+    }
+
+    // Navegación Preventivos UI (Listados y Breadcrumbs)
+    function backToPreventivosList() {
+      document.getElementById('preventivos-list').style.display = 'block';
+      document.getElementById('preventivos-dias-list').style.display = 'none';
+      document.getElementById('preventivos-intervenciones-list').style.display = 'none';
+      document.getElementById('prev-breadcrumb').style.display = 'none';
+      document.getElementById('btn-nuevo-prev').style.display = 'block';
+      currentPreventivoId = null;
+      currentPreventivoDiaId = null;
+    }
+
+    function backToPreventivoDias() {
+      document.getElementById('preventivos-list').style.display = 'none';
+      document.getElementById('preventivos-dias-list').style.display = 'block';
+      document.getElementById('preventivos-intervenciones-list').style.display = 'none';
+      document.getElementById('prev-breadcrumb-sep').style.display = 'none';
+      document.getElementById('btn-nuevo-prev').style.display = 'none';
+      currentPreventivoDiaId = null;
+    }
+
+    // Capas Map Preventivos
+    function togglePreventivosTraffic(show) {
+      console.log('Toggle Preventivos Traffic:', show);
+    }
+    function togglePreventivosVehicles(show) {
+      console.log('Toggle Preventivos Vehicles:', show);
+    }
+
+    // Búsqueda Preventivos
+    function handleSearchPreventivos(q) {
+      const clr = document.getElementById('prev-search-clear');
+      clr.style.display = q ? 'block' : 'none';
+      // Lógica de filtrado visual pendiente
+    }
+    function clearSearchPreventivos() {
+      const el = document.getElementById('prev-search');
+      el.value = '';
+      handleSearchPreventivos('');
+      el.focus();
+    }
   </script>
 </body>
 
