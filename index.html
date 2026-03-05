@@ -382,7 +382,7 @@
         mostrarToast('Capa de ferrocarril activada');
       }
     };
-    console.log("EmerCRE V.6.0.2 Loaded");
+    console.log("EmerCRE V.6.0.3 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -4686,6 +4686,15 @@ ${dataContext}
                 <span class="nivel-pill" style="background:var(--accent); color:#fff; border-radius:10px; padding:2px 8px;">${p.dias || 1} días</span>
               </div>
               <div style="font-size:10px; color:var(--text-3); margin-top:4px;">📅 ${fechaRange}</div>
+              
+              <!-- V.6.0.3: Acordeón de días -->
+              <div id="prev-dias-wrap-${id}" style="display:none; margin-top: 12px; border-top: 1px solid var(--border-mid); padding-top: 12px; cursor: default;" onclick="event.stopPropagation()">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+                  <span style="font-size:11px; font-weight:600; color:var(--text-2);">Días del evento:</span>
+                  <button class="btn-nueva" style="padding: 2px 8px; font-size: 10px;" onclick="window.abrirModalPreventivoDiaDesdeAcordeon('${id}')">+ Añadir Día</button>
+                </div>
+                <div id="prev-dias-container-${id}" style="display:flex; flex-direction:column; gap:6px;"></div>
+              </div>
             </div>
           `;
         }).join('');
@@ -4748,29 +4757,51 @@ ${dataContext}
       } catch (e) { alert('Error: ' + e.message); }
     };
 
+    window.abrirModalPreventivoDiaDesdeAcordeon = (id) => {
+      currentPreventivoId = id;
+      window.abrirModalPreventivoDia();
+    };
+
     window.selectPreventivo = (id) => {
+      const wrap = document.getElementById(`prev - dias - wrap - ${id} `);
+      const isCurrentlyOpen = wrap && wrap.style.display === 'block';
+
+      // Cerrar todos los acordeones primero
+      document.querySelectorAll('[id^="prev-dias-wrap-"]').forEach(el => el.style.display = 'none');
+
+      // Restablecer vista derecha y estados
+      document.getElementById('preventivos-intervenciones-list').style.display = 'none';
+      if (typeof clearPreventivoMarkers === 'function') clearPreventivoMarkers();
+
+      if (isCurrentlyOpen) {
+        currentPreventivoId = null;
+        currentPreventivoDiaId = null;
+        document.getElementById('prev-breadcrumb').style.display = 'none';
+        document.querySelectorAll('#preventivos-list .op-card').forEach(c => c.style.border = '');
+        return;
+      }
+
       currentPreventivoId = id;
       const p = preventivosCache[id];
-      document.getElementById('preventivos-list').style.display = 'none';
-      document.getElementById('btn-nuevo-prev').style.display = 'none';
+      if (wrap) wrap.style.display = 'block';
+
+      // Resaltar tarjeta actual
+      document.querySelectorAll('#preventivos-list .op-card').forEach(c => c.style.border = '');
+      if (wrap) wrap.closest('.op-card').style.border = '1px solid var(--accent)';
 
       const bread = document.getElementById('prev-breadcrumb');
       bread.style.display = 'block';
-      document.getElementById('prev-breadcrumb-sep').style.display = 'none';
-
-      const diasList = document.getElementById('preventivos-dias-list');
-      diasList.style.display = 'block';
+      bread.innerHTML = `<span style="color:var(--text-3); cursor:pointer;" onclick="backToPreventivosList()">🗓️ Preventivo:</span> <span style="font-weight:700;">${p.nombre}</span>`;
 
       cargarSubpreventivos(id);
 
-      // Precargar vehículos de la provincia en cache global para usar en iconos y detalles
+      // Precargar vehículos de la provincia en cache
       window.globalVehiculos = window.globalVehiculos || {};
       const qV = query(collection(db, 'vehiculos'), where('provincia', '==', p.provincia || 'Andalucía'));
       getDocs(qV).then(snapV => {
         snapV.docs.forEach(dv => {
           window.globalVehiculos[dv.id] = dv.data();
         });
-        // Si ya hay un subpreventivo seleccionado, re-renderizar para mostrar iconos
         if (typeof currentPreventivoDiaId !== 'undefined' && currentPreventivoDiaId) {
           const recCont = document.getElementById('prev-recursos-dia-container');
           if (recCont) selectSubpreventivo(currentPreventivoDiaId);
@@ -4784,43 +4815,41 @@ ${dataContext}
       if (unsubSubpreventivos) unsubSubpreventivos();
       if (unsubIntervenciones) unsubIntervenciones();
 
-      document.getElementById('preventivos-list').style.display = 'block';
-      document.getElementById('btn-nuevo-prev').style.display = 'block';
-      document.getElementById('preventivos-dias-list').style.display = 'none';
+      document.querySelectorAll('[id^="prev-dias-wrap-"]').forEach(el => el.style.display = 'none');
+      document.querySelectorAll('#preventivos-list .op-card').forEach(c => c.style.border = '');
       document.getElementById('preventivos-intervenciones-list').style.display = 'none';
       document.getElementById('prev-breadcrumb').style.display = 'none';
+      if (typeof clearPreventivoMarkers === 'function') clearPreventivoMarkers();
     };
 
     function cargarSubpreventivos(pId) {
       if (unsubSubpreventivos) unsubSubpreventivos();
       const q = query(collection(db, 'preventivos', pId, 'subpreventivos'), orderBy('fecha', 'asc'));
       unsubSubpreventivos = onSnapshot(q, snap => {
-        const cont = document.getElementById('prev-dias-container');
+        const cont = document.getElementById(`prev-dias-container-${pId}`);
         if (!cont) return;
         if (snap.empty) {
-          cont.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-4);">No hay días configurados aún.</div>';
+          cont.innerHTML = '<div style="padding:10px; text-align:center; color:var(--text-4); font-size:11px;">Aún no se han añadido días.</div>';
           return;
         }
         cont.innerHTML = snap.docs.map(doc => {
           const d = doc.data();
           const id = doc.id;
           subpreventivosCache[id] = d;
+          const isSelected = (id === currentPreventivoDiaId);
           return `
-            <div class="op-card" onclick="selectSubpreventivo('${id}')">
-              <div class="card-top">
+            <div class="op-card" style="padding:8px 12px; margin-bottom:0; box-shadow:none; border: 1px solid ${isSelected ? 'var(--accent)' : 'var(--border-mid)'}; background: ${isSelected ? 'var(--accent)10' : 'var(--bg-2)'}; cursor:pointer;" onclick="event.stopPropagation(); selectSubpreventivo('${id}')">
+              <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div>
-                  <div class="card-name">${d.nombre}</div>
-                  <div class="card-id" style="margin-top:2px;">📅 ${d.fecha}</div>
+                  <div style="font-size:12px; font-weight:600; color:var(--text-1);">${d.nombre}</div>
+                  <div style="font-size:10px; color:var(--text-3); margin-top:2px;">📅 ${d.fecha}</div>
                 </div>
-                <span class="card-type-tag" style="color:var(--accent); border-color:var(--accent)30; background:var(--accent)12">
-                   ☀️ Día
-                </span>
-              </div>
-              <div class="card-meta">
-                <span class="card-loc">🚗 ${d.recursos?.length || 0} vehículos</span>
+                <div style="font-size:11px; color:var(--accent); background:var(--accent)12; padding:2px 6px; border-radius:10px; font-weight:600;">
+                  🚗 ${d.recursos?.length || 0}
+                </div>
               </div>
             </div>
-          `;
+            `;
         }).join('');
       });
     }
@@ -4889,11 +4918,13 @@ ${dataContext}
     window.selectSubpreventivo = (id) => {
       currentPreventivoDiaId = id;
       const d = subpreventivosCache[id];
-      document.getElementById('preventivos-dias-list').style.display = 'none';
 
-      const breadSep = document.getElementById('prev-breadcrumb-sep');
-      breadSep.style.display = 'inline';
-      document.getElementById('prev-breadcrumb-dia').textContent = d.nombre;
+      if (currentPreventivoId) cargarSubpreventivos(currentPreventivoId);
+
+      const bread = document.getElementById('prev-breadcrumb');
+      if (preventivosCache[currentPreventivoId]) {
+        bread.innerHTML = `<span style="color:var(--text-3); cursor:pointer;" onclick="backToPreventivosList()">🗓️ ${preventivosCache[currentPreventivoId].nombre} /</span> <span style="font-weight:700;">${d.nombre}</span>`;
+      }
 
       document.getElementById('preventivos-intervenciones-list').style.display = 'block';
 
@@ -4909,9 +4940,9 @@ ${dataContext}
           else if (v.tipo === 'Vehículo transporte personal' || v.tipo === 'Vehículo de transporte mixto') iconUrl = 'assets/icons/van.png';
 
           return `<span class="badge-tipo" style="background:var(--bg-3); color:var(--text-1); font-size:11px; display:inline-flex; align-items:center; gap:4px; margin-right:4px; padding:2px 6px; border-radius:4px;">
-            <img src="${iconUrl}" style="width:14px; height:14px;">
-            ${v.indicativo || 'SIN IND'}
-          </span>`;
+                  <img src="${iconUrl}" style="width:14px; height:14px;">
+                    ${v.indicativo || 'SIN IND'}
+                </span>`;
         }
         return `<span class="badge-tipo" style="background:var(--bg-3); color:var(--text-1); font-size:10px;">🚗 ${rvId}</span>`;
       }).join('');
@@ -4923,9 +4954,14 @@ ${dataContext}
       currentPreventivoDiaId = null;
       if (unsubIntervenciones) unsubIntervenciones();
       clearPreventivoMarkers();
-      document.getElementById('preventivos-dias-list').style.display = 'block';
+      if (currentPreventivoId) cargarSubpreventivos(currentPreventivoId);
+
+      const p = preventivosCache[currentPreventivoId];
+      if (p) {
+        document.getElementById('prev-breadcrumb').innerHTML = `<span style="color:var(--text-3); cursor:pointer;" onclick="backToPreventivosList()">🗓️ Preventivo:</span> <span style="font-weight:700;">${p.nombre}</span>`;
+      }
+
       document.getElementById('preventivos-intervenciones-list').style.display = 'none';
-      document.getElementById('prev-breadcrumb-sep').style.display = 'none';
     };
 
     function cargarIntervenciones(pId, dId) {
@@ -4959,22 +4995,22 @@ ${dataContext}
           const prioLabel = { verde: 'LEVE', amarillo: 'GRAVE', rojo: 'MUY GRAVE', negro: 'FALLECIDO' }[i.prioridad] || 'PENDIENTE';
 
           return `
-            <div class="op-card" style="border-left: 4px solid ${prioColor};" onclick="panToPreventivoMarker('${markerId}')">
-              <div class="card-top">
-                <div>
-                  <div class="card-id">${markerId.substring(0, 6).toUpperCase()}</div>
-                  <div class="card-name">${i.descripcion}</div>
-                </div>
-                <span class="card-type-tag" style="color:${prioColor}; border-color:${prioColor}40; background:${prioColor}10">
-                   📍 ${prioLabel}
-                </span>
-              </div>
-              <div class="card-meta">
-                <span class="card-loc">📍 ${i.direccion || 'Ubicación en mapa'}</span>
-                <span style="font-size:10px; font-weight:700; color:var(--text-3);">${i.timestamp?.toDate ? i.timestamp.toDate().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
-              </div>
-              <div style="margin-top:8px; display:flex; gap:4px; flex-wrap:wrap;">
-                ${(i.recursosAsignados || []).map(r => {
+                <div class="op-card" style="border-left: 4px solid ${prioColor};" onclick="panToPreventivoMarker('${markerId}')">
+                  <div class="card-top">
+                    <div>
+                      <div class="card-id">${markerId.substring(0, 6).toUpperCase()}</div>
+                      <div class="card-name">${i.descripcion}</div>
+                    </div>
+                    <span class="card-type-tag" style="color:${prioColor}; border-color:${prioColor}40; background:${prioColor}10">
+                      📍 ${prioLabel}
+                    </span>
+                  </div>
+                  <div class="card-meta">
+                    <span class="card-loc">📍 ${i.direccion || 'Ubicación en mapa'}</span>
+                    <span style="font-size:10px; font-weight:700; color:var(--text-3);">${i.timestamp?.toDate ? i.timestamp.toDate().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                  </div>
+                  <div style="margin-top:8px; display:flex; gap:4px; flex-wrap:wrap;">
+                    ${(i.recursosAsignados || []).map(r => {
             const v = window.globalVehiculos && window.globalVehiculos[r];
             let iconUrl = 'assets/icons/van.png'; // default
             let label = r;
@@ -4992,9 +5028,9 @@ ${dataContext}
                     ${label}
                   </span>`;
           }).join('')}
-              </div>
-            </div>
-          `;
+                  </div>
+                </div>
+                `;
         }).join('');
 
         if (hasCoords && mapPreventivos) {
@@ -9946,7 +9982,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.6.0.2
+            Versión V.6.0.3
           </div>
         </div>
         <div class="field" id="j-prov-row">
