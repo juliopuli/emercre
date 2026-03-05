@@ -7,8 +7,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <link rel="apple-touch-icon" href="assets/logo_emercre.png?v=6.5.3">
-  <link rel="icon" type="image/png" href="assets/logo_emercre.png?v=6.5.2">
+  <link rel="apple-touch-icon" href="assets/logo_emercre.png?v=6.5.4">
+  <link rel="icon" type="image/png" href="assets/logo_emercre.png?v=6.5.4">
   <link rel="manifest" href="manifest.json">
   <title>EmerCRE — Sistema de Gestión de Catástrofes</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -130,8 +130,8 @@
     let ops = {};
     let editingUserId = null;
 
-    // ── CONFIGURACIÓN PUENTE NOTIFICACIONES (V.6.5.3) ─────────────────
-    // OYSTA_BRIDGE_URL eliminada del frontend (V.6.5.3): ahora se usa Cloud Function autenticada.
+    // ── CONFIGURACIÓN PUENTE NOTIFICACIONES (V.6.5.4) ─────────────────
+    // OYSTA_BRIDGE_URL eliminada del frontend (V.6.5.4): ahora se usa Cloud Function autenticada.
 
 
     // Helper visibilidad (V.3.4.1)
@@ -307,22 +307,48 @@
 
     window.toggleVehicleVisibility = async (id, visible) => {
       visibleVehicles[id] = visible;
-
       // V.5.17.1: Guardar preferencia persistente
       if (currentUser) {
         localStorage.setItem(`emercre_vehs_${currentUser.uid}`, JSON.stringify(visibleVehicles));
       }
+      // V.6.5.4: Sincronizar checkbox en Preventivos
+      const chkPrev = document.getElementById(`chk-prev-veh-${id}`);
+      if (chkPrev) chkPrev.checked = visible;
 
-      // V.5.17.8: Si se marca un vehículo y es el único/primero, lanzamos carga inmediata
-      if (visible) {
-        await cargarVehiculosOysta();
+      // Sincronizar marcadores en ambos mapas
+      const v = oystaVehiclesCache.find(x => String(x.id) === String(id));
+      if (v) {
+        syncOystaMarkerGlobal(v);
+      } else if (visible) {
+        await cargarVehiculosOysta(true);
       }
 
-      if (oystaMarkers[id]) {
-        oystaMarkers[id].setMap(visible ? gmap : null);
-      }
-      renderMapa(true); // V.5.20.3 / V.6.1.6: Forzar recalcular zoom una vez cargados
+      if (gmap) renderMapa(true); // V.5.20.3 / V.6.1.6: Forzar recalcular zoom una vez cargados
     };
+
+    // V.6.5.4: Función global para sincronizar marcadores en todos los mapas activos
+    function syncOystaMarkerGlobal(v) {
+      const mid = String(v.id);
+      const isVisible = !!visibleVehicles[mid];
+      const pos = { lat: parseFloat(v.lat), lng: parseFloat(v.lng) };
+      if (isNaN(pos.lat) || isNaN(pos.lng)) return;
+
+      // Mapa Principal (Emergencias)
+      if (gmap) {
+        if (oystaMarkers[mid]) {
+          oystaMarkers[mid].position = pos;
+          oystaMarkers[mid].setMap(isVisible ? gmap : null);
+        } else if (isVisible) {
+          // Si no existe, cargarVehiculosOysta se encargará de crearlo con todo el detalle
+          cargarVehiculosOysta(true);
+        }
+      }
+
+      // Mapa Preventivos
+      if (mapPreventivos) {
+        if (typeof syncOystaMarkerPrev === 'function') syncOystaMarkerPrev(v);
+      }
+    }
 
 
 
@@ -356,7 +382,7 @@
         mostrarToast('Capa de ferrocarril activada');
       }
     };
-    console.log("EmerCRE V.6.5.3 Loaded");
+    console.log("EmerCRE V.6.5.4 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -871,7 +897,7 @@
         console.log("SW listo para recibir notificaciones.");
 
         // Obtener token FCM
-        const vapidKey = "BDwGvRdHh3oO7jdRD8B1vyl6ZAUcvh0P7Fsjhdwzd1XG2_YE0iaOdu_emr9XFdDz2ReN1nlDu1_ipGYjryHH5LQ";
+        const vapidKey = "BDwGvRdHh3oO7jdRD8B1vyl6ZAUcvh0P7Fsjhdwzd1XG2_YE0iaOdu_emr9XFdDz2ReN1nlDu_ipGYjryHH5LQ";
         const token = await withTimeout(
           getToken(messaging, {
             serviceWorkerRegistration: registration,
@@ -1643,10 +1669,9 @@
     // ── OYSTA INTEGRATION (V.5.16.0) ──────────────────────────────────
     async function cargarVehiculosOysta(force = false) {
       console.log(`[Oysta] cargarVehiculosOysta called (force=${force})`);
-      // V.5.17.8: Solo realizar peticiones si hay al menos un vehículo marcado como visible
-      // V.5.17.10: Permitir forzar la carga (para el primer inicio sin caché)
-      const anyVisible = Object.values(visibleVehicles).some(v => v === true);
-      if (!anyVisible && !force) {
+      // V.6.5.4: Implementar pausa automática si no hay vehículos visibles en NINGÚN mapa.
+      const anyVisibleGlobal = Object.values(visibleVehicles).some(v => v === true);
+      if (!anyVisibleGlobal && !force) {
         console.log("[Oysta] No vehicles visible and force=false, skipping fetch.");
         // Si no hay ninguno, aseguramos limpiar el indicador y salir
         const statusText = document.getElementById('oysta-status-text');
@@ -1696,6 +1721,7 @@
         }
 
         renderOystaVehicleList(data.vehicles);
+        if (mapPreventivos) renderOystaVehicleListPrev(data.vehicles); // V.6.5.4: Renderizar también en preventivos
 
         console.log(`Cargando ${data.vehicles.length} vehículos de Oysta...`);
 
@@ -1839,25 +1865,22 @@
       const listContainer = document.getElementById('oysta-vehicle-list');
       if (!listContainer) return;
 
-      const currentIds = vehicles.map(v => v.id).sort().join(',');
-      if (listContainer.dataset.lastIds !== currentIds) {
-        listContainer.innerHTML = '';
-        vehicles.forEach(v => {
-          const mid = String(v.id);
-          // V.5.17.8: Por defecto desmarcados en inicio
-          if (visibleVehicles[mid] === undefined) visibleVehicles[mid] = false;
+      // V.6.5.4: Re-renderizar siempre o al menos actualizar los checkboxes para asegurar sync
+      listContainer.innerHTML = '';
+      vehicles.forEach(v => {
+        const mid = String(v.id);
+        if (visibleVehicles[mid] === undefined) visibleVehicles[mid] = false;
 
-          const div = document.createElement('div');
-          div.className = 'vehicle-selector-item';
-          div.innerHTML = `
-            <input type="checkbox" id="chk-veh-${mid}" ${visibleVehicles[mid] ? 'checked' : ''} 
-                   onchange="toggleVehicleVisibility('${mid}', this.checked)">
-            <label for="chk-veh-${mid}">${v.name}</label>
-          `;
-          listContainer.appendChild(div);
-        });
-        listContainer.dataset.lastIds = currentIds;
-      }
+        const div = document.createElement('div');
+        div.className = 'vehicle-selector-item';
+        div.innerHTML = `
+          <input type="checkbox" id="chk-veh-${mid}" ${visibleVehicles[mid] ? 'checked' : ''} 
+                 onchange="toggleVehicleVisibility('${mid}', this.checked)">
+          <label for="chk-veh-${mid}">${v.name}</label>
+        `;
+        listContainer.appendChild(div);
+      });
+      listContainer.dataset.lastIds = vehicles.map(v => v.id).sort().join(',');
     }
 
     // V.5.17.9: Carga la lista inicial desde cache local
@@ -3324,7 +3347,7 @@ ${dataContext}
       const fab = document.getElementById('btn-mobile-nueva-op');
       if (fab) {
         const isAdmin = currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'autonomica' || currentRole === 'provincial' || currentRole === 'manager';
-        fab.style.display = (sec === 'operaciones' && isAdmin && window.innerWidth < 900) ? 'flex' : 'none';
+        fab.style.display = (sec === 'operaciones' && window.innerWidth < 900 && isAdmin) ? 'flex' : 'none';
       }
     };
 
@@ -4510,9 +4533,15 @@ ${dataContext}
         fullscreenControl: false
       });
 
-      // Layer controls for preventivos map logic (V.6.5.3)
+      // Layer controls for preventivos map logic (V.6.5.4)
       window.refreshPreventivosMap = () => {
-        if (mapPreventivos) google.maps.event.trigger(mapPreventivos, 'resize');
+        if (mapPreventivos) {
+          google.maps.event.trigger(mapPreventivos, 'resize');
+          // V.6.5.4: También refrescar vehículos si están visibles
+          if (Object.values(visibleVehicles).some(v => v === true)) {
+            cargarVehiculosOysta(true);
+          }
+        }
       };
 
       let trafficLayerPrev = null;
@@ -4536,7 +4565,7 @@ ${dataContext}
         }
       };
 
-      // Oysta integration for Preventivos (V.6.5.3)
+      // Oysta integration for Preventivos (V.6.5.4)
       let oystaMarkersPrev = {};
       function renderOystaVehicleListPrev(vehicles) {
         const list = document.getElementById('prev-oysta-vehicle-list');
@@ -4560,17 +4589,13 @@ ${dataContext}
       }
 
       window.toggleVehicleVisibilityPrev = (id, checked) => {
-        // Sincronizar con el estado global de visibilidad
-        visibleVehicles[id] = checked;
-        // Sincronizar checkbox en la lista de emergencias si existe
-        const chkEm = document.getElementById(`chk-veh-${id}`);
-        if (chkEm) chkEm.checked = checked;
-
-        // Sincronizar marcadores en ambos mapas
-        const v = oystaVehiclesCache.find(x => String(x.id) === String(id));
-        if (v) {
-          syncOystaMarkerPrev(v);
-          if (typeof window.cargarVehiculosOysta === 'function') window.cargarVehiculosOysta(true); // Refrescar mapa principal si procede
+        // Sincronizar globalmente
+        if (typeof window.toggleVehicleVisibility === 'function') {
+          window.toggleVehicleVisibility(id, checked);
+        } else {
+          // Fallback si por alguna razón no está disponible
+          visibleVehicles[id] = checked;
+          syncOystaMarkerPrev(oystaVehiclesCache.find(x => String(x.id) === String(id)));
         }
       };
 
@@ -4621,16 +4646,28 @@ ${dataContext}
           const id = doc.id;
           preventivosCache[id] = p;
           const fechaRange = p.fechaInicio ? `${p.fechaInicio} al ${p.fechaFin || '?'}` : 'Sin fecha';
+          const shortId = id.substring(0, 8).toUpperCase();
+          const scopeText = p.provincia === 'Andalucía' ? 'Oficina Autonómica de Andalucía' : `Oficina Provincial de ${p.provincia}`;
+
           return `
             <div class="op-card" onclick="selectPreventivo('${id}')">
-              <div class="op-card-head">
-                 <div class="op-card-title">${p.nombre}</div>
-                 <div class="badge-tipo" style="background:var(--accent); color:#fff;">${p.dias || 1} d</div>
+              <div class="card-top" style="position:relative;">
+                <div>
+                  <div class="card-scope" style="font-size:9px; font-weight:700; color:var(--accent); text-transform:uppercase; margin-bottom:2px; opacity:0.8;">
+                    ${scopeText}
+                  </div>
+                  <div class="card-id">${shortId}</div>
+                  <div class="card-name" style="padding-right:16px;">${p.nombre}</div>
+                </div>
+                <span class="card-type-tag" style="color:var(--accent); border-color:var(--accent)30; background:var(--accent)12">
+                   🗓️ Preventivo
+                </span>
               </div>
-              <div class="op-card-body">
-                <div class="op-card-row">📍 ${p.provincia || 'Andalucía'}</div>
-                <div class="op-card-row">📅 ${fechaRange}</div>
+              <div class="card-meta">
+                <span class="card-loc">📍 ${p.provincia || 'Andalucía'}</span>
+                <span class="nivel-pill" style="background:var(--accent); color:#fff; border-radius:10px; padding:2px 8px;">${p.dias || 1} días</span>
               </div>
+              <div style="font-size:10px; color:var(--text-3); margin-top:4px;">📅 ${fechaRange}</div>
             </div>
           `;
         }).join('');
@@ -4738,12 +4775,17 @@ ${dataContext}
           subpreventivosCache[id] = d;
           return `
             <div class="op-card" onclick="selectSubpreventivo('${id}')">
-              <div class="op-card-head">
-                <div class="op-card-title">${d.nombre}</div>
-                <div style="font-size:11px; color:var(--text-3);">${d.fecha}</div>
+              <div class="card-top">
+                <div>
+                  <div class="card-name">${d.nombre}</div>
+                  <div class="card-id" style="margin-top:2px;">📅 ${d.fecha}</div>
+                </div>
+                <span class="card-type-tag" style="color:var(--accent); border-color:var(--accent)30; background:var(--accent)12">
+                   ☀️ Día
+                </span>
               </div>
-              <div style="font-size:11px; color:var(--accent); margin-top:4px;">
-                🚗 ${d.recursos?.length || 0} vehículos asignados
+              <div class="card-meta">
+                <span class="card-loc">🚗 ${d.recursos?.length || 0} vehículos</span>
               </div>
             </div>
           `;
@@ -4859,16 +4901,25 @@ ${dataContext}
           }
 
           const prioColor = { verde: '#2ecc71', amarillo: '#f1c40f', rojo: '#e74c3c', negro: '#000' }[i.prioridad] || '#95a5a6';
+          const prioLabel = { verde: 'LEVE', amarillo: 'GRAVE', rojo: 'MUY GRAVE', negro: 'FALLECIDO' }[i.prioridad] || 'PENDIENTE';
 
           return `
-            <div class="op-card" style="border-left: 4px solid ${prioColor};">
-              <div class="op-card-head">
-                <div class="op-card-title">${i.descripcion}</div>
-                <div style="font-size:10px; color:var(--text-3);">${i.timestamp?.toDate ? i.timestamp.toDate().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''}</div>
+            <div class="op-card" style="border-left: 4px solid ${prioColor};" onclick="panToPreventivoMarker('${markerId}')">
+              <div class="card-top">
+                <div>
+                  <div class="card-id">${markerId.substring(0, 6).toUpperCase()}</div>
+                  <div class="card-name">${i.descripcion}</div>
+                </div>
+                <span class="card-type-tag" style="color:${prioColor}; border-color:${prioColor}40; background:${prioColor}10">
+                   📍 ${prioLabel}
+                </span>
               </div>
-              <div style="font-size:11px; color:var(--text-3); margin-top:4px;">📍 ${i.direccion || 'Sin dirección'}</div>
-              <div style="margin-top:6px; display:flex; gap:4px; flex-wrap:wrap;">
-                ${(i.recursosAsignados || []).map(r => `<span style="font-size:9px; background:var(--bg-2); padding:2px 4px; border-radius:3px;">${r}</span>`).join('')}
+              <div class="card-meta">
+                <span class="card-loc">📍 ${i.direccion || 'Ubicación en mapa'}</span>
+                <span style="font-size:10px; font-weight:700; color:var(--text-3);">${i.timestamp?.toDate ? i.timestamp.toDate().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+              </div>
+              <div style="margin-top:8px; display:flex; gap:4px; flex-wrap:wrap;">
+                ${(i.recursosAsignados || []).map(r => `<span style="font-size:9px; background:var(--bg-2); padding:2px 6px; border:1px solid var(--border-mid); border-radius:3px; color:var(--text-2);">🚑 ${r}</span>`).join('')}
               </div>
             </div>
           `;
@@ -4903,6 +4954,14 @@ ${dataContext}
         title: i.descripcion
       });
     }
+
+    window.panToPreventivoMarker = (id) => {
+      const m = markersPreventivos[id];
+      if (m && mapPreventivos) {
+        mapPreventivos.panTo(m.position);
+        mapPreventivos.setZoom(17);
+      }
+    };
 
     window.abrirModalPreventivoIntervencion = () => {
       document.getElementById('prev-int-desc').value = '';
@@ -8870,7 +8929,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.6.5.3
+          V.6.5.4
         </div>
       </div>
 
