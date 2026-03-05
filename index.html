@@ -65,9 +65,9 @@
     }
     initMessaging();
 
-    // ── FIREBASE APP CHECK (V.7.0.4) ──────────────────────────────────
+    // ── FIREBASE APP CHECK (V.7.0.5) ──────────────────────────────────
     try {
-      // self.FIREBASE_APPCHECK_DEBUG_TOKEN = true; // Desactivado para producción (V.7.0.4)
+      // self.FIREBASE_APPCHECK_DEBUG_TOKEN = true; // Desactivado para producción (V.7.0.5)
       initializeAppCheck(fbApp, {
         provider: new ReCaptchaV3Provider('6LemNXUsAAAAACVSGSPQ2ow0qbaV0a7QvZo5tV0h'),
         isTokenAutoRefreshEnabled: true
@@ -96,7 +96,7 @@
     let oystaInfoWindow = null;
     let visibleVehicles = {}; // id_vehiculo -> boolean
     let oystaVehiclesCache = []; // Última lista de vehículos recibida
-    let localVehiclesByOystaId = {}; // V.7.0.4: Mapeo OystaID -> Datos Vehículo Local
+    let localVehiclesByOystaId = {}; // V.7.0.5: Mapeo OystaID -> Datos Vehículo Local
     let autocomplete = null;
     let autocompleteEdit = null;
     let autocompletePrevInt = null;
@@ -134,11 +134,11 @@
     let ops = {};
     let editingUserId = null;
 
-    // ── CONFIGURACIÓN PUENTE NOTIFICACIONES (V.7.0.4) ─────────────────
-    // OYSTA_BRIDGE_URL eliminada del frontend (V.7.0.4): ahora se usa Cloud Function autenticada.
+    // ── CONFIGURACIÓN PUENTE NOTIFICACIONES (V.7.0.5) ─────────────────
+    // OYSTA_BRIDGE_URL eliminada del frontend (V.7.0.5): ahora se usa Cloud Function autenticada.
 
 
-    // V.7.0.4: Ayudante para visibilidad de operaciones
+    // V.7.0.5: Ayudante para visibilidad de operaciones
     function isOpVisible(op) {
       if (!op) return false;
       const isOculta = op.oculta === true;
@@ -146,7 +146,7 @@
       return true;
     }
 
-    // V.7.0.4: Unificar visibilidad de vehículos (default true)
+    // V.7.0.5: Unificar visibilidad de vehículos (default true)
     function isVehicleVisible(id) {
       return visibleVehicles[id] !== false;
     }
@@ -350,11 +350,11 @@
 
     window.toggleVehicleVisibility = async (id, visible) => {
       visibleVehicles[id] = visible;
-      // V.7.0.4: Guardar preferencia persistente
+      // V.7.0.5: Guardar preferencia persistente
       if (currentUser) {
         localStorage.setItem(`emercre_vehs_${currentUser.uid}`, JSON.stringify(visibleVehicles));
       }
-      // V.7.0.4: Sincronizar checkbox en Preventivos
+      // V.7.0.5: Sincronizar checkbox en Preventivos
       const chkPrev = document.getElementById(`chk-prev-veh-${id}`);
       if (chkPrev) chkPrev.checked = visible;
 
@@ -366,10 +366,10 @@
         await cargarVehiculosOysta(true);
       }
 
-      if (gmap) renderMapa(true); // V.7.0.4 / V.7.0.4: Forzar recalcular zoom una vez cargados
+      if (gmap) renderMapa(true); // V.7.0.5 / V.7.0.5: Forzar recalcular zoom una vez cargados
     };
 
-    // V.7.0.4: Función global para sincronizar marcadores en todos los mapas activos
+    // V.7.0.5: Función global para sincronizar marcadores en todos los mapas activos
     function syncOystaMarkerGlobal(v) {
       const mid = String(v.id);
       const isVisible = isVehicleVisible(mid);
@@ -425,7 +425,7 @@
         mostrarToast('Capa de ferrocarril activada');
       }
     };
-    console.log("EmerCRE V.7.0.4 Loaded");
+    console.log("EmerCRE V.7.0.5 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -760,7 +760,7 @@
     };
 
     function suscribirChatDetalle(chatId) {
-      if (!chatId) return; // V.7.0.4
+      if (!chatId) return; // V.7.0.5
       if (unsubChatDetail) unsubChatDetail();
       const msgsDiv = document.getElementById('chat-messages');
       msgsDiv.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-4);">Cargando mensajes...</div>';
@@ -791,7 +791,7 @@
 
           const bubble = document.createElement('div');
           bubble.className = `msg-bubble ${isMe ? 'msg-sent' : 'msg-received'}`;
-          // V.7.0.4: Sanitización XSS — textContent en lugar de innerHTML para el texto del usuario
+          // V.7.0.5: Sanitización XSS — textContent en lugar de innerHTML para el texto del usuario
           const msgText = document.createElement('div');
           msgText.textContent = m.texto;
           const msgMeta = document.createElement('div');
@@ -823,7 +823,7 @@
       if (!text) return;
 
       input.value = '';
-      input.style.height = ''; // V.7.0.4: Reset height after sending
+      input.style.height = ''; // V.7.0.5: Reset height after sending
       try {
         await addDoc(collection(db, 'chat_mensajes'), {
           remitenteId: currentUser.uid,
@@ -835,7 +835,7 @@
           leidoPor: []
         });
 
-        // V.7.0.4: Push notification para mensajes privados (con filtro notifChat)
+        // V.7.0.5: Push notification para mensajes privados (con filtro notifChat)
         if (currentChatId) {
           const destUser = allUsersCache.find(u => u.uid === currentChatId);
           if (destUser && destUser.fcmToken && destUser.notifChat !== false) {
@@ -870,7 +870,7 @@
     window.addEventListener('click', actualizarActividad);
     window.addEventListener('keypress', actualizarActividad);
 
-    // V.7.0.4:  Listener para mensajes del SW (app ya abierta o en background)
+    // V.7.0.5:  Listener para mensajes del SW (app ya abierta o en background)
     let pendingChatOpen = null;
 
     function procesarPendingChat() {
@@ -902,7 +902,7 @@
       }
     });
 
-    // ── NOTIFICACIONES PUSH (V.7.0.4 Fix Android PWA + iOS) ────────────────────────────
+    // ── NOTIFICACIONES PUSH (V.7.0.5 Fix Android PWA + iOS) ────────────────────────────
     window.setupNotifications = async (isManual = false) => {
       if (!messaging) {
         if (isManual) mostrarToast("⚠️ El navegador no soporta notificaciones o no está en HTTPS.");
@@ -923,7 +923,7 @@
           return;
         }
 
-        // V.7.0.4: Timeout de seguridad extendido para evitar bloqueo en Android PWA
+        // V.7.0.5: Timeout de seguridad extendido para evitar bloqueo en Android PWA
         const withTimeout = (promise, ms) => Promise.race([
           promise,
           new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout FCM')), ms))
@@ -935,7 +935,7 @@
         );
         console.log("SW registrado:", registration);
 
-        // V.7.0.4: Esperar activamente a que el Service Worker esté listo (crítico en Android)
+        // V.7.0.5: Esperar activamente a que el Service Worker esté listo (crítico en Android)
         await navigator.serviceWorker.ready;
         console.log("SW listo para recibir notificaciones.");
 
@@ -960,7 +960,7 @@
       }
     }
 
-    // V.7.0.4: Toggle notification preferences
+    // V.7.0.5: Toggle notification preferences
     window.toggleNotifPreference = async (type, enabled) => {
       if (!currentUser) return;
       const field = type === 'ops' ? 'notifOperaciones' : 'notifChat';
@@ -979,7 +979,7 @@
       const chatToggle = document.getElementById('toggle-notif-chat');
       if (opsToggle) opsToggle.checked = currentUserDoc.notifOperaciones !== false;
       if (chatToggle) chatToggle.checked = currentUserDoc.notifChat !== false;
-    };    // Función para disparar la notificación push real (V.7.0.4)
+    };    // Función para disparar la notificación push real (V.7.0.5)
     window.broadcastNuevaOperacion = async (op) => {
       console.log("Broadcasting nueva operación:", op.nombre);
 
@@ -1002,7 +1002,7 @@
           if (u.uid === currentUser.uid) return false; // No notificarme a mí mismo
           if (!u.fcmToken) return false; // Sin token = sin push
           if (!u.activo) return false; // Usuarios inactivos
-          if (u.notifOperaciones === false) return false; // V.7.0.4: Preferencia desactivada
+          if (u.notifOperaciones === false) return false; // V.7.0.5: Preferencia desactivada
           // Filtrar por provincia: notificar a los de esa provincia + autonómicos
           if (u.provincia === op.provincia || u.provincia === 'Andalucía') return true;
           return false;
@@ -1028,7 +1028,7 @@
       }
     }
 
-    // Listener para mensajes FCM en primer plano (V.7.0.4)
+    // Listener para mensajes FCM en primer plano (V.7.0.5)
     // Solo log, sin toast adicional (el toast ya lo pone el onSnapshot)
     if (messaging) {
       onMessage(messaging, (payload) => {
@@ -1104,7 +1104,7 @@
           });
         } catch (e) { console.warn("Presencia no registrada (posible falta de reglas):", e); }
 
-        // V.7.0.4: Se deshabilitada la persistencia de visibilidad al inicio
+        // V.7.0.5: Se deshabilitada la persistencia de visibilidad al inicio
         // para asegurar que todos los vehículos empiecen desmarcados y no lancen peticiones automáticas.
 
         // Update Navigation Menu based on access
@@ -1129,9 +1129,9 @@
 
         mostrarApp();
         initApp();
-        // V.7.0.4: Delay para evitar bloqueo en Android PWA install
+        // V.7.0.5: Delay para evitar bloqueo en Android PWA install
         setTimeout(() => { setupNotifications(); }, 2000);
-        initNotifToggles(); // V.7.0.4
+        initNotifToggles(); // V.7.0.5
       } else {
         currentUser = null; currentRole = null;
         mostrarLogin();
@@ -1339,7 +1339,7 @@
       showSection('operaciones');
       if (gmap && mapReady) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
 
-      // ── MOBILE DRAWER POPULATION (V.7.0.4) ──────────────────────────
+      // ── MOBILE DRAWER POPULATION (V.7.0.5) ──────────────────────────
       const dn = document.getElementById('drawer-user-name');
       const dr = document.getElementById('drawer-user-role');
       if (dn) dn.textContent = currentUserDoc.nombre || currentUser.email;
@@ -1383,18 +1383,18 @@
         mobileNuevaBtn.style.display = isAdmin ? 'flex' : 'none';
       }
 
-      // Oysta Integration (V.7.0.4)
-      // V.7.0.4: Condicionar carga por permiso de usuario
+      // Oysta Integration (V.7.0.5)
+      // V.7.0.5: Condicionar carga por permiso de usuario
       const vehicleBtn = document.getElementById('btn-toggle-vehicles');
       if (currentUserDoc.canSeeVehicles) {
-        if (vehicleBtn) vehicleBtn.style.display = 'flex'; // V.7.0.4
-        suscribirVehiculosLocales(); // V.7.0.4
-        // V.7.0.4: Si la caché está vacía, forzamos una carga inicial única para poblar la lista
+        if (vehicleBtn) vehicleBtn.style.display = 'flex'; // V.7.0.5
+        suscribirVehiculosLocales(); // V.7.0.5
+        // V.7.0.5: Si la caché está vacía, forzamos una carga inicial única para poblar la lista
         const hasCache = populateOystaVehicleListFromCache();
         cargarVehiculosOysta(!hasCache);
         setInterval(cargarVehiculosOysta, 30000); // Actualizar cada 30s
       } else {
-        if (vehicleBtn) vehicleBtn.style.display = 'none'; // V.7.0.4
+        if (vehicleBtn) vehicleBtn.style.display = 'none'; // V.7.0.5
       }
     }
 
@@ -1405,13 +1405,13 @@
       if (unsubJefes) { unsubJefes(); unsubJefes = null; }
       if (unsubGuardia) { unsubGuardia(); unsubGuardia = null; }
       if (unsubGlobalJefes) { unsubGlobalJefes(); unsubGlobalJefes = null; }
-      if (unsubVehiculos) { unsubVehiculos(); unsubVehiculos = null; } // V.7.0.4
-      // Clean chat listeners (V.7.0.4)
+      if (unsubVehiculos) { unsubVehiculos(); unsubVehiculos = null; } // V.7.0.5
+      // Clean chat listeners (V.7.0.5)
       if (unsubChatPrivateGlobal) { unsubChatPrivateGlobal(); unsubChatPrivateGlobal = null; }
       if (unsubUserPresence) { unsubUserPresence(); unsubUserPresence = null; }
       if (unsubChatDetail) { unsubChatDetail(); unsubChatDetail = null; }
       ops = {};
-      localVehiclesByOystaId = {}; // V.7.0.4
+      localVehiclesByOystaId = {}; // V.7.0.5
     }
 
     let unsubVehiculos = null;
@@ -1426,7 +1426,7 @@
           }
         });
         // Si ya tenemos marcadores Oysta, refrescarlos para aplicar posibles cambios de icono
-        // V.7.0.4: Gating robusto
+        // V.7.0.5: Gating robusto
         if (Object.keys(oystaMarkers).length > 0 && currentUserDoc.canSeeVehicles) cargarVehiculosOysta();
       });
     }
@@ -1460,12 +1460,12 @@
               // Si es la carga inicial, asumimos que no es nueva "en tiempo real"
               // a no ser que tú mismo la hayas creado muy recientemente
               if (!initialLoad && d.creadoPor !== currentUser.uid) {
-                // Solo pitar si es de mi ámbito o soy autonómico (V.7.0.4)
+                // Solo pitar si es de mi ámbito o soy autonómico (V.7.0.5)
                 const myProv = currentUserDoc.provincia;
                 const opProv = d.provincia;
                 if (myProv === 'Andalucía' || myProv === opProv) {
                   hasNewOp = true;
-                  // V.7.0.4: Solo toast visual en primer plano. La notificación del sistema
+                  // V.7.0.5: Solo toast visual en primer plano. La notificación del sistema
                   // la envía el push real de FCM (funciona también con app cerrada/bloqueada).
                   mostrarToast(`📢 Nueva Operación: ${d.nombre}`);
                 }
@@ -1605,7 +1605,7 @@
     function renderMapa(forceZoom = false) {
       if (!gmap || !mapReady) return;
 
-      // Build search filter helper (V.7.0.4)
+      // Build search filter helper (V.7.0.5)
       const q = searchQuery.trim().toLowerCase();
       function isOpSearchVisible(op) {
         if (!isOpVisible(op)) return false;
@@ -1655,7 +1655,7 @@
             content: iconContent,
             title: op.nombre
           });
-          // V.7.0.4/13: Usar gmp-click para AdvancedMarkerElement
+          // V.7.0.5/13: Usar gmp-click para AdvancedMarkerElement
           marker.addListener('gmp-click', () => {
             if (routingPickField) {
               const markerOp = ops[op.id];
@@ -1676,18 +1676,18 @@
         }
       });
 
-      // V.7.0.4: Incluir vehículos Oysta en el auto-fit del mapa
+      // V.7.0.5: Incluir vehículos Oysta en el auto-fit del mapa
       Object.keys(oystaMarkers).forEach(id => {
         const m = oystaMarkers[id];
-        // V.7.0.4: Solo incluir en zoom si están marcados como visibles
+        // V.7.0.5: Solo incluir en zoom si están marcados como visibles
         if (m.position && visibleVehicles[id] !== false) {
           bounds.extend(m.position);
           hasValidCoords = true;
         }
       });
 
-      // V.7.0.4: Permitir forzar zoom aunque haya una op seleccionada (selOpId)
-      // V.7.0.4: No auto-zoom si el panel de rutas está abierto
+      // V.7.0.5: Permitir forzar zoom aunque haya una op seleccionada (selOpId)
+      // V.7.0.5: No auto-zoom si el panel de rutas está abierto
       if (hasValidCoords && !editPickMode && !picking && !routingPanelOpen && (!selOpId || forceZoom)) {
         if (boundsTimeout) clearTimeout(boundsTimeout);
         boundsTimeout = setTimeout(() => {
@@ -1697,22 +1697,22 @@
         }, 100);
       }
 
-      // V.7.0.4: Asegurar que los vehículos Oysta se ven tras renderizar el mapa
-      // V.7.0.4: Gating robusto
-      // V.7.0.4: Si no hay vehículos en el panel, forzamos una carga para poblar la lista
+      // V.7.0.5: Asegurar que los vehículos Oysta se ven tras renderizar el mapa
+      // V.7.0.5: Gating robusto
+      // V.7.0.5: Si no hay vehículos en el panel, forzamos una carga para poblar la lista
       if (currentUserDoc.canSeeVehicles) {
         const listContainer = document.getElementById('oysta-vehicle-list');
-        // V.7.0.4: El placeholder "Cargando..." cuenta como 1 hijo, así que <=1 significa vacío
+        // V.7.0.5: El placeholder "Cargando..." cuenta como 1 hijo, así que <=1 significa vacío
         const listEmpty = !listContainer || listContainer.children.length <= 1;
         console.log(`[Oysta] renderMapa: listEmpty=${listEmpty}, children=${listContainer ? listContainer.children.length : 'N/A'}`);
         cargarVehiculosOysta(listEmpty);
       }
     }
 
-    // ── OYSTA INTEGRATION (V.7.0.4) ──────────────────────────────────
+    // ── OYSTA INTEGRATION (V.7.0.5) ──────────────────────────────────
     async function cargarVehiculosOysta(force = false) {
       console.log(`[Oysta] cargarVehiculosOysta called (force=${force})`);
-      // V.7.0.4: Implementar pausa automática si no hay vehículos visibles en NINGÚN mapa.
+      // V.7.0.5: Implementar pausa automática si no hay vehículos visibles en NINGÚN mapa.
       const anyVisibleGlobal = Object.values(visibleVehicles).some(v => v === true);
       if (!anyVisibleGlobal && !force) {
         console.log("[Oysta] No vehicles visible and force=false, skipping fetch.");
@@ -1722,7 +1722,7 @@
         return;
       }
 
-      // V.7.0.4: Permitir carga si gmap O mapPreventivos están disponibles
+      // V.7.0.5: Permitir carga si gmap O mapPreventivos están disponibles
       if ((!gmap && !mapPreventivos) || !mapReady || !currentUserDoc?.canSeeVehicles) {
         console.log(`[Oysta] Gating failed: gmap=${!!gmap}, mapPrev=${!!mapPreventivos}, mapReady=${mapReady}, canSeeVehicles=${currentUserDoc?.canSeeVehicles}`);
         return;
@@ -1736,12 +1736,12 @@
 
       const indicator = document.getElementById('oysta-status-indicator');
       const statusText = document.getElementById('oysta-status-text');
-      // V.7.0.4: Solo mostrar el cuadro de estado a Super Admins (transparente para el resto)
+      // V.7.0.5: Solo mostrar el cuadro de estado a Super Admins (transparente para el resto)
       if (indicator) indicator.style.display = (currentRole === 'super_admin') ? 'flex' : 'none';
 
       try {
         if (statusText) statusText.textContent = "Sincronizando...";
-        // V.7.0.4: Usar Cloud Function autenticada en vez de fetch directo al GAS
+        // V.7.0.5: Usar Cloud Function autenticada en vez de fetch directo al GAS
         const getOystaVehiclesFn = httpsCallable(functions, 'getOystaVehicles');
         const result = await getOystaVehiclesFn();
         const data = result.data;
@@ -1753,9 +1753,9 @@
           return;
         }
 
-        oystaVehiclesCache = data.vehicles; // V.7.0.4: Guardar en cache para vinculación
+        oystaVehiclesCache = data.vehicles; // V.7.0.5: Guardar en cache para vinculación
 
-        // V.7.0.4: Guardar en localStorage para disponibilidad inmediata en el próximo inicio
+        // V.7.0.5: Guardar en localStorage para disponibilidad inmediata en el próximo inicio
         localStorage.setItem('emercre_oysta_cache', JSON.stringify(data.vehicles.map(v => ({ id: v.id, name: v.name }))));
 
         if (statusText) {
@@ -1764,7 +1764,7 @@
         }
 
         renderOystaVehicleList(data.vehicles);
-        if (mapPreventivos) renderOystaVehicleListPrev(data.vehicles); // V.7.0.4: Renderizar también en preventivos
+        if (mapPreventivos) renderOystaVehicleListPrev(data.vehicles); // V.7.0.5: Renderizar también en preventivos
 
         console.log(`Cargando ${data.vehicles.length} vehículos de Oysta...`);
 
@@ -1818,8 +1818,8 @@
             marker.vehicleData = v;
             marker.localVehicleData = localVeh;
 
-            // V.7.0.4: Pop-over con datos al pinchar
-            // V.7.0.4: Usar gmp-click para evitar aviso de deprecación
+            // V.7.0.5: Pop-over con datos al pinchar
+            // V.7.0.5: Usar gmp-click para evitar aviso de deprecación
             marker.addListener('gmp-click', () => {
               if (oystaInfoWindow) oystaInfoWindow.close();
               const vd = marker.vehicleData;
@@ -1880,7 +1880,7 @@
       });
     };
 
-    // V.7.0.4: Función global compartida para generar el HTML del marcador Oysta (Emergencias y Preventivos)
+    // V.7.0.5: Función global compartida para generar el HTML del marcador Oysta (Emergencias y Preventivos)
     window.createOystaMarkerContent = (v, localVeh, statusClass) => {
       const content = document.createElement('div');
       if (localVeh) {
@@ -1907,14 +1907,14 @@
       return content;
     };
 
-    // V.7.0.4: Función modular para renderizar la lista de vehículos
+    // V.7.0.5: Función modular para renderizar la lista de vehículos
     function renderOystaVehicleList(vehicles) {
       console.log(`[Oysta] renderOystaVehicleList called with ${vehicles?.length} vehicles.`);
       if (!vehicles) return;
       const listContainer = document.getElementById('oysta-vehicle-list');
       if (!listContainer) return;
 
-      // V.7.0.4: Re-renderizar siempre o al menos actualizar los checkboxes para asegurar sync
+      // V.7.0.5: Re-renderizar siempre o al menos actualizar los checkboxes para asegurar sync
       listContainer.innerHTML = '';
       vehicles.forEach(v => {
         const mid = String(v.id);
@@ -1932,8 +1932,8 @@
       listContainer.dataset.lastIds = vehicles.map(v => v.id).sort().join(',');
     }
 
-    // V.7.0.4: Carga la lista inicial desde cache local
-    // V.7.0.4: Retorna true si se cargó algo, false si la caché está vacía
+    // V.7.0.5: Carga la lista inicial desde cache local
+    // V.7.0.5: Retorna true si se cargó algo, false si la caché está vacía
     function populateOystaVehicleListFromCache() {
       console.log("[Oysta] populateOystaVehicleListFromCache called.");
       const cached = localStorage.getItem('emercre_oysta_cache');
@@ -2030,14 +2030,14 @@
         visible = visible.filter(o => o.provincia === selectedProvincia);
       }
 
-      // Lógica de filtrado de intervenciones ocultas (V.7.0.4)
+      // Lógica de filtrado de intervenciones ocultas (V.7.0.5)
       visible = visible.filter(op => {
         const isOculta = op.oculta === true;
         if (isOculta) return mostrarCerradas;
         return true;
       });
 
-      // Búsqueda de texto (V.7.0.4)
+      // Búsqueda de texto (V.7.0.5)
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
         visible = visible.filter(op => {
@@ -2460,7 +2460,7 @@
         ? op.creadoEn.toDate().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
         : '—';
       ir.innerHTML = '';
-      // V.7.0.4: Sanitización XSS — usar textContent para campos de usuario
+      // V.7.0.5: Sanitización XSS — usar textContent para campos de usuario
       function addInfoItem(container, value, label) {
         const item = document.createElement('div');
         item.className = 'dp-info-item';
@@ -2489,9 +2489,9 @@
 
       const isHighAdmin = currentRole === 'super_admin' || currentRole === 'manager';
       document.getElementById('dp-admin-btns').style.display = (isAdmin) ? 'flex' : 'none';
-      // V.7.0.4: Tanto Admins como Responsables pueden reabrir
+      // V.7.0.5: Tanto Admins como Responsables pueden reabrir
       document.getElementById('dp-reabrir-btn').style.display = (isAdmin && isFinalizada) ? 'inline-flex' : 'none';
-      // V.7.0.4: Solo Admins de alto nivel (manager/super_admin) pueden borrar, siempre.
+      // V.7.0.5: Solo Admins de alto nivel (manager/super_admin) pueden borrar, siempre.
       if (document.getElementById('dp-borrar-btn')) {
         document.getElementById('dp-borrar-btn').style.display = isHighAdmin ? 'inline-flex' : 'none';
       }
@@ -2501,7 +2501,7 @@
         b.disabled = isFinalizada;
       });
 
-      // Lógica de Ocultar (V.7.0.4)
+      // Lógica de Ocultar (V.7.0.5)
       const hideWrapper = document.getElementById('dp-hide-wrapper');
       if (hideWrapper) {
         if (isFinalizada && (currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'manager')) {
@@ -2695,7 +2695,7 @@
     window.borrarOp = async () => {
       if (!selOpId) return;
 
-      // V.7.0.4: Verificación de permisos estrictamente para Administradores
+      // V.7.0.5: Verificación de permisos estrictamente para Administradores
       const isHighAdmin = currentRole === 'super_admin' || currentRole === 'manager';
 
       if (!isHighAdmin) {
@@ -3084,7 +3084,7 @@ ${dataContext}
             break;
           case 'Jefe de Operaciones':
             subSelect.style.display = 'block';
-            // Auto-seleccionar el jefe que ya está puesto en el campo de dirección (V.7.0.4)
+            // Auto-seleccionar el jefe que ya está puesto en el campo de dirección (V.7.0.5)
             const jefeActual = document.getElementById(`${prefix}-dir`).value;
             if (jefeActual) subSelect.value = jefeActual;
             break;
@@ -3205,7 +3205,7 @@ ${dataContext}
             timestamp: serverTimestamp()
           });
         }
-        broadcastNuevaOperacion({ id: ref.id, nombre, provincia, creadoPorNombre: autorNombre }); // V.7.0.4
+        broadcastNuevaOperacion({ id: ref.id, nombre, provincia, creadoPorNombre: autorNombre }); // V.7.0.5
         cerrarModalOp();
         window.abrirDetalle(ref.id);
       } catch (e) { alert('Error: ' + e.message); }
@@ -3374,15 +3374,15 @@ ${dataContext}
         document.getElementById('section-chat-view').style.display = 'flex';
         document.getElementById('section-chat').style.display = 'flex';
         cargarUsuariosParaChat();
-        // Al entrar, no auto-seleccionamos si no hay nada (V.7.0.4)
+        // Al entrar, no auto-seleccionamos si no hay nada (V.7.0.5)
         if (currentChatId) selectChat(currentChatId);
         else selectChat(null);
       } else {
         document.getElementById('section-chat-view').style.display = 'none';
         document.getElementById('section-chat').style.display = 'none';
-        // Detener listener de detalle al salir del chat para permitir notificaciones (V.7.0.4)
+        // Detener listener de detalle al salir del chat para permitir notificaciones (V.7.0.5)
         if (unsubChatDetail) { unsubChatDetail(); unsubChatDetail = null; }
-        // Deseleccionar chat al salir para que al volver no se marque como leído auto (V.7.0.4)
+        // Deseleccionar chat al salir para que al volver no se marque como leído auto (V.7.0.5)
         currentChatId = null;
       }
 
@@ -3392,7 +3392,7 @@ ${dataContext}
       }
       if (sec === 'operaciones' && gmap) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
 
-      // Toggle mobile FAB: only show on operaciones (V.7.0.4)
+      // Toggle mobile FAB: only show on operaciones (V.7.0.5)
       const fab = document.getElementById('btn-mobile-nueva-op');
       if (fab) {
         const isAdmin = currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'autonomica' || currentRole === 'provincial' || currentRole === 'manager';
@@ -3546,7 +3546,7 @@ ${dataContext}
 
       document.getElementById('u-activo').value = 'true';
       document.getElementById('u-todos-chats').checked = true; // Por defecto checked
-      document.getElementById('u-can-see-vehicles').checked = false; // V.7.0.4: Por defecto desmarcado
+      document.getElementById('u-can-see-vehicles').checked = false; // V.7.0.5: Por defecto desmarcado
       document.getElementById('u-acc-emergencias').checked = true;
       document.getElementById('u-acc-preventivos').checked = false;
       document.getElementById('u-pass-row').style.display = 'flex';
@@ -3615,7 +3615,7 @@ ${dataContext}
       document.getElementById('u-activo').value = u.activo === false ? 'false' : 'true';
       // Retrocompatibilidad: si no está definido, asume true
       document.getElementById('u-todos-chats').checked = u.aparecerEnTodosLosChats !== false;
-      // V.7.0.4: Cargar permiso de vehículos
+      // V.7.0.5: Cargar permiso de vehículos
       document.getElementById('u-can-see-vehicles').checked = !!u.canSeeVehicles;
 
       document.getElementById('u-acc-emergencias').checked = u.accesoEmergencias !== false; // True por defecto (retrocompatibilidad)
@@ -3645,7 +3645,7 @@ ${dataContext}
       try {
         if (editingUserId) {
           let updateData = { nombre, role, provincia, activo };
-          updateData.canSeeVehicles = document.getElementById('u-can-see-vehicles').checked; // V.7.0.4
+          updateData.canSeeVehicles = document.getElementById('u-can-see-vehicles').checked; // V.7.0.5
           updateData.accesoEmergencias = document.getElementById('u-acc-emergencias').checked;
           updateData.accesoPreventivos = document.getElementById('u-acc-preventivos').checked;
           if (currentUserDoc.role === 'super_admin') {
@@ -3666,7 +3666,7 @@ ${dataContext}
           if (data.error) throw new Error(data.error.message);
           let newData = {
             nombre, email, role, provincia, activo,
-            canSeeVehicles: document.getElementById('u-can-see-vehicles').checked, // V.7.0.4
+            canSeeVehicles: document.getElementById('u-can-see-vehicles').checked, // V.7.0.5
             accesoEmergencias: document.getElementById('u-acc-emergencias').checked,
             accesoPreventivos: document.getElementById('u-acc-preventivos').checked,
             creadoPor: currentUser.uid,
@@ -3784,7 +3784,7 @@ ${dataContext}
       if (typeof cargarErbes === 'function') cargarErbes();
       if (typeof cargarEries === 'function') cargarEries();
 
-      // Sync drawer selectors (V.7.0.4)
+      // Sync drawer selectors (V.7.0.5)
       const dProvSel = document.getElementById('drawer-prov-selector');
       if (dProvSel) dProvSel.value = val;
       const hProvSel = document.getElementById('hdr-prov-selector');
@@ -3857,12 +3857,12 @@ ${dataContext}
         provSel.value = selectedProvincia === 'Andalucía' ? 'Andalucía' : selectedProvincia;
       }
 
-      // V.7.0.4/14: Poblar vinculación con Oysta (filtrando ya asociados)
+      // V.7.0.5/14: Poblar vinculación con Oysta (filtrando ya asociados)
       const oystaSel = document.getElementById('v-oysta-link');
       if (oystaSel) {
         oystaSel.innerHTML = '<option value="">(Sin vinculación)</option>';
         oystaVehiclesCache.forEach(v => {
-          // V.7.0.4: Solo mostrar si no está asociado a nadie
+          // V.7.0.5: Solo mostrar si no está asociado a nadie
           const estaAsociado = !!localVehiclesByOystaId[v.id];
           if (!estaAsociado) {
             const opt = document.createElement('option');
@@ -3896,12 +3896,12 @@ ${dataContext}
         provRow.style.display = 'block';
       }
 
-      // V.7.0.4/14: Poblar vinculación con Oysta y seleccionar actual (filtrando ya asociados ajenos)
+      // V.7.0.5/14: Poblar vinculación con Oysta y seleccionar actual (filtrando ya asociados ajenos)
       const oystaSel = document.getElementById('v-oysta-link');
       if (oystaSel) {
         oystaSel.innerHTML = '<option value="">(Sin vinculación)</option>';
         oystaVehiclesCache.forEach(veh => {
-          // V.7.0.4: Mostrar si no está asociado O si es el ID actual de este vehículo
+          // V.7.0.5: Mostrar si no está asociado O si es el ID actual de este vehículo
           const estaAsociadoAAjax = !!localVehiclesByOystaId[veh.id];
           const esElMismo = v.oystaId && String(v.oystaId) === String(veh.id);
 
@@ -4401,7 +4401,7 @@ ${dataContext}
             document.getElementById(`${prefix}-dir`).value = jefeNombre;
             const orgSelect = document.getElementById(`${prefix}-org`);
             if (orgSelect) {
-              // Si ya está seleccionado 'Jefe de Operaciones', sincronizamos el sub-selector (V.7.0.4)
+              // Si ya está seleccionado 'Jefe de Operaciones', sincronizamos el sub-selector (V.7.0.5)
               if (orgSelect.value === 'Jefe de Operaciones') {
                 const subSelect = document.getElementById(`${prefix}-org-sub-select`);
                 if (subSelect) subSelect.value = jefeNombre;
@@ -4423,7 +4423,7 @@ ${dataContext}
           if (valEl) valEl.textContent = jefeGuardiaActual || 'Sin asignar';
           const sel = document.getElementById('hdr-jefe-guardia-sel');
           if (sel) sel.value = jefeGuardiaActual || '';
-          // Drawer sync (V.7.0.4)
+          // Drawer sync (V.7.0.5)
           const dVal = document.getElementById('drawer-jefe-guardia-val');
           if (dVal) dVal.textContent = jefeGuardiaActual || 'Sin asignar';
           const dSel = document.getElementById('drawer-jefe-guardia-sel');
@@ -4434,7 +4434,7 @@ ${dataContext}
           if (valEl) valEl.textContent = 'Sin asignar';
           const sel = document.getElementById('hdr-jefe-guardia-sel');
           if (sel) sel.value = '';
-          // Drawer sync (V.7.0.4)
+          // Drawer sync (V.7.0.5)
           const dVal = document.getElementById('drawer-jefe-guardia-val');
           if (dVal) dVal.textContent = 'Sin asignar';
           const dSel = document.getElementById('drawer-jefe-guardia-sel');
@@ -4526,7 +4526,7 @@ ${dataContext}
       });
     });
 
-    // --- LOGICA MOBILE V.7.0.4 ---
+    // --- LOGICA MOBILE V.7.0.5 ---
     window.toggleMobileMenu = () => {
       document.getElementById('mobile-menu-overlay').classList.toggle('open');
     };
@@ -4564,7 +4564,7 @@ ${dataContext}
     };
 
     // ==========================================
-    // MÓDULO DE PREVENTIVOS - LÓGICA (V.7.0.4)
+    // MÓDULO DE PREVENTIVOS - LÓGICA (V.7.0.5)
     // ==========================================
 
     window.initMapPreventivos = () => {
@@ -4582,7 +4582,7 @@ ${dataContext}
         fullscreenControl: false
       });
 
-      // Control de capas y vehículos (V.7.0.4)
+      // Control de capas y vehículos (V.7.0.5)
       window.refreshPreventivosMap = () => {
         if (mapPreventivos) {
           google.maps.event.trigger(mapPreventivos, 'resize');
@@ -4612,9 +4612,9 @@ ${dataContext}
         }
       };
 
-      // V.7.0.4: Sincronizar vehículos inmediatamente al abrir el mapa
-      if (typeof oystaVehiclesCache !== 'undefined' && oystaVehiclesCache.length > 0) {
-        window.renderOystaVehicleListPrev(oystaVehiclesCache);
+      // V.7.0.5: Forzar inicio de script Oysta si no está corriendo
+      if (currentUserDoc && currentUserDoc.canSeeVehicles) {
+        cargarVehiculosOysta(true);
       }
     };
 
@@ -4723,11 +4723,11 @@ ${dataContext}
               </div>
               <div class="card-meta">
                 <span class="card-loc">📍 ${p.provincia || 'Andalucía'}</span>
-                <span class="nivel-pill" style="background:var(--accent); color:#fff; border-radius:10px; padding:2px 8px;">${p.dias || 1} días</span>
+                ${(p.dias || 1) > 1 ? `<span class="nivel-pill" style="background:var(--accent); color:#fff; border-radius:10px; padding:2px 8px;">${p.dias} días</span>` : ''}
               </div>
               <div style="font-size:10px; color:var(--text-3); margin-top:4px;">📅 ${fechaRange}</div>
               
-              <!-- V.7.0.4: Acordeón de días -->
+              <!-- V.7.0.5: Acordeón de días -->
               <div id="prev-dias-wrap-${id}" style="display:none; margin-top: 12px; border-top: 1px solid var(--border-mid); padding-top: 12px; cursor: default;" onclick="event.stopPropagation()">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
                   <span style="font-size:11px; font-weight:600; color:var(--text-2);">Días del evento:</span>
@@ -4860,7 +4860,7 @@ ${dataContext}
       document.querySelectorAll('[id^="prev-dias-wrap-"]').forEach(el => el.style.display = 'none');
       document.querySelectorAll('#preventivos-list .op-card').forEach(c => c.style.border = '');
 
-      // V.7.0.4: Cerrar panel lateral si estuviera abierto
+      // V.7.0.5: Cerrar panel lateral si estuviera abierto
       const side = document.getElementById('preventivos-detail-panel');
       if (side) side.classList.remove('open');
 
@@ -5009,7 +5009,7 @@ ${dataContext}
     };
 
     window.backToPreventivoDias = () => {
-      // V.7.0.4: Esto ahora solo cierra el detalle ya que el acordeón es permanente
+      // V.7.0.5: Esto ahora solo cierra el detalle ya que el acordeón es permanente
       cerrarDetallePreventivo();
     };
 
@@ -5049,7 +5049,7 @@ ${dataContext}
           const isOculta = i.oculta === true;
 
           return `
-                <div class="op-card ${isClosed ? 'op-cerrada' : ''}" style="border-left: 4px solid ${prioColor}; ${isOculta ? 'opacity:0.6;' : ''}" onclick="panToPreventivoMarker('${markerId}')">
+                <div class="op-card ${isClosed ? 'op-cerrada' : ''}" style="border-left: 4px solid ${prioColor}; ${isOculta ? 'opacity:0.6;' : ''}" onclick="abrirGestionIntervencion('${markerId}')">
                   <div class="card-top">
                     <div style="flex:1">
                       <div style="display:flex; justify-content:space-between; align-items:start;">
@@ -5086,12 +5086,6 @@ ${dataContext}
                             </span>`;
           }).join('')}
                   </div>
-                  <div style="margin-top:12px; padding-top:8px; border-top:1px solid var(--border-mid); display:flex; gap:6px; flex-wrap:wrap;" onclick="event.stopPropagation()">
-                    <button class="btn-nueva" style="padding:4px 8px; font-size:10px; flex:1; background:var(--bg-3); color:var(--text-1);" onclick="abrirEditarIntervencion('${markerId}')" title="Editar">✏️</button>
-                    <button class="btn-nueva" style="padding:4px 8px; font-size:10px; flex:1; background:${isClosed ? 'var(--accent)' : 'var(--bg-3)'}; color:${isClosed ? '#fff' : 'var(--text-1)'};" onclick="toggleIntervencionStatus('${markerId}')" title="${isClosed ? 'Reabrir' : 'Cerrar'}">${isClosed ? '🔓' : '🔒'}</button>
-                    <button class="btn-nueva" style="padding:4px 8px; font-size:10px; flex:1; background:var(--bg-3); color:var(--text-1);" onclick="abrirComentarios('${markerId}')" title="Comentarios">💬 ${(i.comentarios || []).length}</button>
-                    <button class="btn-nueva" style="padding:4px 8px; font-size:10px; flex:1; background:${isOculta ? '#333' : 'var(--bg-3)'}; color:${isOculta ? '#fff' : 'var(--text-1)'};" onclick="toggleIntervencionOculta('${markerId}')" title="${isOculta ? 'Mostrar' : 'Ocultar'}">${isOculta ? '👁️' : '🕶️'}</button>
-                    <button class="btn-nueva" style="padding:4px 8px; font-size:10px; flex:1; background:#fee; color:#c00; border-color:#fcc;" onclick="borrarIntervencion('${markerId}')" title="Borrar">🗑️</button>
                   </div>
                 </div>
                 `;
@@ -5361,8 +5355,76 @@ ${dataContext}
           actualizadoEn: serverTimestamp()
         });
         document.getElementById('prev-comentario-txt').value = '';
-        // El onSnapshot se encargará de refrescar la modal si está abierta
+        // Refrescar modal de gestión si está abierta para actualizar el contador de comentarios
+        if (document.getElementById('overlay-prev-gestion-int').style.display === 'flex') {
+          abrirGestionIntervencion(currentComIntId);
+        }
       } catch (e) { alert('Error: ' + e.message); }
+    };
+
+    window.abrirGestionIntervencion = (id) => {
+      const i = intervencionesCache[id];
+      if (!i) return;
+      panToPreventivoMarker(id);
+
+      const body = document.getElementById('prev-gestion-int-body');
+      const isClosed = i.abierta === false;
+      const isOculta = i.oculta === true;
+
+      let html = `
+        <div style="padding:10px; background:var(--bg-2); border-radius:8px; border-left:4px solid var(--accent); margin-bottom:10px;">
+          <div style="font-weight:700; color:var(--text-1); margin-bottom:4px;">${i.descripcion}</div>
+          <div style="font-size:11px; color:var(--text-3);">📍 ${i.direccion || 'Sin dirección'}</div>
+        </div>
+      `;
+
+      if (!isClosed) {
+        // ABIERTA: Editar, Añadir Recurso, Comentar, Cerrar, Borrar
+        html += `
+          <button class="btn-reg" style="width:100%; justify-content:center;" onclick="cerrarModalGestionInt(); abrirEditarIntervencion('${id}')">✏️ Editar Intervención</button>
+          
+          <div style="margin-top:10px;">
+            <div class="field-lbl">Añadir Recurso</div>
+            <select class="f-input" style="width:100%" onchange="if(this.value) { asignarRecursoIntervencion('${id}', this.value); this.value=''; }">
+              <option value="">-- Seleccionar Recurso --</option>
+              ${Object.keys(window.globalVehiculos || {}).filter(rv => !(i.recursosAsignados || []).includes(rv)).map(rv => `<option value="${rv}">${window.globalVehiculos[rv].indicativo || rv}</option>`).join('')}
+            </select>
+          </div>
+
+          <button class="btn-nueva" style="width:100%; justify-content:center; background:var(--bg-3); color:var(--text-1); margin-top:10px;" onclick="abrirComentarios('${id}')">💬 Comentarios (${(i.comentarios || []).length})</button>
+          <button class="btn-nueva" style="width:100%; justify-content:center; background:var(--accent); color:#fff;" onclick="cerrarModalGestionInt(); toggleIntervencionStatus('${id}')">🔒 Cerrar Intervención</button>
+          <button class="btn-nueva" style="width:100%; justify-content:center; background:#fee; color:#c00; border-color:#fcc;" onclick="cerrarModalGestionInt(); borrarIntervencion('${id}')">🗑️ Eliminar Permanente</button>
+        `;
+      } else {
+        // CERRADA: Ocultar/Mostrar, Reabrir, Borrar
+        html += `
+          <button class="btn-reg" style="width:100%; justify-content:center; background:${isOculta ? '#333' : 'var(--bg-3)'}; color:${isOculta ? '#fff' : 'var(--text-1)'};" onclick="cerrarModalGestionInt(); toggleIntervencionOculta('${id}')">
+            ${isOculta ? '👁️ Mostrar Intervención' : '🕶️ Ocultar Intervención'}
+          </button>
+          <button class="btn-nueva" style="width:100%; justify-content:center; background:var(--accent); color:#fff;" onclick="cerrarModalGestionInt(); toggleIntervencionStatus('${id}')">🔓 Reabrir Intervención</button>
+          <button class="btn-nueva" style="width:100%; justify-content:center; background:#fee; color:#c00; border-color:#fcc;" onclick="cerrarModalGestionInt(); borrarIntervencion('${id}')">🗑️ Eliminar Permanente</button>
+        `;
+      }
+
+      body.innerHTML = html;
+      document.getElementById('overlay-prev-gestion-int').style.display = 'flex';
+    };
+
+    window.cerrarModalGestionInt = () => document.getElementById('overlay-prev-gestion-int').style.display = 'none';
+
+    window.asignarRecursoIntervencion = async (id, recurso) => {
+      const i = intervencionesCache[id];
+      if (!i) return;
+      const recs = [...(i.recursosAsignados || []), recurso];
+      try {
+        await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
+          recursosAsignados: recs,
+          actualizadoEn: serverTimestamp()
+        });
+        mostrarToast('Recurso asignado');
+        // Refrescar modal si sigue abierta
+        abrirGestionIntervencion(id);
+      } catch (e) { console.error(e); }
     };
 
     window.handleSearchPreventivos = (q) => {
@@ -5959,7 +6021,7 @@ ${dataContext}
       width: 100%;
     }
 
-    /* Modales Preventivos pegados a la izquierda (V.7.0.4) */
+    /* Modales Preventivos pegados a la izquierda (V.7.0.5) */
     #overlay-preventivo-main,
     #overlay-preventivo-dia,
     #overlay-preventivo-intervencion {
@@ -6162,7 +6224,7 @@ ${dataContext}
       font-weight: 500;
     }
 
-    /* ═══════ CHAT UI — WhatsApp-Style (V.7.0.4) ═══════ */
+    /* ═══════ CHAT UI — WhatsApp-Style (V.7.0.5) ═══════ */
     #section-chat {
       display: none;
       height: calc(100vh - 120px);
@@ -7871,7 +7933,7 @@ ${dataContext}
       background: #102a54 !important;
     }
 
-    /* SECTIONS V.7.0.4 */
+    /* SECTIONS V.7.0.5 */
     #section-usuarios,
     #section-tablas {
       padding: 24px;
@@ -8097,7 +8159,7 @@ ${dataContext}
       }
     }
 
-    /* --- RESPONSIVE / MOBILE V.7.0.4 --- */
+    /* --- RESPONSIVE / MOBILE V.7.0.5 --- */
     .btn-menu-toggle {
       display: none;
       background: none;
@@ -8553,7 +8615,7 @@ ${dataContext}
         margin-bottom: 4px;
       }
 
-      /* ═══════ MOBILE FIX V.7.0.4 — Global Overflow Protection ═══════ */
+      /* ═══════ MOBILE FIX V.7.0.5 — Global Overflow Protection ═══════ */
       html,
       body {
         overflow: hidden !important;
@@ -8572,7 +8634,7 @@ ${dataContext}
         min-height: 0 !important;
       }
 
-      /* ═══════ Chat Section — Stacked Mobile Layout (V.7.0.4) ═══════ */
+      /* ═══════ Chat Section — Stacked Mobile Layout (V.7.0.5) ═══════ */
       #section-chat {
         flex-direction: column !important;
         height: calc(100vh - 60px) !important;
@@ -8696,7 +8758,7 @@ ${dataContext}
         display: none !important;
       }
 
-      /* ═══════ V.7.0.4 — Detail Panel Mobile Compact ═══════ */
+      /* ═══════ V.7.0.5 — Detail Panel Mobile Compact ═══════ */
 
       /* Nivel selector: compact single line */
       .detail-panel>div:nth-child(2) {
@@ -8795,7 +8857,7 @@ ${dataContext}
         font-size: 8px !important;
       }
 
-      /* ═══════ V.7.0.4 — Sidebar Scroll Fix ═══════ */
+      /* ═══════ V.7.0.5 — Sidebar Scroll Fix ═══════ */
       .panel-left {
         max-height: calc(100vh - 60px) !important;
         overflow: hidden !important;
@@ -8810,7 +8872,7 @@ ${dataContext}
         min-height: 0 !important;
       }
 
-      /* ═══════ V.7.0.4 — Main View Width Containment ═══════ */
+      /* ═══════ V.7.0.5 — Main View Width Containment ═══════ */
       #section-operaciones {
         overflow-x: hidden !important;
         max-width: 100vw !important;
@@ -8844,7 +8906,7 @@ ${dataContext}
       }
     }
 
-    /* ═══════ V.7.0.4 — Notification Toggle Rows ═══════ */
+    /* ═══════ V.7.0.5 — Notification Toggle Rows ═══════ */
     .drawer-notif-toggle {
       display: flex;
       align-items: center;
@@ -8961,7 +9023,7 @@ ${dataContext}
       border-color: #e67e22;
     }
 
-    /* LEYENDA FERROCARRIL (V.7.0.4) */
+    /* LEYENDA FERROCARRIL (V.7.0.5) */
     .railway-legend {
       position: absolute;
       bottom: 80px;
@@ -9200,7 +9262,7 @@ ${dataContext}
 
         <!-- Footer actions -->
         <div class="drawer-foot" style="display:flex; flex-direction:column; gap:8px; flex-shrink:0;">
-          <!-- V.7.0.4: Notification Toggles -->
+          <!-- V.7.0.5: Notification Toggles -->
           <div class="drawer-notif-toggle">
             <div class="drawer-notif-info">
               <span class="drawer-notif-icon">🗺</span>
@@ -9267,7 +9329,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.7.0.4
+          V.7.0.5
         </div>
       </div>
 
@@ -9485,7 +9547,7 @@ ${dataContext}
         <!-- Listado de Intervenciones de un Día (ELIMINADO DE AQUÍ) -->
       </div>
 
-      <!-- V.7.0.4: Nuevo Panel de Detalle Deslizable -->
+      <!-- V.7.0.5: Nuevo Panel de Detalle Deslizable -->
       <div class="detail-panel" id="preventivos-detail-panel">
         <div class="dp-header">
           <div class="dp-scope-title">Detalle del Día</div>
@@ -10085,7 +10147,24 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL COMENTARIOS INTERVENCION (V.7.0.4) -->
+  <!-- MODAL COMENTARIOS INTERVENCION (V.7.0.5) -->
+  <!-- MODAL GESTION INTERVENCION (V.7.0.5) -->
+  <div class="overlay" id="overlay-prev-gestion-int" style="display:none;"
+    onclick="if(event.target===this) cerrarModalGestionInt()">
+    <div class="modal" style="width:380px;">
+      <div class="modal-head">
+        <div class="modal-title">Gestionar Intervención</div>
+        <button class="btn-close-dp" onclick="cerrarModalGestionInt()">✕</button>
+      </div>
+      <div class="modal-body" id="prev-gestion-int-body" style="display:flex; flex-direction:column; gap:12px;">
+        <!-- Se poblará dinámicamente -->
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel" onclick="cerrarModalGestionInt()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
   <div class="overlay" id="overlay-prev-comentarios" style="display:none;"
     onclick="if(event.target===this) cerrarModalComentarios()">
     <div class="modal" style="width:450px;">
@@ -10235,7 +10314,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.7.0.4
+            Versión V.7.0.5
           </div>
         </div>
         <div class="field" id="j-prov-row">
