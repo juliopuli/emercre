@@ -7,8 +7,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <link rel="apple-touch-icon" href="assets/logo_emercre.png?v=6.0.1">
-  <link rel="icon" type="image/png" href="assets/logo_emercre.png?v=6.0.1">
+  <link rel="apple-touch-icon" href="assets/logo_emercre.png?v=6.0.2">
+  <link rel="icon" type="image/png" href="assets/logo_emercre.png?v=6.0.2">
   <link rel="manifest" href="manifest.json">
   <title>EmerCRE — Sistema de Gestión de Catástrofes</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -382,7 +382,7 @@
         mostrarToast('Capa de ferrocarril activada');
       }
     };
-    console.log("EmerCRE V.6.0.1 Loaded");
+    console.log("EmerCRE V.6.0.2 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1747,35 +1747,14 @@
           const localVeh = localVehiclesByOystaId[mid];
           const isVisible = visibleVehicles[mid] !== false;
 
-          const content = document.createElement('div');
-
-          if (localVeh) {
-            // V.5.17.0: Vehículo vinculado -> Usar icono personalizado
-            content.className = `custom-marker oysta-linked-marker ${statusClass}`;
-            content.style.setProperty('--nivel-color', statusClass === 'moving' ? '#27ae60' : '#e67e22');
-
-            const iconMap = {
-              'Camión': 'assets/icons/truck.png',
-              'Vehículo transporte personal': 'assets/icons/van.png',
-              'Vehículo de transporte mixto': 'assets/icons/offroad.png',
-              'Ambulancia': 'assets/icons/ambulance.png',
-              'Vehículo Todo terreno': 'assets/icons/offroad.png'
-            };
-            const iconPath = iconMap[localVeh.tipo] || 'assets/icons/van.png';
-
-            // V.5.17.7: Solo mostrar dibujo si está vinculado (más limpio)
-            content.innerHTML = `
-              <div class="marker-main" style="width:32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-                <img src="${iconPath}" style="width:20px; height:20px; object-fit:contain;">
-              </div>
-            `;
+          let content;
+          if (typeof window.createOystaMarkerContent === 'function') {
+            content = window.createOystaMarkerContent(v, localVeh, statusClass);
           } else {
-            // Vehículo NO vinculado -> Pill por defecto
-            content.className = `oysta-marker ${statusClass}`;
+            content = document.createElement('div');
+            content.className = `oysta-marker`;
             content.innerHTML = v.name;
           }
-
-          content.title = `${v.name}${localVeh ? ' (' + localVeh.indicativo + ')' : ''}\nEstado: ${v.status}\nVelocidad: ${v.speed} km/h\nÚltima pos: ${v.last_pos}`;
 
           if (oystaMarkers[mid]) {
             oystaMarkers[mid].position = pos;
@@ -1856,6 +1835,33 @@
           map: gmap,
         });
       });
+    };
+
+    // V.6.6.1: Función global compartida para generar el HTML del marcador Oysta (Emergencias y Preventivos)
+    window.createOystaMarkerContent = (v, localVeh, statusClass) => {
+      const content = document.createElement('div');
+      if (localVeh) {
+        content.className = `custom-marker oysta-linked-marker ${statusClass}`;
+        content.style.setProperty('--nivel-color', statusClass === 'moving' ? '#27ae60' : '#e67e22');
+        const iconMap = {
+          'Camión': 'assets/icons/truck.png',
+          'Vehículo transporte personal': 'assets/icons/van.png',
+          'Vehículo de transporte mixto': 'assets/icons/offroad.png',
+          'Ambulancia': 'assets/icons/ambulance.png',
+          'Vehículo Todo terreno': 'assets/icons/offroad.png'
+        };
+        const iconPath = iconMap[localVeh.tipo] || 'assets/icons/van.png';
+        content.innerHTML = `
+          <div class="marker-main" style="width:32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+            <img src="${iconPath}" style="width:20px; height:20px; object-fit:contain;">
+          </div>
+        `;
+      } else {
+        content.className = `oysta-marker ${statusClass}`;
+        content.innerHTML = v.name;
+      }
+      content.title = `${v.name}${localVeh ? ' (' + localVeh.indicativo + ')' : ''}\nEstado: ${v.status}\nVelocidad: ${v.speed} km/h\nÚltima pos: ${v.last_pos}`;
+      return content;
     };
 
     // V.5.17.9: Función modular para renderizar la lista de vehículos
@@ -4608,11 +4614,23 @@ ${dataContext}
 
         if (oystaMarkersPrev[mid]) {
           oystaMarkersPrev[mid].position = pos;
+          if (typeof window.createOystaMarkerContent === 'function') {
+            const statusClass = (parseFloat(v.speed) > 5) ? 'moving' : 'stopped';
+            const localVeh = typeof localVehiclesByOystaId !== 'undefined' ? localVehiclesByOystaId[mid] : null;
+            oystaMarkersPrev[mid].content = window.createOystaMarkerContent(v, localVeh, statusClass);
+          }
           oystaMarkersPrev[mid].setMap(isVisible ? mapPreventivos : null);
         } else if (isVisible) {
-          const content = document.createElement('div');
-          content.className = `oysta-marker`;
-          content.innerHTML = v.name;
+          let content;
+          if (typeof window.createOystaMarkerContent === 'function') {
+            const statusClass = (parseFloat(v.speed) > 5) ? 'moving' : 'stopped';
+            const localVeh = typeof localVehiclesByOystaId !== 'undefined' ? localVehiclesByOystaId[mid] : null;
+            content = window.createOystaMarkerContent(v, localVeh, statusClass);
+          } else {
+            content = document.createElement('div');
+            content.className = `oysta-marker`;
+            content.innerHTML = v.name;
+          }
           const marker = new google.maps.marker.AdvancedMarkerElement({
             position: pos,
             map: mapPreventivos,
@@ -9001,7 +9019,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.6.0.1
+          V.6.0.2
         </div>
       </div>
 
@@ -9928,7 +9946,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.6.0.1
+            Versión V.6.0.2
           </div>
         </div>
         <div class="field" id="j-prov-row">
