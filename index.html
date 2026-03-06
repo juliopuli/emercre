@@ -434,8 +434,8 @@
       if (gmap) {
         if (oystaMarkers[mid]) {
           oystaMarkers[mid].position = pos;
-          oystaMarkers[mid].setMap(isVisible ? gmap : null);
-        } else if (isVisible) {
+          oystaMarkers[mid].setMap((isVisible && currentUserDoc?.canSeeVehicles) ? gmap : null);
+        } else if (isVisible && currentUserDoc?.canSeeVehicles) {
           // Si no existe, cargarVehiculosOysta se encargará de crearlo con todo el detalle
           cargarVehiculosOysta(true);
         }
@@ -484,7 +484,7 @@
         mostrarToast('Capa de ferrocarril activada');
       }
     };
-    console.log("EmerCRE V.8.1.3 Loaded");
+    console.log("EmerCRE V.8.1.4 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1459,14 +1459,17 @@
       }
 
       // Oysta Integration (V.8.1.0)
+      // Oysta Integration (V.8.1.4)
       const vehicleBtn = document.getElementById('btn-toggle-vehicles');
-      if (currentUserDoc.canSeeVehicles) {
-        if (vehicleBtn) vehicleBtn.style.display = 'flex';
-        suscribirVehiculosLocales();
-        ensureOystaScriptIsRunning();
-      } else {
-        if (vehicleBtn) vehicleBtn.style.display = 'none';
-      }
+      const vehicleBtnPrev = document.getElementById('btn-prev-toggle-vehicles');
+      const hasPermission = !!currentUserDoc.canSeeVehicles;
+
+      if (vehicleBtn) vehicleBtn.style.display = hasPermission ? 'flex' : 'none';
+      if (vehicleBtnPrev) vehicleBtnPrev.style.display = hasPermission ? 'flex' : 'none';
+      if (document.getElementById('mnav-vehiculos')) document.getElementById('mnav-vehiculos').style.display = hasPermission ? 'block' : 'none';
+
+      suscribirVehiculosLocales();
+      ensureOystaScriptIsRunning();
     }
 
     let oystaIntervalId = null;
@@ -1809,8 +1812,8 @@
         return;
       }
 
-      // V.8.1.0: Permitir carga siempre si es forzada, de lo contrario esperar disponibilidad de mapas
-      if (!currentUserDoc?.canSeeVehicles) return;
+      // V.8.1.4: Permitir carga siempre para que el cache esté disponible para asignaciones de preventivos
+      // if (!currentUserDoc?.canSeeVehicles) return; 
       if (!force && (!mapReady || (!gmap && !mapPreventivos))) {
         console.log(`[Oysta] Gating active: mapReady=${mapReady}, maps available=${!!gmap || !!mapPreventivos}`);
         return;
@@ -1903,14 +1906,14 @@
           if (oystaMarkers[mid]) {
             oystaMarkers[mid].position = pos;
             oystaMarkers[mid].content = content;
-            oystaMarkers[mid].setMap(isVisible ? gmap : null);
+            oystaMarkers[mid].setMap((isVisible && currentUserDoc?.canSeeVehicles) ? gmap : null);
             // Actualizar datos para el InfoWindow
             oystaMarkers[mid].vehicleData = v;
             oystaMarkers[mid].localVehicleData = localVeh;
           } else {
             const marker = new google.maps.marker.AdvancedMarkerElement({
               position: pos,
-              map: isVisible ? gmap : null,
+              map: (isVisible && currentUserDoc?.canSeeVehicles) ? gmap : null,
               content: content,
               title: v.name
             });
@@ -4760,7 +4763,7 @@ ${dataContext}
     };
 
     // ==========================================
-    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.1.3)
+    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.1.4)
     // ==========================================
 
     window.initMapPreventivos = () => {
@@ -4891,7 +4894,7 @@ ${dataContext}
           const localVeh = typeof localVehiclesByOystaId !== 'undefined' ? localVehiclesByOystaId[mid] : null;
           oystaMarkersPrev[mid].content = window.createOystaMarkerContent(v, localVeh, statusClass);
         }
-        oystaMarkersPrev[mid].setMap(isVisible ? mapPreventivos : null);
+        oystaMarkersPrev[mid].setMap((isVisible && currentUserDoc?.canSeeVehicles) ? mapPreventivos : null);
       } else if (isVisible) {
         let content;
         if (typeof window.createOystaMarkerContent === 'function') {
@@ -4905,7 +4908,7 @@ ${dataContext}
         }
         const marker = new google.maps.marker.AdvancedMarkerElement({
           position: pos,
-          map: mapPreventivos,
+          map: (isVisible && currentUserDoc?.canSeeVehicles) ? mapPreventivos : null,
           content: content,
           title: v.name,
           zIndex: 1000 // V.8.1.0: Asegurar visibilidad
@@ -10852,7 +10855,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.8.1.3
+          V.8.1.4
         </div>
       </div>
 
@@ -11082,7 +11085,7 @@ ${dataContext}
 
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.8.1.3
+          V.8.1.4
         </div>
       </div>
 
@@ -11898,7 +11901,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.1.3
+            Versión V.8.1.4
           </div>
         </div>
         <div class="field" id="j-prov-row">
