@@ -3493,14 +3493,14 @@ ${dataContext}
       }
       if (sec === 'operaciones' && gmap) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
 
-      // Toggle mobile FAB: only show on operaciones (V.7.3.2)
+      // Toggle mobile FAB: only show on operaciones (V.7.3.3)
       const fab = document.getElementById('btn-mobile-nueva-op');
       if (fab) {
         const isAdmin = currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'autonomica' || currentRole === 'provincial' || currentRole === 'manager';
         fab.style.display = (sec === 'operaciones' && window.innerWidth < 900 && isAdmin) ? 'flex' : 'none';
       }
 
-      // V.7.3.2: Gestionar visibilidad de botones de mapa en móvil en todos los cambios de sección
+      // V.7.3.3: Gestionar visibilidad de botones de mapa en móvil en todos los cambios de sección
       const mapZone = document.querySelector('.map-zone');
       const prevMapZone = document.querySelector('#section-preventivos .panel-right');
       const toggleBtn = document.getElementById('btn-mobile-map-toggle');
@@ -4638,7 +4638,7 @@ ${dataContext}
       });
     });
 
-    // --- LOGICA MOBILE V.7.3.2 ---
+    // --- LOGICA MOBILE V.7.3.3 ---
     window.toggleMobileMenu = () => {
       document.getElementById('mobile-menu-overlay').classList.toggle('open');
     };
@@ -4723,10 +4723,14 @@ ${dataContext}
         }
       };
 
-      // V.7.3.1: Asegurar script Oysta
-      if (currentUserDoc && currentUserDoc.canSeeVehicles) {
-        ensureOystaScriptIsRunning();
-      }
+      // V.7.3.3: Asegurar script Oysta y variable mapReady tras cargar el mapa
+      google.maps.event.addListenerOnce(mapPreventivos, 'tilesloaded', function () {
+        mapReady = true;
+        if (currentUserDoc && currentUserDoc.canSeeVehicles) {
+          ensureOystaScriptIsRunning();
+          cargarVehiculosOysta(true);
+        }
+      });
     };
 
     window.renderOystaVehicleListPrev = (vehicles) => {
