@@ -1168,13 +1168,17 @@
 
         const navOps = document.getElementById('nav-operaciones');
         const navPrev = document.getElementById('nav-preventivos');
+        const navChat = document.getElementById('nav-chat');
         const mnavOps = document.getElementById('mnav-operaciones');
         const mnavPrev = document.getElementById('mnav-preventivos');
+        const mnavChat = document.getElementById('mnav-chat');
 
         if (navOps) navOps.style.display = accesoEmergencias ? 'flex' : 'none';
         if (mnavOps) mnavOps.style.display = accesoEmergencias ? 'flex' : 'none';
         if (navPrev) navPrev.style.display = accesoPreventivos ? 'flex' : 'none';
         if (mnavPrev) mnavPrev.style.display = accesoPreventivos ? 'flex' : 'none';
+        if (navChat) navChat.style.display = accesoEmergencias ? 'flex' : 'none';
+        if (mnavChat) mnavChat.style.display = accesoEmergencias ? 'flex' : 'none';
 
         if (accesoEmergencias) {
           showSection('operaciones');
@@ -1398,7 +1402,9 @@
       suscribirGuardia();
       suscribirTodosLosJefes();
       cargarUsuariosParaChat();
-      suscribirNotificacionesChat();
+      if (currentUserDoc.accesoEmergencias !== false) {
+        suscribirNotificacionesChat();
+      }
       if (gmap && mapReady) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
 
       // ── MOBILE DRAWER POPULATION (V.7.4.0) ──────────────────────────
@@ -3474,6 +3480,14 @@ ${dataContext}
 
     // ── SECTIONS ───────────────────────────────────────────────────────
     window.showSection = sec => {
+      // V.7.4.0: Bloqueo explícito de chat si no tiene acceso a emergencias
+      if (sec === 'chat' && currentUserDoc.accesoEmergencias === false) {
+        mostrarToast('Acceso al Chat restringido por permisos.');
+        if (currentUserDoc.accesoPreventivos) showSection('preventivos');
+        else showSection('operaciones');
+        return;
+      }
+
       document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
       document.getElementById('section-operaciones').style.display = sec === 'operaciones' ? 'flex' : 'none';
       if (document.getElementById('section-preventivos')) {
@@ -10261,8 +10275,8 @@ ${dataContext}
         Emergencias</button>
       <button class="nav-item" id="nav-preventivos" data-sec="preventivos" onclick="showSection('preventivos')"
         style="display:none">⚕️ Preventivos</button>
-      <button class="nav-item" data-sec="chat" onclick="showSection('chat')">💬 Chat <span
-          id="nav-chat-badge"></span></button>
+      <button class="nav-item" id="nav-chat" data-sec="chat" onclick="showSection('chat')" style="display:none">💬 Chat
+        <span id="nav-chat-badge"></span></button>
       <button class="nav-item" id="nav-usuarios" data-sec="usuarios" onclick="showSection('usuarios')"
         style="display:none">👥 Usuarios</button>
       <button class="nav-item" id="nav-tablas" data-sec="tablas" onclick="showSection('tablas')" style="display:none">🗂
@@ -10327,8 +10341,8 @@ ${dataContext}
             onclick="mobileShowSection('operaciones')">🚨 Emergencias</button>
           <button class="drawer-item" id="mnav-preventivos" data-sec="preventivos"
             onclick="mobileShowSection('preventivos')" style="display:none">⚕️ Preventivos</button>
-          <button class="drawer-item" data-sec="chat" onclick="mobileShowSection('chat')">💬 Chat <span
-              id="mnav-chat-badge"></span></button>
+          <button class="drawer-item" id="mnav-chat" data-sec="chat" onclick="mobileShowSection('chat')"
+            style="display:none">💬 Chat <span id="mnav-chat-badge"></span></button>
           <button class="drawer-item" id="mnav-usuarios" data-sec="usuarios" onclick="mobileShowSection('usuarios')"
             style="display:none">👥 Usuarios</button>
           <button class="drawer-item" id="mnav-tablas" data-sec="tablas" onclick="mobileShowSection('tablas')"
