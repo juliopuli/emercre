@@ -3493,11 +3493,32 @@ ${dataContext}
       }
       if (sec === 'operaciones' && gmap) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
 
-      // Toggle mobile FAB: only show on operaciones (V.7.3.1)
+      // Toggle mobile FAB: only show on operaciones (V.7.3.2)
       const fab = document.getElementById('btn-mobile-nueva-op');
       if (fab) {
         const isAdmin = currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'autonomica' || currentRole === 'provincial' || currentRole === 'manager';
         fab.style.display = (sec === 'operaciones' && window.innerWidth < 900 && isAdmin) ? 'flex' : 'none';
+      }
+
+      // V.7.3.2: Gestionar visibilidad de botones de mapa en móvil en todos los cambios de sección
+      const mapZone = document.querySelector('.map-zone');
+      const prevMapZone = document.querySelector('#section-preventivos .panel-right');
+      const toggleBtn = document.getElementById('btn-mobile-map-toggle');
+      const toggleBtnPrev = document.getElementById('btn-mobile-map-toggle-prev');
+
+      if (sec === 'operaciones') {
+        if (toggleBtnPrev) { toggleBtnPrev.style.display = 'none'; toggleBtnPrev.textContent = 'Ver Mapa 🗺'; }
+        if (prevMapZone) prevMapZone.classList.remove('mobile-on');
+        if (toggleBtn && window.innerWidth <= 900) toggleBtn.style.display = 'block';
+      } else if (sec === 'preventivos') {
+        if (toggleBtn) { toggleBtn.style.display = 'none'; toggleBtn.textContent = 'Ver Mapa 🗺'; }
+        if (mapZone) mapZone.classList.remove('mobile-on');
+        if (toggleBtnPrev && window.innerWidth <= 900) toggleBtnPrev.style.display = 'block';
+      } else {
+        if (toggleBtn) { toggleBtn.style.display = 'none'; toggleBtn.textContent = 'Ver Mapa 🗺'; }
+        if (toggleBtnPrev) { toggleBtnPrev.style.display = 'none'; toggleBtnPrev.textContent = 'Ver Mapa 🗺'; }
+        if (mapZone) mapZone.classList.remove('mobile-on');
+        if (prevMapZone) prevMapZone.classList.remove('mobile-on');
       }
     };
 
@@ -4617,7 +4638,7 @@ ${dataContext}
       });
     });
 
-    // --- LOGICA MOBILE V.7.3.1 ---
+    // --- LOGICA MOBILE V.7.3.2 ---
     window.toggleMobileMenu = () => {
       document.getElementById('mobile-menu-overlay').classList.toggle('open');
     };
@@ -4627,35 +4648,6 @@ ${dataContext}
       showSection(sec);
       // Actualizar visual en el drawer
       document.querySelectorAll('.drawer-item').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
-
-      // Resetear estado del mapa al cambiar de sección
-      const mapZone = document.querySelector('.map-zone');
-      const prevMapZone = document.querySelector('#section-preventivos .panel-right');
-      const toggleBtn = document.getElementById('btn-mobile-map-toggle');
-      const toggleBtnPrev = document.getElementById('btn-mobile-map-toggle-prev');
-
-      if (sec === 'operaciones') {
-        if (toggleBtnPrev) {
-          toggleBtnPrev.style.display = 'none';
-          toggleBtnPrev.textContent = 'Ver Mapa 🗺';
-        }
-        if (prevMapZone) prevMapZone.classList.remove('mobile-on');
-
-        if (toggleBtn && window.innerWidth <= 900) toggleBtn.style.display = 'block';
-      } else if (sec === 'preventivos') {
-        if (toggleBtn) {
-          toggleBtn.style.display = 'none';
-          toggleBtn.textContent = 'Ver Mapa 🗺';
-        }
-        if (mapZone) mapZone.classList.remove('mobile-on');
-
-        if (toggleBtnPrev && window.innerWidth <= 900) toggleBtnPrev.style.display = 'block';
-      } else {
-        if (toggleBtn) { toggleBtn.style.display = 'none'; toggleBtn.textContent = 'Ver Mapa 🗺'; }
-        if (toggleBtnPrev) { toggleBtnPrev.style.display = 'none'; toggleBtnPrev.textContent = 'Ver Mapa 🗺'; }
-        if (mapZone) mapZone.classList.remove('mobile-on');
-        if (prevMapZone) prevMapZone.classList.remove('mobile-on');
-      }
     };
 
     window.toggleMobileMap = () => {
@@ -9408,6 +9400,11 @@ ${dataContext}
         right: 0;
         bottom: 0;
         z-index: 550;
+      }
+
+      .map-zone.mobile-on,
+      #section-preventivos .panel-right.mobile-on {
+        display: block !important;
       }
 
       .map-zone {
