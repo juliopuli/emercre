@@ -669,6 +669,9 @@
       const filteredUsers = allUsersCache.filter(u => {
         if (u.uid === currentUser.uid) return false;
 
+        // V.7.4.0: Si el usuario NO tiene acceso a emergencias, no aparece en el chat de nadie
+        if (u.accesoEmergencias === false) return false;
+
         // NUEVA REGLA: Los Jefes de Operaciones activos siempre pueden verse entre sí
         const amIJefe = Object.values(allJefesGuardiaCacheMap).includes(currentUserDoc.nombre);
         const isOtherJefe = Object.values(allJefesGuardiaCacheMap).includes(u.nombre);
