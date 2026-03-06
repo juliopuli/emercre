@@ -3938,6 +3938,12 @@ ${dataContext}
 
       renderSidebar();
       renderMapa();
+      // V.7.4.0: Refrescar preventivos
+      if (typeof renderPreventivosList === 'function' && lastPreventivosSnap) {
+        renderPreventivosList(lastPreventivosSnap);
+      }
+      if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
+
       actualizarContadores();
       suscribirGuardia();
       suscribirJefesSelect(); // Refrescar listas de jefes filtradas
@@ -4879,6 +4885,10 @@ ${dataContext}
       list.innerHTML = snap.docs.map(doc => {
         const p = doc.data();
         const id = doc.id;
+
+        // V.7.4.0: Filtrado Provincial
+        if (selectedProvincia !== 'Andalucía' && p.provincia !== selectedProvincia) return '';
+
         preventivosCache[id] = p;
 
         // V.7.4.0: Filtrar si está finalizado/oculto
@@ -4960,6 +4970,7 @@ ${dataContext}
         document.getElementById('prev-main-nombre').value = '';
         document.getElementById('prev-main-fecha-ini').value = '';
         document.getElementById('prev-main-fecha-fin').value = '';
+        document.getElementById('prev-main-provincia').value = selectedProvincia !== 'Andalucía' ? selectedProvincia : 'Andalucía';
         document.getElementById('prev-main-dias').value = '';
       }
 
