@@ -3493,14 +3493,14 @@ ${dataContext}
       }
       if (sec === 'operaciones' && gmap) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
 
-      // Toggle mobile FAB: only show on operaciones (V.7.3.3)
+      // Toggle mobile FAB: only show on operaciones (V.7.3.4)
       const fab = document.getElementById('btn-mobile-nueva-op');
       if (fab) {
         const isAdmin = currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'autonomica' || currentRole === 'provincial' || currentRole === 'manager';
         fab.style.display = (sec === 'operaciones' && window.innerWidth < 900 && isAdmin) ? 'flex' : 'none';
       }
 
-      // V.7.3.3: Gestionar visibilidad de botones de mapa en móvil en todos los cambios de sección
+      // V.7.3.4: Gestionar visibilidad de botones de mapa en móvil en todos los cambios de sección
       const mapZone = document.querySelector('.map-zone');
       const prevMapZone = document.querySelector('#section-preventivos .panel-right');
       const toggleBtn = document.getElementById('btn-mobile-map-toggle');
@@ -4638,7 +4638,7 @@ ${dataContext}
       });
     });
 
-    // --- LOGICA MOBILE V.7.3.3 ---
+    // --- LOGICA MOBILE V.7.3.4 ---
     window.toggleMobileMenu = () => {
       document.getElementById('mobile-menu-overlay').classList.toggle('open');
     };
@@ -4723,7 +4723,7 @@ ${dataContext}
         }
       };
 
-      // V.7.3.3: Asegurar script Oysta y variable mapReady tras cargar el mapa
+      // V.7.3.4: Asegurar script Oysta y variable mapReady tras cargar el mapa
       google.maps.event.addListenerOnce(mapPreventivos, 'tilesloaded', function () {
         mapReady = true;
         if (currentUserDoc && currentUserDoc.canSeeVehicles) {
@@ -10470,8 +10470,9 @@ ${dataContext}
       <button id="btn-mobile-map-toggle" class="btn-mobile-map-toggle" onclick="toggleMobileMap()">Ver Mapa 🗺</button>
       <div class="map-zone">
         <div class="map-controls-floating">
-          <div id="oysta-status-indicator" class="map-btn-float"
-            style="font-size: 9px; pointer-events: none; opacity: 0.9; display: none; background: rgba(11, 34, 65, 0.9); border-color: var(--accent); color: white; min-width: 140px; justify-content: center;">
+          <div id="oysta-status-indicator" class="map-btn-float" onclick="cargarVehiculosOysta(true)"
+            title="Forzar sincronización Oysta"
+            style="font-size: 9px; cursor: pointer; opacity: 0.9; display: none; background: rgba(11, 34, 65, 0.9); border-color: var(--accent); color: white; min-width: 140px; justify-content: center;">
             🛰️ Oysta: <span id="oysta-status-text" style="font-weight: 700; margin-left: 4px;">Sincronizando...</span>
           </div>
           <button id="btn-toggle-traffic" class="map-btn-float" onclick="toggleTraffic()">🚦 Tráfico</button>
@@ -10606,9 +10607,10 @@ ${dataContext}
           <div class="dp-top-row">
             <div id="prev-dp-breadcrumb" style="font-size: 13px; font-weight: 600; color: var(--text-2);"></div>
             <div style="display:flex; align-items:center; gap:10px;">
-              <!-- V.7.3.1: Status Oysta para Super Admin -->
-              <div id="oysta-status-indicator-prev"
-                style="font-size: 8px; opacity: 0.8; display: none; background: rgba(0,0,0,0.4); padding: 2px 6px; border-radius: 4px; color: white;">
+              <!-- V.7.3.4: Status Oysta para Super Admin (Clickable) -->
+              <div id="oysta-status-indicator-prev" onclick="window.cargarVehiculosOysta(true)"
+                title="Forzar sincronización Oysta"
+                style="font-size: 8px; opacity: 0.8; display: none; cursor: pointer; background: rgba(0,0,0,0.4); padding: 2px 6px; border-radius: 4px; color: white;">
                 🛰️ <span id="oysta-status-text-prev">Sync...</span>
               </div>
               <button class="btn-close-dp" onclick="cerrarDetallePreventivo()">✕</button>
