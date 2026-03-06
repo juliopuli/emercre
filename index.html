@@ -452,6 +452,19 @@
       return visibleVehiclesPrev[id] !== false;
     }
 
+    // Helper para cálculo de distancia (Haversine) - V.8.1.5
+    function haversineDistance(p1, p2) {
+      if (!p1 || !p2) return 999;
+      const R = 6371; // Radio de la Tierra en km
+      const dLat = (p2.lat - p1.lat) * Math.PI / 180;
+      const dLon = (p2.lng - p1.lng) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(p1.lat * Math.PI / 180) * Math.cos(p2.lat * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      return R * c;
+    }
+
 
 
     let railwayLayer = null;
@@ -484,7 +497,7 @@
         mostrarToast('Capa de ferrocarril activada');
       }
     };
-    console.log("EmerCRE V.8.1.4 Loaded");
+    console.log("EmerCRE V.8.1.5 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1459,7 +1472,7 @@
       }
 
       // Oysta Integration (V.8.1.0)
-      // Oysta Integration (V.8.1.4)
+      // Oysta Integration (V.8.1.5)
       const vehicleBtn = document.getElementById('btn-toggle-vehicles');
       const vehicleBtnPrev = document.getElementById('btn-prev-toggle-vehicles');
       const hasPermission = !!currentUserDoc.canSeeVehicles;
@@ -1812,7 +1825,7 @@
         return;
       }
 
-      // V.8.1.4: Permitir carga siempre para que el cache esté disponible para asignaciones de preventivos
+      // V.8.1.5: Permitir carga siempre para que el cache esté disponible para asignaciones de preventivos
       // if (!currentUserDoc?.canSeeVehicles) return; 
       if (!force && (!mapReady || (!gmap && !mapPreventivos))) {
         console.log(`[Oysta] Gating active: mapReady=${mapReady}, maps available=${!!gmap || !!mapPreventivos}`);
@@ -4763,7 +4776,7 @@ ${dataContext}
     };
 
     // ==========================================
-    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.1.4)
+    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.1.5)
     // ==========================================
 
     window.initMapPreventivos = () => {
@@ -5842,6 +5855,44 @@ ${dataContext}
           zIndex: 900
         });
         window._prevIntVehicleMarkers[vehicleId] = marker;
+
+        // V.8.1.5: Monitorización de Estados (Salida y Llegada Automática)
+        const iDoc = interventionDocs.find(d => d.id === renderData.interventionId);
+        if (iDoc) {
+          const iData = iDoc.data();
+          const indicativo = localVeh.indicativo || oystaVeh.name;
+          const comments = iData.comentarios || [];
+
+          // 1. Salida: Se considera "en movimiento" si speed > 5
+          const isMoving = parseFloat(oystaVeh.speed) > 5;
+          const hasDeparted = comments.some(c => c.texto && c.texto.includes("sale hacia el lugar") && c.texto.includes(indicativo));
+
+          if (!hasDeparted && isMoving) {
+            const logComm = {
+              texto: `⚡️ ${indicativo} sale hacia el lugar.`,
+              autor: 'Sist. Oysta',
+              autorId: 'system',
+              timestamp: Date.now(),
+              fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+            };
+            updateDoc(iDoc.ref, { comentarios: [...comments, logComm] });
+          }
+
+          // 2. Llegada: En un radio de 100m (0.1km)
+          const dist = haversineDistance(pos, iData.coords);
+          const hasArrived = comments.some(c => c.texto && c.texto.includes("llega al lugar del aviso") && c.texto.includes(indicativo));
+
+          if (!hasArrived && dist < 0.1) {
+            const logComm = {
+              texto: `✅ ${indicativo} llega al lugar del aviso.`,
+              autor: 'Sist. Oysta',
+              autorId: 'system',
+              timestamp: Date.now(),
+              fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+            };
+            updateDoc(iDoc.ref, { comentarios: [...(iData.comentarios || []), logComm] });
+          }
+        }
 
         // ------ B. RUTA DINÁMICA ------
         // V.8.1.0: Sólo trazamos ruta si la intervención es Atención Urgente (rojo)
@@ -10855,7 +10906,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.8.1.4
+          V.8.1.5
         </div>
       </div>
 
@@ -11085,7 +11136,7 @@ ${dataContext}
 
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.8.1.4
+          V.8.1.5
         </div>
       </div>
 
@@ -11901,7 +11952,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.1.4
+            Versión V.8.1.5
           </div>
         </div>
         <div class="field" id="j-prov-row">
