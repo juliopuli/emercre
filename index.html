@@ -4552,16 +4552,6 @@ ${dataContext}
       document.getElementById('screen-login').style.display = 'flex';
       document.getElementById('screen-app').style.display = 'none';
       const btn = document.getElementById('btn-login');
-      onAuthStateChanged(auth, user => {
-        if (user) {
-          currentUser = user;
-          console.log("Logged as:", user.email);
-          document.getElementById('screen-login').style.display = 'none';
-          document.getElementById('screen-app').style.display = 'block';
-        } else {
-          window.doLogout();
-        }
-      });
       if (btn) { btn.disabled = false; btn.textContent = 'Login'; }
     }
     function mostrarApp() {
@@ -5273,26 +5263,18 @@ ${dataContext}
         return;
       }
 
-      currentPreventivoId = subpreventivosCache[id]?.preventivoId || currentPreventivoId; // Asegurar pId
-      window.selectSubpreventivo = (id) => {
-        const d = subpreventivosCache[id];
-        if (d && d.abierta === false) {
-          mostrarToast('Día cerrado. Reábrelo para ver su contenido.');
-          return;
-        }
+      currentPreventivoId = d?.preventivoId || currentPreventivoId;
+      currentPreventivoDiaId = id;
+      activeIntManageId = null;
 
-        currentPreventivoId = d?.preventivoId || currentPreventivoId;
-        currentPreventivoDiaId = id;
-        activeIntManageId = null;
+      document.getElementById('preventivos-detail-panel').classList.add('open');
+      if (currentPreventivoId) cargarSubpreventivos(currentPreventivoId);
 
-        document.getElementById('preventivos-detail-panel').classList.add('open');
-        if (currentPreventivoId) cargarSubpreventivos(currentPreventivoId);
-
-        const bCont = document.getElementById('prev-dp-breadcrumb');
-        if (preventivosCache[currentPreventivoId]) {
-          const pMother = preventivosCache[currentPreventivoId];
-          const isClosed = d.abierta === false;
-          bCont.innerHTML = `
+      const bCont = document.getElementById('prev-dp-breadcrumb');
+      if (preventivosCache[currentPreventivoId]) {
+        const pMother = preventivosCache[currentPreventivoId];
+        const isClosed = d.abierta === false;
+        bCont.innerHTML = `
           <div style="display:flex; align-items:center; gap:10px;">
             <div>
               <span style="color:var(--accent); font-weight:700;">${pMother.nombre}</span> / ${d.nombre}
@@ -5310,73 +5292,73 @@ ${dataContext}
             </div>
           </div>
         `;
-        }
-
-        // Renderizar recursos del día
-        const recCont = document.getElementById('prev-recursos-dia-container');
-        if (recCont) {
-          const occupiedResources = new Set();
-          Object.keys(intervencionesCache).forEach(k => {
-            const other = intervencionesCache[k];
-            if (other.abierta !== false && !other.oculta) {
-              (other.recursosAsignados || []).forEach(r => occupiedResources.add(r));
-            }
-          });
-          recCont.innerHTML = window.renderResourceBadges(d.recursos, occupiedResources);
-        }
-
-        cargarIntervenciones(currentPreventivoId, id);
-      };
-
-      window.backToPreventivoDias = () => {
-        // V.7.1.0: Esto ahora solo cierra el detalle ya que el acordeón es permanente
-        cerrarDetallePreventivo();
-      };
-
-      function cargarIntervenciones(pId, dId) {
-        if (unsubIntervenciones) unsubIntervenciones();
-        const q = query(collection(db, 'preventivos', pId, 'subpreventivos', dId, 'intervenciones'), orderBy('timestamp', 'desc'));
-        unsubIntervenciones = onSnapshot(q, snap => {
-          lastIntervencionesSnap = snap;
-          renderPreventivoIntervenciones(snap);
-        });
       }
 
-      function renderPreventivoIntervenciones(snap) {
-        if (!snap) return;
-        const cont = document.getElementById('prev-intervenciones-container');
-        if (!cont) return;
+      // Renderizar recursos del día
+      const recCont = document.getElementById('prev-recursos-dia-container');
+      if (recCont) {
+        const occupiedResources = new Set();
+        Object.keys(intervencionesCache).forEach(k => {
+          const other = intervencionesCache[k];
+          if (other.abierta !== false && !other.oculta) {
+            (other.recursosAsignados || []).forEach(r => occupiedResources.add(r));
+          }
+        });
+        recCont.innerHTML = window.renderResourceBadges(d.recursos, occupiedResources);
+      }
 
-        clearPreventivoMarkers();
+      cargarIntervenciones(currentPreventivoId, id);
+    };
 
-        if (snap.empty) {
-          cont.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-4);">Sin intervenciones registradas este día.</div>';
-          return;
+    window.backToPreventivoDias = () => {
+      // V.7.1.0: Esto ahora solo cierra el detalle ya que el acordeón es permanente
+      cerrarDetallePreventivo();
+    };
+
+    function cargarIntervenciones(pId, dId) {
+      if (unsubIntervenciones) unsubIntervenciones();
+      const q = query(collection(db, 'preventivos', pId, 'subpreventivos', dId, 'intervenciones'), orderBy('timestamp', 'desc'));
+      unsubIntervenciones = onSnapshot(q, snap => {
+        lastIntervencionesSnap = snap;
+        renderPreventivoIntervenciones(snap);
+      });
+    }
+
+    function renderPreventivoIntervenciones(snap) {
+      if (!snap) return;
+      const cont = document.getElementById('prev-intervenciones-container');
+      if (!cont) return;
+
+      clearPreventivoMarkers();
+
+      if (snap.empty) {
+        cont.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-4);">Sin intervenciones registradas este día.</div>';
+        return;
+      }
+
+      const bounds = new google.maps.LatLngBounds();
+      let hasCoords = false;
+      let intCache = {};
+
+      cont.innerHTML = snap.docs.map(doc => {
+        const i = doc.data();
+        const markerId = doc.id;
+        intCache[markerId] = i;
+
+        const isClosed = i.abierta === false;
+
+        if (i.coords && i.oculta !== true && !(isClosed && currentRole === 'usuario')) {
+          hasCoords = true;
+          bounds.extend(i.coords);
+          addInterventionMarker(markerId, i);
         }
 
-        const bounds = new google.maps.LatLngBounds();
-        let hasCoords = false;
-        let intCache = {};
+        if (i.oculta === true && !mostrarCerradas) return '';
+        if (isClosed && currentRole === 'usuario') return ''; // V.7.1.0: Usuarios no ven cerradas
 
-        cont.innerHTML = snap.docs.map(doc => {
-          const i = doc.data();
-          const markerId = doc.id;
-          intCache[markerId] = i;
+        const prioColor = { verde: '#2ecc71', amarillo: '#f1c40f', rojo: '#e74c3c', negro: '#000' }[i.prioridad] || '#95a5a6';
 
-          const isClosed = i.abierta === false;
-
-          if (i.coords && i.oculta !== true && !(isClosed && currentRole === 'usuario')) {
-            hasCoords = true;
-            bounds.extend(i.coords);
-            addInterventionMarker(markerId, i);
-          }
-
-          if (i.oculta === true && !mostrarCerradas) return '';
-          if (isClosed && currentRole === 'usuario') return ''; // V.7.1.0: Usuarios no ven cerradas
-
-          const prioColor = { verde: '#2ecc71', amarillo: '#f1c40f', rojo: '#e74c3c', negro: '#000' }[i.prioridad] || '#95a5a6';
-
-          return `
+        return `
         <div class="op-card ${isClosed ? 'op-cerrada' : ''}" style="border-left: 4px solid ${prioColor}; ${isClosed ? 'opacity:0.6;' : ''}" onclick="abrirGestionIntervencion('${markerId}')">
                   <div class="card-top">
                     <div style="flex:1">
@@ -5397,23 +5379,23 @@ ${dataContext}
                   </div>
                   <div style="margin-top:8px; display:flex; gap:4px; flex-wrap:wrap;">
                     ${(i.recursosAsignados || []).map(r => {
-            const v = window.globalVehiculos && window.globalVehiculos[r];
-            let iconUrl = 'assets/icons/van.png';
-            let label = r;
-            if (v) {
-              if (v.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
-              else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
-              else if (v.tipo === 'Vehículo Todo terreno' || v.tipo === 'Todo Terreno') iconUrl = 'assets/icons/offroad.png';
-              else if (v.tipo === 'Vehículo transporte personal' || v.tipo === 'Vehículo de transporte mixto') iconUrl = 'assets/icons/van.png';
-              label = v.indicativo || 'SIN IND';
-            } else {
-              return `<span style="font-size:9px; background:var(--bg-2); padding:2px 6px; border:1px solid var(--border-mid); border-radius:3px; color:var(--text-2);">🚗 ${r}</span>`;
-            }
-            return `<span style="font-size:9px; background:var(--bg-2); padding:2px 4px; border:1px solid var(--border-mid); border-radius:3px; color:var(--text-2); display:inline-flex; align-items:center; gap:2px;">
+          const v = window.globalVehiculos && window.globalVehiculos[r];
+          let iconUrl = 'assets/icons/van.png';
+          let label = r;
+          if (v) {
+            if (v.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
+            else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
+            else if (v.tipo === 'Vehículo Todo terreno' || v.tipo === 'Todo Terreno') iconUrl = 'assets/icons/offroad.png';
+            else if (v.tipo === 'Vehículo transporte personal' || v.tipo === 'Vehículo de transporte mixto') iconUrl = 'assets/icons/van.png';
+            label = v.indicativo || 'SIN IND';
+          } else {
+            return `<span style="font-size:9px; background:var(--bg-2); padding:2px 6px; border:1px solid var(--border-mid); border-radius:3px; color:var(--text-2);">🚗 ${r}</span>`;
+          }
+          return `<span style="font-size:9px; background:var(--bg-2); padding:2px 4px; border:1px solid var(--border-mid); border-radius:3px; color:var(--text-2); display:inline-flex; align-items:center; gap:2px;">
                                <img src="${iconUrl}" style="width:10px; height:10px;">
                                ${label}
                              </span>`;
-          }).join('')}
+        }).join('')}
                   </div>
                   </div>
                   <!--V.7.1.0: Sección de gestión inline-->
@@ -5422,126 +5404,126 @@ ${dataContext}
         </div>
                 </div>
         `;
-        }).join('');
+      }).join('');
 
-        intervencionesCache = intCache;
+      intervencionesCache = intCache;
 
-        // V.7.1.0: Refrescar semáforos de la cabecera reactivamente
-        if (currentPreventivoDiaId) renderHeaderResourceBadges(currentPreventivoDiaId);
+      // V.7.1.0: Refrescar semáforos de la cabecera reactivamente
+      if (currentPreventivoDiaId) renderHeaderResourceBadges(currentPreventivoDiaId);
 
-        // V.7.1.0: Si había un panel abierto, lo recuperamos (para que se vean los comentarios nuevos reactivamente)
-        if (activeIntManageId && intervencionesCache[activeIntManageId]) {
-          setTimeout(() => abrirGestionIntervencion(activeIntManageId), 10);
-        }
-
-        if (hasCoords && mapPreventivos) {
-          mapPreventivos.fitBounds(bounds);
-          if (mapPreventivos.getZoom() > 16) mapPreventivos.setZoom(16);
-        }
+      // V.7.1.0: Si había un panel abierto, lo recuperamos (para que se vean los comentarios nuevos reactivamente)
+      if (activeIntManageId && intervencionesCache[activeIntManageId]) {
+        setTimeout(() => abrirGestionIntervencion(activeIntManageId), 10);
       }
 
-      function clearPreventivoMarkers() {
-        Object.values(markersPreventivos).forEach(m => m.map = null);
-        markersPreventivos = {};
+      if (hasCoords && mapPreventivos) {
+        mapPreventivos.fitBounds(bounds);
+        if (mapPreventivos.getZoom() > 16) mapPreventivos.setZoom(16);
+      }
+    }
+
+    function clearPreventivoMarkers() {
+      Object.values(markersPreventivos).forEach(m => m.map = null);
+      markersPreventivos = {};
+    }
+
+    function addInterventionMarker(id, i) {
+      if (!mapPreventivos || !i.coords) return;
+
+      const pin = new google.maps.marker.PinElement({
+        background: { verde: '#2ecc71', amarillo: '#f1c40f', rojo: '#e74c3c', negro: '#000' }[i.prioridad] || '#95a5a6',
+        borderColor: '#fff',
+        glyphColor: '#fff',
+        scale: 1.0
+      });
+
+      markersPreventivos[id] = new google.maps.marker.AdvancedMarkerElement({
+        position: i.coords,
+        map: mapPreventivos,
+        content: pin.element,
+        title: i.descripcion
+      });
+    }
+
+    window.panToPreventivoMarker = (id) => {
+      const m = markersPreventivos[id];
+      if (m && mapPreventivos) {
+        mapPreventivos.panTo(m.position);
+        mapPreventivos.setZoom(17);
+      }
+    };
+
+    window.abrirModalPreventivoIntervencion = function (isEdit) {
+      window.ensureAutocompletePrevInt();
+      // editIntervencionId se resetea solo si no venimos de abrirEditarIntervencion
+      if (isEdit !== true) {
+        editIntervencionId = null;
+        document.querySelector('#overlay-preventivo-intervencion .modal-title').innerText = 'Nueva Intervención';
+        document.getElementById('btn-save-prev-int').innerText = 'Registrar Intervención';
       }
 
-      function addInterventionMarker(id, i) {
-        if (!mapPreventivos || !i.coords) return;
+      const d = subpreventivosCache[currentPreventivoDiaId];
+      const iEdit = editIntervencionId ? intervencionesCache[editIntervencionId] : null;
 
-        const pin = new google.maps.marker.PinElement({
-          background: { verde: '#2ecc71', amarillo: '#f1c40f', rojo: '#e74c3c', negro: '#000' }[i.prioridad] || '#95a5a6',
-          borderColor: '#fff',
-          glyphColor: '#fff',
-          scale: 1.0
-        });
-
-        markersPreventivos[id] = new google.maps.marker.AdvancedMarkerElement({
-          position: i.coords,
-          map: mapPreventivos,
-          content: pin.element,
-          title: i.descripcion
-        });
-      }
-
-      window.panToPreventivoMarker = (id) => {
-        const m = markersPreventivos[id];
-        if (m && mapPreventivos) {
-          mapPreventivos.panTo(m.position);
-          mapPreventivos.setZoom(17);
-        }
-      };
-
-      window.abrirModalPreventivoIntervencion = function (isEdit) {
-        window.ensureAutocompletePrevInt();
-        // editIntervencionId se resetea solo si no venimos de abrirEditarIntervencion
-        if (isEdit !== true) {
-          editIntervencionId = null;
-          document.querySelector('#overlay-preventivo-intervencion .modal-title').innerText = 'Nueva Intervención';
-          document.getElementById('btn-save-prev-int').innerText = 'Registrar Intervención';
-        }
-
-        const d = subpreventivosCache[currentPreventivoDiaId];
-        const iEdit = editIntervencionId ? intervencionesCache[editIntervencionId] : null;
-
-        // Reset fields if not edit
-        if (isEdit) {
-          if (iEdit) {
-            document.getElementById('prev-int-desc').value = iEdit.descripcion || '';
-            document.getElementById('prev-int-dir').value = iEdit.direccion || '';
-            document.getElementById('prev-int-prio').value = iEdit.prioridad || 'verde';
-            if (iEdit.coords) {
-              pickedCoordsPrev = iEdit.coords;
-              document.getElementById('prev-int-coords').innerText = `Ubicación: ${pickedCoordsPrev.lat.toFixed(5)}, ${pickedCoordsPrev.lng.toFixed(5)}`;
-            }
+      // Reset fields if not edit
+      if (isEdit) {
+        if (iEdit) {
+          document.getElementById('prev-int-desc').value = iEdit.descripcion || '';
+          document.getElementById('prev-int-dir').value = iEdit.direccion || '';
+          document.getElementById('prev-int-prio').value = iEdit.prioridad || 'verde';
+          if (iEdit.coords) {
+            pickedCoordsPrev = iEdit.coords;
+            document.getElementById('prev-int-coords').innerText = `Ubicación: ${pickedCoordsPrev.lat.toFixed(5)}, ${pickedCoordsPrev.lng.toFixed(5)}`;
           }
-        } else {
-          document.getElementById('prev-int-desc').value = '';
-          document.getElementById('prev-int-dir').value = '';
-          document.getElementById('prev-int-prio').value = 'verde';
-          document.getElementById('prev-int-coords').innerText = 'Sin coordenadas fijadas.';
-          pickedCoordsPrev = null;
         }
+      } else {
+        document.getElementById('prev-int-desc').value = '';
+        document.getElementById('prev-int-dir').value = '';
+        document.getElementById('prev-int-prio').value = 'verde';
+        document.getElementById('prev-int-coords').innerText = 'Sin coordenadas fijadas.';
+        pickedCoordsPrev = null;
+      }
 
-        const recList = document.getElementById('prev-int-recursos-list');
-        if (!d || !d.recursos || d.recursos.length === 0) {
-          recList.innerHTML = '<div style="font-size:11px; color:var(--text-4);">No hay recursos asignados a este día.</div>';
-        } else {
-          // Recursos ocupados en otras intervenciones ABIERTAS del mismo día
-          const occupiedResources = new Set();
-          Object.keys(intervencionesCache).forEach(k => {
-            const other = intervencionesCache[k];
-            if (k !== editIntervencionId && other.abierta !== false && !other.oculta) {
-              (other.recursosAsignados || []).forEach(r => occupiedResources.add(r));
-            }
-          });
+      const recList = document.getElementById('prev-int-recursos-list');
+      if (!d || !d.recursos || d.recursos.length === 0) {
+        recList.innerHTML = '<div style="font-size:11px; color:var(--text-4);">No hay recursos asignados a este día.</div>';
+      } else {
+        // Recursos ocupados en otras intervenciones ABIERTAS del mismo día
+        const occupiedResources = new Set();
+        Object.keys(intervencionesCache).forEach(k => {
+          const other = intervencionesCache[k];
+          if (k !== editIntervencionId && other.abierta !== false && !other.oculta) {
+            (other.recursosAsignados || []).forEach(r => occupiedResources.add(r));
+          }
+        });
 
-          const getVehiclePriority = (type) => {
-            if (type === 'Ambulancia') return 1;
-            if (type?.includes('Terreno')) return 2;
-            if (type?.includes('transporte') || type === 'Van') return 3;
-            if (type === 'Camión') return 4;
-            return 5;
-          };
+        const getVehiclePriority = (type) => {
+          if (type === 'Ambulancia') return 1;
+          if (type?.includes('Terreno')) return 2;
+          if (type?.includes('transporte') || type === 'Van') return 3;
+          if (type === 'Camión') return 4;
+          return 5;
+        };
 
-          recList.innerHTML = `
+        recList.innerHTML = `
         <div style="display:flex; flex-wrap:wrap; gap:6px;">
           ${d.recursos
-              .filter(rvId => !occupiedResources.has(rvId) || (iEdit?.recursosAsignados || []).includes(rvId))
-              .sort((a, b) => {
-                const va = window.globalVehiculos && window.globalVehiculos[a];
-                const vb = window.globalVehiculos && window.globalVehiculos[b];
-                return getVehiclePriority(va?.tipo) - getVehiclePriority(vb?.tipo);
-              })
-              .map(rvId => {
-                const v = window.globalVehiculos && window.globalVehiculos[rvId];
-                const isSelected = (iEdit?.recursosAsignados || []).includes(rvId);
+            .filter(rvId => !occupiedResources.has(rvId) || (iEdit?.recursosAsignados || []).includes(rvId))
+            .sort((a, b) => {
+              const va = window.globalVehiculos && window.globalVehiculos[a];
+              const vb = window.globalVehiculos && window.globalVehiculos[b];
+              return getVehiclePriority(va?.tipo) - getVehiclePriority(vb?.tipo);
+            })
+            .map(rvId => {
+              const v = window.globalVehiculos && window.globalVehiculos[rvId];
+              const isSelected = (iEdit?.recursosAsignados || []).includes(rvId);
 
-                let iconUrl = 'assets/icons/van.png';
-                if (v?.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
-                else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
-                else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/offroad.png';
+              let iconUrl = 'assets/icons/van.png';
+              if (v?.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
+              else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
+              else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/offroad.png';
 
-                return `
+              return `
                   <div class="prev-int-res-card" data-id="${rvId}" data-selected="${isSelected}"
                        style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:${isSelected ? 'var(--accent)' : 'var(--bg-1)'}; color:${isSelected ? '#fff' : 'var(--text-1)'}; border:1px solid ${isSelected ? 'var(--accent)' : 'var(--border-mid)'}; border-radius:6px; cursor:pointer; transition:all 0.2s;"
                        onclick="this.dataset.selected=(this.dataset.selected==='true'?'false':'true'); this.style.background=(this.dataset.selected==='true'?'var(--accent)':'var(--bg-1)'); this.style.color=(this.dataset.selected==='true'?'#fff':'var(--text-1)'); this.style.borderColor=(this.dataset.selected==='true'?'var(--accent)':'var(--border-mid)');">
@@ -5549,392 +5531,392 @@ ${dataContext}
                     <span style="font-size:12px; font-weight:600;">${v?.indicativo || rvId}</span>
                   </div>
                 `;
-              }).join('')
-            }
+            }).join('')
+          }
           </div>
         `;
-        }
+      }
+
+      document.getElementById('overlay-preventivo-intervencion').style.display = 'flex';
+    };
+
+    let pickedCoordsPrev = null;
+    window.prepararPinIntervencion = () => {
+      if (!mapPreventivos) return;
+      cerrarModalPreventivoIntervencion();
+      mostrarToast('Haz clic en el mapa de preventivos para situar la intervención');
+      mapPreventivos.getDiv().style.cursor = 'crosshair';
+
+      const listener = mapPreventivos.addListener('click', e => {
+        pickedCoordsPrev = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+        google.maps.event.removeListener(listener);
+        mapPreventivos.getDiv().style.cursor = '';
 
         document.getElementById('overlay-preventivo-intervencion').style.display = 'flex';
-      };
+        document.getElementById('prev-int-coords').innerText = `Ubicación fijada: ${pickedCoordsPrev.lat.toFixed(5)}, ${pickedCoordsPrev.lng.toFixed(5)}`;
 
-      let pickedCoordsPrev = null;
-      window.prepararPinIntervencion = () => {
-        if (!mapPreventivos) return;
-        cerrarModalPreventivoIntervencion();
-        mostrarToast('Haz clic en el mapa de preventivos para situar la intervención');
-        mapPreventivos.getDiv().style.cursor = 'crosshair';
-
-        const listener = mapPreventivos.addListener('click', e => {
-          pickedCoordsPrev = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-          google.maps.event.removeListener(listener);
-          mapPreventivos.getDiv().style.cursor = '';
-
-          document.getElementById('overlay-preventivo-intervencion').style.display = 'flex';
-          document.getElementById('prev-int-coords').innerText = `Ubicación fijada: ${pickedCoordsPrev.lat.toFixed(5)}, ${pickedCoordsPrev.lng.toFixed(5)}`;
-
-          if (prevMarkerInt) prevMarkerInt.setMap(null);
-          prevMarkerInt = new google.maps.marker.AdvancedMarkerElement({
-            position: pickedCoordsPrev,
-            map: mapPreventivos,
-            title: "Intervención (Pin)"
-          });
-        });
-      };
-
-      window.cerrarModalPreventivoIntervencion = () => {
-        document.getElementById('overlay-preventivo-intervencion').style.display = 'none';
         if (prevMarkerInt) prevMarkerInt.setMap(null);
-        prevMarkerInt = null;
-      };
+        prevMarkerInt = new google.maps.marker.AdvancedMarkerElement({
+          position: pickedCoordsPrev,
+          map: mapPreventivos,
+          title: "Intervención (Pin)"
+        });
+      });
+    };
 
-      window.guardarPreventivoIntervencion = async () => {
-        const desc = document.getElementById('prev-int-desc').value.trim();
-        if (!desc) return alert('La descripción es obligatoria');
+    window.cerrarModalPreventivoIntervencion = () => {
+      document.getElementById('overlay-preventivo-intervencion').style.display = 'none';
+      if (prevMarkerInt) prevMarkerInt.setMap(null);
+      prevMarkerInt = null;
+    };
 
-        const prio = document.getElementById('prev-int-prio').value;
-        const dir = document.getElementById('prev-int-dir').value;
+    window.guardarPreventivoIntervencion = async () => {
+      const desc = document.getElementById('prev-int-desc').value.trim();
+      if (!desc) return alert('La descripción es obligatoria');
 
-        const recs = Array.from(document.querySelectorAll('.prev-int-res-card'))
-          .filter(c => c.dataset.selected === 'true')
-          .map(c => c.dataset.id);
+      const prio = document.getElementById('prev-int-prio').value;
+      const dir = document.getElementById('prev-int-dir').value;
 
-        const isEdit = !!editIntervencionId;
+      const recs = Array.from(document.querySelectorAll('.prev-int-res-card'))
+        .filter(c => c.dataset.selected === 'true')
+        .map(c => c.dataset.id);
 
-        try {
-          const data = {
-            descripcion: desc,
-            prioridad: prio,
-            direccion: dir,
-            recursosAsignados: recs,
-            coords: pickedCoordsPrev,
-            actualizadoEn: serverTimestamp()
-          };
+      const isEdit = !!editIntervencionId;
 
-          if (isEdit) {
-            await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', editIntervencionId), data);
-            mostrarToast('Intervención actualizada.');
-          } else {
-            data.abierta = true;
-            data.oculta = false;
-            data.timestamp = serverTimestamp();
+      try {
+        const data = {
+          descripcion: desc,
+          prioridad: prio,
+          direccion: dir,
+          recursosAsignados: recs,
+          coords: pickedCoordsPrev,
+          actualizadoEn: serverTimestamp()
+        };
 
-            // V.7.1.0: Log inicial de recursos
-            let initialComms = [];
-            if (recs && recs.length > 0) {
-              const logEntries = recs.map(rvId => {
-                const v = window.globalVehiculos && window.globalVehiculos[rvId];
-                const indicativo = v?.indicativo || rvId;
-                let icon = '🚐';
-                if (v?.tipo === 'Camión') icon = '🚒';
-                else if (v?.tipo === 'Ambulancia') icon = '🚑';
-                else if (v?.tipo?.includes('Terreno')) icon = '🛻';
-                return `${icon} Asignado: ${indicativo} `;
-              });
+        if (isEdit) {
+          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', editIntervencionId), data);
+          mostrarToast('Intervención actualizada.');
+        } else {
+          data.abierta = true;
+          data.oculta = false;
+          data.timestamp = serverTimestamp();
 
-              initialComms.push({
-                texto: `🚀 INTERVENCIÓN INICIADA\n${logEntries.join('\n')} `,
-                autor: currentUserDoc.nombre || 'Usuario',
-                autorId: currentUser.uid,
-                timestamp: Date.now(),
-                fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-              });
-            }
-            data.comentarios = initialComms;
+          // V.7.1.0: Log inicial de recursos
+          let initialComms = [];
+          if (recs && recs.length > 0) {
+            const logEntries = recs.map(rvId => {
+              const v = window.globalVehiculos && window.globalVehiculos[rvId];
+              const indicativo = v?.indicativo || rvId;
+              let icon = '🚐';
+              if (v?.tipo === 'Camión') icon = '🚒';
+              else if (v?.tipo === 'Ambulancia') icon = '🚑';
+              else if (v?.tipo?.includes('Terreno')) icon = '🛻';
+              return `${icon} Asignado: ${indicativo} `;
+            });
 
-            await addDoc(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones'), data);
-            mostrarToast('Intervención registrada.');
-          }
-          cerrarModalPreventivoIntervencion();
-        } catch (e) { alert('Error: ' + e.message); }
-      };
-
-      let editIntervencionId = null;
-      window.abrirEditarIntervencion = (id) => {
-        const i = intervencionesCache[id];
-        if (!i) return;
-
-        // Llamamos con true para indicar que es edición y no resetee el ID
-        window.abrirModalPreventivoIntervencion(true);
-        editIntervencionId = id;
-
-        document.querySelector('#overlay-preventivo-intervencion .modal-title').innerText = 'Editar Intervención';
-        document.getElementById('btn-save-prev-int').innerText = 'Modificar Intervención';
-
-        document.getElementById('prev-int-desc').value = i.descripcion || '';
-        document.getElementById('prev-int-dir').value = i.direccion || '';
-        document.getElementById('prev-int-prio').value = i.prioridad || 'verde';
-
-        if (i.coords) {
-          pickedCoordsPrev = i.coords;
-          document.getElementById('prev-int-coords').innerText = `Ubicación fijada: ${i.coords.lat.toFixed(5)}, ${i.coords.lng.toFixed(5)}`;
-
-          if (prevMarkerInt) prevMarkerInt.setMap(null);
-          prevMarkerInt = new google.maps.marker.AdvancedMarkerElement({
-            position: i.coords,
-            map: mapPreventivos,
-            title: "Intervención (Editable)"
-          });
-        }
-
-        // Checkboxes de recursos
-        const checks = document.querySelectorAll('input[name="prev-int-recurso-v"]');
-        checks.forEach(c => c.checked = (i.recursosAsignados || []).includes(c.value));
-      };
-
-      window.toggleSubpreventivoStatus = async (id) => {
-        const d = subpreventivosCache[id];
-        const p = preventivosCache[currentPreventivoId];
-        if (!d || !p) return;
-
-        const currentlyOpen = d.abierta !== false;
-        const newStatus = !currentlyOpen;
-
-        try {
-          if (newStatus === false) {
-            const motivo = prompt('Por favor, indica un motivo o resumen del cierre de este día de preventivo:');
-            if (motivo === null) return;
-            if (!motivo.trim()) {
-              alert('El motivo de cierre es obligatorio.');
-              return;
-            }
-            const autoLog = {
-              texto: `🚨 Preventivo cerrado el día ${new Date().toLocaleDateString('es-ES')} a las ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`,
-              autor: 'Sistema',
-              autorId: 'system',
-              timestamp: Date.now(),
-              fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-            };
-            const closureComm = {
-              texto: `🔒 DÍA CERRADO: ${motivo.trim()}`,
+            initialComms.push({
+              texto: `🚀 INTERVENCIÓN INICIADA\n${logEntries.join('\n')} `,
               autor: currentUserDoc.nombre || 'Usuario',
               autorId: currentUser.uid,
               timestamp: Date.now(),
               fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-            };
+            });
+          }
+          data.comentarios = initialComms;
 
-            const isSingleDay = (p.dias || 1) === 1;
+          await addDoc(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones'), data);
+          mostrarToast('Intervención registrada.');
+        }
+        cerrarModalPreventivoIntervencion();
+      } catch (e) { alert('Error: ' + e.message); }
+    };
 
-            await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', id), {
+    let editIntervencionId = null;
+    window.abrirEditarIntervencion = (id) => {
+      const i = intervencionesCache[id];
+      if (!i) return;
+
+      // Llamamos con true para indicar que es edición y no resetee el ID
+      window.abrirModalPreventivoIntervencion(true);
+      editIntervencionId = id;
+
+      document.querySelector('#overlay-preventivo-intervencion .modal-title').innerText = 'Editar Intervención';
+      document.getElementById('btn-save-prev-int').innerText = 'Modificar Intervención';
+
+      document.getElementById('prev-int-desc').value = i.descripcion || '';
+      document.getElementById('prev-int-dir').value = i.direccion || '';
+      document.getElementById('prev-int-prio').value = i.prioridad || 'verde';
+
+      if (i.coords) {
+        pickedCoordsPrev = i.coords;
+        document.getElementById('prev-int-coords').innerText = `Ubicación fijada: ${i.coords.lat.toFixed(5)}, ${i.coords.lng.toFixed(5)}`;
+
+        if (prevMarkerInt) prevMarkerInt.setMap(null);
+        prevMarkerInt = new google.maps.marker.AdvancedMarkerElement({
+          position: i.coords,
+          map: mapPreventivos,
+          title: "Intervención (Editable)"
+        });
+      }
+
+      // Checkboxes de recursos
+      const checks = document.querySelectorAll('input[name="prev-int-recurso-v"]');
+      checks.forEach(c => c.checked = (i.recursosAsignados || []).includes(c.value));
+    };
+
+    window.toggleSubpreventivoStatus = async (id) => {
+      const d = subpreventivosCache[id];
+      const p = preventivosCache[currentPreventivoId];
+      if (!d || !p) return;
+
+      const currentlyOpen = d.abierta !== false;
+      const newStatus = !currentlyOpen;
+
+      try {
+        if (newStatus === false) {
+          const motivo = prompt('Por favor, indica un motivo o resumen del cierre de este día de preventivo:');
+          if (motivo === null) return;
+          if (!motivo.trim()) {
+            alert('El motivo de cierre es obligatorio.');
+            return;
+          }
+          const autoLog = {
+            texto: `🚨 Preventivo cerrado el día ${new Date().toLocaleDateString('es-ES')} a las ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`,
+            autor: 'Sistema',
+            autorId: 'system',
+            timestamp: Date.now(),
+            fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+          };
+          const closureComm = {
+            texto: `🔒 DÍA CERRADO: ${motivo.trim()}`,
+            autor: currentUserDoc.nombre || 'Usuario',
+            autorId: currentUser.uid,
+            timestamp: Date.now(),
+            fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+          };
+
+          const isSingleDay = (p.dias || 1) === 1;
+
+          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', id), {
+            abierta: false,
+            oculta: isSingleDay ? true : false,
+            comentarios: [...(d.comentarios || []), autoLog, closureComm],
+            actualizadoEn: serverTimestamp()
+          });
+
+          if (isSingleDay) {
+            await updateDoc(doc(db, 'preventivos', currentPreventivoId), {
               abierta: false,
-              oculta: isSingleDay ? true : false,
-              comentarios: [...(d.comentarios || []), autoLog, closureComm],
+              oculta: true,
               actualizadoEn: serverTimestamp()
             });
+          }
+        } else {
+          const reabrirLog = {
+            texto: `🔓 DÍA REABIERTO`,
+            autor: currentUserDoc.nombre || 'Usuario',
+            autorId: currentUser.uid,
+            timestamp: Date.now(),
+            fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+          };
+          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', id), {
+            abierta: true,
+            oculta: false,
+            comentarios: [...(d.comentarios || []), reabrirLog],
+            actualizadoEn: serverTimestamp()
+          });
+          if ((p.dias || 1) === 1) {
+            await updateDoc(doc(db, 'preventivos', currentPreventivoId), {
+              abierta: true,
+              oculta: false,
+              actualizadoEn: serverTimestamp()
+            });
+          }
+        }
 
-            if (isSingleDay) {
-              await updateDoc(doc(db, 'preventivos', currentPreventivoId), {
+        if (newStatus === false && !mostrarCerradas && (p.dias || 1) === 1) {
+          window.cerrarDetallePreventivo();
+        } else {
+          window.selectSubpreventivo(id);
+        }
+
+        mostrarToast(newStatus ? 'Día reabierto' : 'Día cerrado');
+      } catch (e) { console.error(e); }
+    };
+
+    window.togglePreventivoMotherStatus = async (id) => {
+      const p = preventivosCache[id];
+      if (!p) return;
+      const currentlyOpen = p.abierta !== false;
+      const newStatus = !currentlyOpen;
+
+      if (newStatus === false) {
+        if (!confirm('¿Seguro que quieres finalizar este preventivo completo? Se cerrarán automáticamente todos los días del evento y se ocultará de la lista principal.')) return;
+      }
+
+      try {
+        if (newStatus === false) {
+          // Cierre recursivo de subpreventivos (días)
+          const snap = await getDocs(collection(db, 'preventivos', id, 'subpreventivos'));
+          const promises = snap.docs.map(docSub => {
+            const dataSub = docSub.data();
+            if (dataSub.abierta !== false) {
+              return updateDoc(docSub.ref, {
                 abierta: false,
                 oculta: true,
                 actualizadoEn: serverTimestamp()
               });
             }
-          } else {
-            const reabrirLog = {
-              texto: `🔓 DÍA REABIERTO`,
-              autor: currentUserDoc.nombre || 'Usuario',
-              autorId: currentUser.uid,
-              timestamp: Date.now(),
-              fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-            };
-            await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', id), {
-              abierta: true,
-              oculta: false,
-              comentarios: [...(d.comentarios || []), reabrirLog],
-              actualizadoEn: serverTimestamp()
-            });
-            if ((p.dias || 1) === 1) {
-              await updateDoc(doc(db, 'preventivos', currentPreventivoId), {
-                abierta: true,
-                oculta: false,
-                actualizadoEn: serverTimestamp()
-              });
-            }
-          }
-
-          if (newStatus === false && !mostrarCerradas && (p.dias || 1) === 1) {
-            window.cerrarDetallePreventivo();
-          } else {
-            window.selectSubpreventivo(id);
-          }
-
-          mostrarToast(newStatus ? 'Día reabierto' : 'Día cerrado');
-        } catch (e) { console.error(e); }
-      };
-
-      window.togglePreventivoMotherStatus = async (id) => {
-        const p = preventivosCache[id];
-        if (!p) return;
-        const currentlyOpen = p.abierta !== false;
-        const newStatus = !currentlyOpen;
-
-        if (newStatus === false) {
-          if (!confirm('¿Seguro que quieres finalizar este preventivo completo? Se cerrarán automáticamente todos los días del evento y se ocultará de la lista principal.')) return;
+          }).filter(Boolean);
+          await Promise.all(promises);
         }
 
-        try {
-          if (newStatus === false) {
-            // Cierre recursivo de subpreventivos (días)
-            const snap = await getDocs(collection(db, 'preventivos', id, 'subpreventivos'));
-            const promises = snap.docs.map(docSub => {
-              const dataSub = docSub.data();
-              if (dataSub.abierta !== false) {
-                return updateDoc(docSub.ref, {
-                  abierta: false,
-                  oculta: true,
-                  actualizadoEn: serverTimestamp()
-                });
-              }
-            }).filter(Boolean);
-            await Promise.all(promises);
-          }
+        await updateDoc(doc(db, 'preventivos', id), {
+          abierta: newStatus,
+          oculta: newStatus === false ? true : false,
+          actualizadoEn: serverTimestamp()
+        });
 
-          await updateDoc(doc(db, 'preventivos', id), {
-            abierta: newStatus,
-            oculta: newStatus === false ? true : false,
-            actualizadoEn: serverTimestamp()
-          });
-
-          if (newStatus === false && !mostrarCerradas) {
-            window.cerrarDetallePreventivo();
-            currentPreventivoId = null;
-          }
-
-          mostrarToast(newStatus ? 'Preventivo reabierto' : 'Preventivo finalizado (días cerrados)');
-        } catch (e) { alert('Error: ' + e.message); }
-      };
-
-      window.toggleIntervencionStatus = async (id) => {
-        const i = intervencionesCache[id];
-        if (!i) return;
-        const newStatus = !i.abierta;
-
-        let closureComm = null;
-        if (newStatus === false) {
-          const motivo = prompt('Por favor, indica un motivo o resumen del cierre de esta intervención:');
-          if (motivo === null) return; // Cancelar
-          if (!motivo.trim()) {
-            alert('El motivo de cierre es obligatorio.');
-            return;
-          }
-          closureComm = {
-            texto: `🔒 INTERVENCIÓN CERRADA: ${motivo.trim()} `,
-            autor: currentUserDoc.nombre || 'Usuario',
-            autorId: currentUser.uid,
-            timestamp: Date.now(),
-            fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-          };
-        } else {
-          // Reabrir: Log automático
-          closureComm = {
-            texto: `🔓 INTERVENCIÓN REABIERTA`,
-            autor: currentUserDoc.nombre || 'Usuario',
-            autorId: currentUser.uid,
-            timestamp: Date.now(),
-            fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-          };
+        if (newStatus === false && !mostrarCerradas) {
+          window.cerrarDetallePreventivo();
+          currentPreventivoId = null;
         }
 
-        try {
-          const comms = i.comentarios || [];
-          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
-            abierta: newStatus,
-            oculta: newStatus === false ? true : false, // V.7.1.0: Auto-ocultar al cerrar
-            comentarios: [...comms, closureComm],
-            actualizadoEn: serverTimestamp()
-          });
+        mostrarToast(newStatus ? 'Preventivo reabierto' : 'Preventivo finalizado (días cerrados)');
+      } catch (e) { alert('Error: ' + e.message); }
+    };
 
-          if (newStatus === false) activeIntManageId = null; // V.7.1.0: Colapsar al cerrar
+    window.toggleIntervencionStatus = async (id) => {
+      const i = intervencionesCache[id];
+      if (!i) return;
+      const newStatus = !i.abierta;
 
-          mostrarToast(newStatus ? 'Intervención reabierta' : 'Intervención cerrada');
-        } catch (e) { console.error(e); }
-      };
-
-      window.toggleIntervencionOculta = async (id) => {
-        const i = intervencionesCache[id];
-        if (!i) return;
-        const newOculta = !i.oculta;
-        try {
-          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
-            oculta: newOculta,
-            actualizadoEn: serverTimestamp()
-          });
-        } catch (e) { console.error(e); }
-      };
-
-      window.borrarIntervencion = async (id) => {
-        if (!canDeleteIntervencion()) { mostrarToast('No tienes permiso para borrar intervenciones'); return; }
-        if (!confirm('¿Seguro que deseas eliminar esta intervención permanentemente?')) return;
-        try {
-          await deleteDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id));
-          mostrarToast('Intervención eliminada');
-        } catch (e) { alert('Error al borrar: ' + e.message); }
-      };
-
-      window.borrarSubpreventivo = async (id) => {
-        if (!canDeleteSubpreventivo()) { mostrarToast('No tienes permiso para borrar días'); return; }
-        if (!confirm('¿Seguro que deseas eliminar este día y todas sus intervenciones permanentemente?')) return;
-        try {
-          // En un entorno real se deberían borrar las subcolecciones, pero Firestore SDK web no lo hace automático.
-          // Por ahora borramos el documento del día.
-          await deleteDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', id));
-          if (currentPreventivoDiaId === id) cerrarDetallePreventivo();
-          mostrarToast('Día eliminado');
-        } catch (e) { alert('Error al borrar: ' + e.message); }
-      };
-
-      window.borrarPreventivo = async (id) => {
-        if (!canDeletePreventivo()) { mostrarToast('No tienes permiso para borrar preventivos'); return; }
-        if (!confirm('¿Seguro que deseas eliminar este preventivo y TODO su contenido permanentemente?')) return;
-        try {
-          await deleteDoc(doc(db, 'preventivos', id));
-          if (currentPreventivoId === id) backToPreventivosList();
-          mostrarToast('Preventivo eliminado');
-        } catch (e) { alert('Error al borrar: ' + e.message); }
-      };
-
-      let currentComIntId = null;
-      let currentComMode = 'intervencion'; // V.7.1.0: 'intervencion' o 'dia'
-
-      window.abrirComentarios = (id, mode = 'intervencion') => {
-        currentComMode = mode;
-        currentComIntId = id;
-
-        let data = null;
-        if (mode === 'intervencion') {
-          data = intervencionesCache[id];
-        } else {
-          data = subpreventivosCache[id];
-        }
-
-        if (!data) return;
-
-        const modalTitle = document.querySelector('#overlay-prev-comentarios .modal-title');
-        if (modalTitle) {
-          modalTitle.textContent = mode === 'intervencion' ? 'Comentarios Intervención' : 'Registro / Incidencias del Día';
-        }
-
-        renderComentariosList(data.comentarios || []);
-        document.getElementById('prev-comentario-txt').value = '';
-
-        // V.7.1.0: Ocultar controles de añadir comentario para usuarios
-        const canEdit = (mode === 'intervencion') ? canEditIntervencion(data) : canEditSubpreventivo(data);
-        document.querySelector('#overlay-prev-comentarios .field').style.display = canEdit ? 'block' : 'none';
-        document.querySelector('#overlay-prev-comentarios .btn-reg').style.display = canEdit ? 'inline-block' : 'none';
-
-        document.getElementById('overlay-prev-comentarios').style.display = 'flex';
-      };
-
-      window.cerrarModalComentarios = () => document.getElementById('overlay-prev-comentarios').style.display = 'none';
-
-      function renderComentariosList(list) {
-        const cont = document.getElementById('prev-comentarios-list');
-        if (!cont) return;
-        if (list.length === 0) {
-          cont.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-4); font-size:12px;">Sin comentarios todavía.</div>';
+      let closureComm = null;
+      if (newStatus === false) {
+        const motivo = prompt('Por favor, indica un motivo o resumen del cierre de esta intervención:');
+        if (motivo === null) return; // Cancelar
+        if (!motivo.trim()) {
+          alert('El motivo de cierre es obligatorio.');
           return;
         }
-        cont.innerHTML = list.map(c => `
+        closureComm = {
+          texto: `🔒 INTERVENCIÓN CERRADA: ${motivo.trim()} `,
+          autor: currentUserDoc.nombre || 'Usuario',
+          autorId: currentUser.uid,
+          timestamp: Date.now(),
+          fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        };
+      } else {
+        // Reabrir: Log automático
+        closureComm = {
+          texto: `🔓 INTERVENCIÓN REABIERTA`,
+          autor: currentUserDoc.nombre || 'Usuario',
+          autorId: currentUser.uid,
+          timestamp: Date.now(),
+          fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        };
+      }
+
+      try {
+        const comms = i.comentarios || [];
+        await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
+          abierta: newStatus,
+          oculta: newStatus === false ? true : false, // V.7.1.0: Auto-ocultar al cerrar
+          comentarios: [...comms, closureComm],
+          actualizadoEn: serverTimestamp()
+        });
+
+        if (newStatus === false) activeIntManageId = null; // V.7.1.0: Colapsar al cerrar
+
+        mostrarToast(newStatus ? 'Intervención reabierta' : 'Intervención cerrada');
+      } catch (e) { console.error(e); }
+    };
+
+    window.toggleIntervencionOculta = async (id) => {
+      const i = intervencionesCache[id];
+      if (!i) return;
+      const newOculta = !i.oculta;
+      try {
+        await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
+          oculta: newOculta,
+          actualizadoEn: serverTimestamp()
+        });
+      } catch (e) { console.error(e); }
+    };
+
+    window.borrarIntervencion = async (id) => {
+      if (!canDeleteIntervencion()) { mostrarToast('No tienes permiso para borrar intervenciones'); return; }
+      if (!confirm('¿Seguro que deseas eliminar esta intervención permanentemente?')) return;
+      try {
+        await deleteDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id));
+        mostrarToast('Intervención eliminada');
+      } catch (e) { alert('Error al borrar: ' + e.message); }
+    };
+
+    window.borrarSubpreventivo = async (id) => {
+      if (!canDeleteSubpreventivo()) { mostrarToast('No tienes permiso para borrar días'); return; }
+      if (!confirm('¿Seguro que deseas eliminar este día y todas sus intervenciones permanentemente?')) return;
+      try {
+        // En un entorno real se deberían borrar las subcolecciones, pero Firestore SDK web no lo hace automático.
+        // Por ahora borramos el documento del día.
+        await deleteDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', id));
+        if (currentPreventivoDiaId === id) cerrarDetallePreventivo();
+        mostrarToast('Día eliminado');
+      } catch (e) { alert('Error al borrar: ' + e.message); }
+    };
+
+    window.borrarPreventivo = async (id) => {
+      if (!canDeletePreventivo()) { mostrarToast('No tienes permiso para borrar preventivos'); return; }
+      if (!confirm('¿Seguro que deseas eliminar este preventivo y TODO su contenido permanentemente?')) return;
+      try {
+        await deleteDoc(doc(db, 'preventivos', id));
+        if (currentPreventivoId === id) backToPreventivosList();
+        mostrarToast('Preventivo eliminado');
+      } catch (e) { alert('Error al borrar: ' + e.message); }
+    };
+
+    let currentComIntId = null;
+    let currentComMode = 'intervencion'; // V.7.1.0: 'intervencion' o 'dia'
+
+    window.abrirComentarios = (id, mode = 'intervencion') => {
+      currentComMode = mode;
+      currentComIntId = id;
+
+      let data = null;
+      if (mode === 'intervencion') {
+        data = intervencionesCache[id];
+      } else {
+        data = subpreventivosCache[id];
+      }
+
+      if (!data) return;
+
+      const modalTitle = document.querySelector('#overlay-prev-comentarios .modal-title');
+      if (modalTitle) {
+        modalTitle.textContent = mode === 'intervencion' ? 'Comentarios Intervención' : 'Registro / Incidencias del Día';
+      }
+
+      renderComentariosList(data.comentarios || []);
+      document.getElementById('prev-comentario-txt').value = '';
+
+      // V.7.1.0: Ocultar controles de añadir comentario para usuarios
+      const canEdit = (mode === 'intervencion') ? canEditIntervencion(data) : canEditSubpreventivo(data);
+      document.querySelector('#overlay-prev-comentarios .field').style.display = canEdit ? 'block' : 'none';
+      document.querySelector('#overlay-prev-comentarios .btn-reg').style.display = canEdit ? 'inline-block' : 'none';
+
+      document.getElementById('overlay-prev-comentarios').style.display = 'flex';
+    };
+
+    window.cerrarModalComentarios = () => document.getElementById('overlay-prev-comentarios').style.display = 'none';
+
+    function renderComentariosList(list) {
+      const cont = document.getElementById('prev-comentarios-list');
+      if (!cont) return;
+      if (list.length === 0) {
+        cont.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-4); font-size:12px;">Sin comentarios todavía.</div>';
+        return;
+      }
+      cont.innerHTML = list.map(c => `
         <div style="background:var(--bg-3); padding:8px 12px; border-radius:8px; border-left:3px solid var(--accent); margin-bottom:4px;">
           <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
             <span style="font-size:11px; font-weight:700; color:var(--accent);">${c.autor}</span>
@@ -5943,103 +5925,103 @@ ${dataContext}
           <div style="font-size:12px; line-height:1.4;">${c.texto}</div>
         </div>
         `).join('');
-        cont.scrollTop = cont.scrollHeight;
-      }
+      cont.scrollTop = cont.scrollHeight;
+    }
 
-      window.guardarComentarioPrev = async () => {
-        const txt = document.getElementById('prev-comentario-txt').value.trim();
-        if (!txt || !currentComIntId) return;
+    window.guardarComentarioPrev = async () => {
+      const txt = document.getElementById('prev-comentario-txt').value.trim();
+      if (!txt || !currentComIntId) return;
 
-        let data = (currentComMode === 'intervencion') ? intervencionesCache[currentComIntId] : subpreventivosCache[currentComIntId];
-        if (!data) return;
+      let data = (currentComMode === 'intervencion') ? intervencionesCache[currentComIntId] : subpreventivosCache[currentComIntId];
+      if (!data) return;
 
-        // V.7.1.0: Guard de seguridad
-        const canEdit = (currentComMode === 'intervencion') ? canEditIntervencion(data) : canEditSubpreventivo(data);
-        if (!canEdit) { mostrarToast('No tienes permiso para comentar aquí'); return; }
+      // V.7.1.0: Guard de seguridad
+      const canEdit = (currentComMode === 'intervencion') ? canEditIntervencion(data) : canEditSubpreventivo(data);
+      if (!canEdit) { mostrarToast('No tienes permiso para comentar aquí'); return; }
 
-        const comms = data.comentarios || [];
-        const newComm = {
-          texto: txt,
-          autor: currentUserDoc.nombre || 'Usuario',
-          autorId: currentUser.uid,
-          timestamp: Date.now(),
-          fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-        };
-
-        try {
-          let docRef;
-          if (currentComMode === 'intervencion') {
-            docRef = doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', currentComIntId);
-          } else {
-            docRef = doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentComIntId);
-          }
-
-          await updateDoc(docRef, {
-            comentarios: [...comms, newComm],
-            actualizadoEn: serverTimestamp()
-          });
-          document.getElementById('prev-comentario-txt').value = '';
-
-          // Refrescar modal de gestión o detalle panel
-          if (currentComMode === 'intervencion' && document.getElementById('overlay-prev-gestion-int').style.display === 'flex') {
-            abrirGestionIntervencion(currentComIntId);
-          }
-          // renderComentariosList se actualizará por el snapshot listener de cargarSubpreventivos/cargarIntervenciones
-          // O lo forzamos aquí localmente si queremos feedback instantáneo
-          renderComentariosList([...comms, newComm]);
-
-        } catch (e) { alert('Error: ' + e.message); }
+      const comms = data.comentarios || [];
+      const newComm = {
+        texto: txt,
+        autor: currentUserDoc.nombre || 'Usuario',
+        autorId: currentUser.uid,
+        timestamp: Date.now(),
+        fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
       };
 
-      window.abrirGestionIntervencion = (id) => {
-        const i = intervencionesCache[id];
-        if (!i) return;
-        panToPreventivoMarker(id);
-
-        const manageDiv = document.getElementById(`prev-int-manage-${id}`);
-        if (!manageDiv) return;
-
-        // Si ya está abierto y no es una recarga forzada por snapshot, lo cerramos (vuelco/acordeón)
-        // Pero si activeIntManageId === id significa que queremos que esté abierto
-        if (manageDiv.style.display === 'block' && activeIntManageId !== id) {
-          manageDiv.style.display = 'none';
-          activeIntManageId = null;
-          return;
+      try {
+        let docRef;
+        if (currentComMode === 'intervencion') {
+          docRef = doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', currentComIntId);
+        } else {
+          docRef = doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentComIntId);
         }
 
-        // Cerrar otros abiertos si no es el mismo que ya está abierto
-        if (activeIntManageId && activeIntManageId !== id) {
-          const prevManageDiv = document.getElementById(`prev-int-manage-${activeIntManageId}`);
-          if (prevManageDiv) prevManageDiv.style.display = 'none';
-        }
-        // Cerrar todos los demás si no estamos reabriendo el mismo
-        document.querySelectorAll('[id^="prev-int-manage-"]').forEach(el => {
-          if (el.id !== `prev-int-manage-${id}`) {
-            el.style.display = 'none';
-          }
+        await updateDoc(docRef, {
+          comentarios: [...comms, newComm],
+          actualizadoEn: serverTimestamp()
         });
+        document.getElementById('prev-comentario-txt').value = '';
 
-        // Si el div actual ya estaba abierto y es el mismo, lo cerramos
-        if (manageDiv.style.display === 'block' && activeIntManageId === id) {
-          manageDiv.style.display = 'none';
-          activeIntManageId = null;
-          return;
+        // Refrescar modal de gestión o detalle panel
+        if (currentComMode === 'intervencion' && document.getElementById('overlay-prev-gestion-int').style.display === 'flex') {
+          abrirGestionIntervencion(currentComIntId);
         }
+        // renderComentariosList se actualizará por el snapshot listener de cargarSubpreventivos/cargarIntervenciones
+        // O lo forzamos aquí localmente si queremos feedback instantáneo
+        renderComentariosList([...comms, newComm]);
 
-        activeIntManageId = id;
+      } catch (e) { alert('Error: ' + e.message); }
+    };
 
-        const isClosed = i.abierta === false;
-        const isOculta = i.oculta === true;
+    window.abrirGestionIntervencion = (id) => {
+      const i = intervencionesCache[id];
+      if (!i) return;
+      panToPreventivoMarker(id);
 
-        const canEdit = canEditIntervencion(i);
-        const canDelete = canDeleteIntervencion();
-        const canReopen = canReopenEverything();
+      const manageDiv = document.getElementById(`prev-int-manage-${id}`);
+      if (!manageDiv) return;
 
-        const commsHtml = (i.comentarios || []).length > 0
-          ? `<div style="max-height:200px; overflow-y:auto; margin-bottom:10px; border-bottom:1px solid var(--border-mid); padding-bottom:10px; border-left:2px solid var(--border-mid); padding-left:10px;">
+      // Si ya está abierto y no es una recarga forzada por snapshot, lo cerramos (vuelco/acordeón)
+      // Pero si activeIntManageId === id significa que queremos que esté abierto
+      if (manageDiv.style.display === 'block' && activeIntManageId !== id) {
+        manageDiv.style.display = 'none';
+        activeIntManageId = null;
+        return;
+      }
+
+      // Cerrar otros abiertos si no es el mismo que ya está abierto
+      if (activeIntManageId && activeIntManageId !== id) {
+        const prevManageDiv = document.getElementById(`prev-int-manage-${activeIntManageId}`);
+        if (prevManageDiv) prevManageDiv.style.display = 'none';
+      }
+      // Cerrar todos los demás si no estamos reabriendo el mismo
+      document.querySelectorAll('[id^="prev-int-manage-"]').forEach(el => {
+        if (el.id !== `prev-int-manage-${id}`) {
+          el.style.display = 'none';
+        }
+      });
+
+      // Si el div actual ya estaba abierto y es el mismo, lo cerramos
+      if (manageDiv.style.display === 'block' && activeIntManageId === id) {
+        manageDiv.style.display = 'none';
+        activeIntManageId = null;
+        return;
+      }
+
+      activeIntManageId = id;
+
+      const isClosed = i.abierta === false;
+      const isOculta = i.oculta === true;
+
+      const canEdit = canEditIntervencion(i);
+      const canDelete = canDeleteIntervencion();
+      const canReopen = canReopenEverything();
+
+      const commsHtml = (i.comentarios || []).length > 0
+        ? `<div style="max-height:200px; overflow-y:auto; margin-bottom:10px; border-bottom:1px solid var(--border-mid); padding-bottom:10px; border-left:2px solid var(--border-mid); padding-left:10px;">
         ${(i.comentarios || []).slice().reverse().map((c, idx) => {
-            const originalIdx = (i.comentarios.length - 1) - idx;
-            return `
+          const originalIdx = (i.comentarios.length - 1) - idx;
+          return `
               <div class="tl-entry" style="margin-bottom:12px; border:none; padding:0; background:transparent;">
                 <div class="tl-body" style="border:none; padding:0;">
                   <div class="tl-meta" style="display:flex; align-items:center; margin-bottom:2px;">
@@ -6051,12 +6033,12 @@ ${dataContext}
                 </div>
               </div>
             `;
-          }).join('')
-          }
+        }).join('')
+        }
              </div> `
-          : `<div style="font-size:10px; color:var(--text-4); text-align:center; padding:10px;">Sin comentarios todavía.</div> `;
+        : `<div style="font-size:10px; color:var(--text-4); text-align:center; padding:10px;">Sin comentarios todavía.</div> `;
 
-        let html = `
+      let html = `
         <div style="position:relative; display:flex; flex-direction:column; gap:10px; background:rgba(0,0,0,0.03); padding:10px; border-radius:8px; border:1px solid var(--border-mid);">
           <!--Botón Editar Arriba Derecha-->
           ${canEdit ? `
@@ -6067,44 +6049,44 @@ ${dataContext}
           ${commsHtml}
       `;
 
-        if (!isClosed) {
-          // Encontrar recursos ocupados en otras intervenciones ABIERTAS del mismo día
-          const occupiedResources = new Set();
-          Object.keys(intervencionesCache).forEach(k => {
-            const other = intervencionesCache[k];
-            if (k !== id && other.abierta !== false && !other.oculta) {
-              (other.recursosAsignados || []).forEach(r => occupiedResources.add(r));
-            }
-          });
+      if (!isClosed) {
+        // Encontrar recursos ocupados en otras intervenciones ABIERTAS del mismo día
+        const occupiedResources = new Set();
+        Object.keys(intervencionesCache).forEach(k => {
+          const other = intervencionesCache[k];
+          if (k !== id && other.abierta !== false && !other.oculta) {
+            (other.recursosAsignados || []).forEach(r => occupiedResources.add(r));
+          }
+        });
 
-          // Recursos totales del día
-          const dayResources = subpreventivosCache[currentPreventivoDiaId]?.recursos || [];
-          const availableResources = dayResources.filter(r => !occupiedResources.has(r) && !(i.recursosAsignados || []).includes(r));
+        // Recursos totales del día
+        const dayResources = subpreventivosCache[currentPreventivoDiaId]?.recursos || [];
+        const availableResources = dayResources.filter(r => !occupiedResources.has(r) && !(i.recursosAsignados || []).includes(r));
 
-          // Construir lista de recursos disponibles con iconos y ORDENADOS
-          const getVehiclePriority = (type) => {
-            if (type === 'Ambulancia') return 1;
-            if (type?.includes('Terreno')) return 2;
-            if (type?.includes('transporte') || type === 'Van') return 3;
-            if (type === 'Camión') return 4;
-            return 5;
-          };
+        // Construir lista de recursos disponibles con iconos y ORDENADOS
+        const getVehiclePriority = (type) => {
+          if (type === 'Ambulancia') return 1;
+          if (type?.includes('Terreno')) return 2;
+          if (type?.includes('transporte') || type === 'Van') return 3;
+          if (type === 'Camión') return 4;
+          return 5;
+        };
 
-          const resListHtml = availableResources.length > 0
-            ? availableResources
-              .sort((a, b) => {
-                const va = window.globalVehiculos && window.globalVehiculos[a];
-                const vb = window.globalVehiculos && window.globalVehiculos[b];
-                return getVehiclePriority(va?.tipo) - getVehiclePriority(vb?.tipo);
-              })
-              .map(rvId => {
-                const v = window.globalVehiculos && window.globalVehiculos[rvId];
-                let iconUrl = 'assets/icons/van.png';
-                if (v?.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
-                else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
-                else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/offroad.png';
+        const resListHtml = availableResources.length > 0
+          ? availableResources
+            .sort((a, b) => {
+              const va = window.globalVehiculos && window.globalVehiculos[a];
+              const vb = window.globalVehiculos && window.globalVehiculos[b];
+              return getVehiclePriority(va?.tipo) - getVehiclePriority(vb?.tipo);
+            })
+            .map(rvId => {
+              const v = window.globalVehiculos && window.globalVehiculos[rvId];
+              let iconUrl = 'assets/icons/van.png';
+              if (v?.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
+              else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
+              else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/offroad.png';
 
-                return `
+              return `
         <div class="res-item-row" style="display:flex; align-items:center; gap:8px; padding:4px 6px; background:var(--bg-1); border:1px solid var(--border-mid); border-radius:4px; ${canEdit ? 'cursor:pointer;' : 'opacity:0.6; cursor:not-allowed;'} transition:all 0.2s;"
       ${canEdit ? `onclick="asignarRecursoIntervencion('${id}', '${rvId}')" onmouseover="this.style.borderColor='var(--accent)';" onmouseout="this.style.borderColor='var(--border-mid)';" title="Añadir ${v?.indicativo || rvId}"` : ''}>
         <img src="${iconUrl}" style="width:14px; height:14px; opacity:0.8;">
@@ -6112,10 +6094,10 @@ ${dataContext}
           ${canEdit ? '<span style="font-size:10px; color:var(--accent); font-weight:700;">+</span>' : ''}
         </div>
       `;
-              }).join('')
-            : `<div style="font-size:10px; color:var(--text-4); text-align:center; padding:6px;">No hay más vehículos libres para este día.</div> `;
+            }).join('')
+          : `<div style="font-size:10px; color:var(--text-4); text-align:center; padding:6px;">No hay más vehículos libres para este día.</div> `;
 
-          html += `
+        html += `
         <div style="margin-top:-4px;">
             <div class="field-lbl" style="font-size:9px; margin-bottom:4px;">Añadir Comentario</div>
             <div style="display:flex; flex-direction:column; gap:6px;">
@@ -6136,9 +6118,9 @@ ${dataContext}
             ${canDelete ? `<button class="btn-nueva" style="width:40px; background:#fee; color:#c00; border-color:#fcc; font-size:11px; height:32px; border-radius:4px;" onclick="borrarIntervencion('${id}')" title="Eliminar">🗑️</button>` : ''}
           </div>
       `;
-        } else {
-          // CERRADA: Ocultar/Mostrar, Reabrir, Borrar
-          html += `
+      } else {
+        // CERRADA: Ocultar/Mostrar, Reabrir, Borrar
+        html += `
         <div style="display:flex; flex-direction:column; gap:8px;">
             ${canShowHidden() ? `
             <button class="btn-reg" style="width:100%; justify-content:center; background:${isOculta ? '#333' : 'var(--bg-3)'}; color:${isOculta ? '#fff' : 'var(--text-1)'}; font-size:11px; height:32px; border-radius:4px; font-weight:600;" onclick="toggleIntervencionOculta('${id}')">
@@ -6150,133 +6132,133 @@ ${dataContext}
             </div>
           </div>
         `;
-        }
+      }
 
-        html += `</div> `;
-        manageDiv.innerHTML = html;
-        manageDiv.style.display = 'block';
+      html += `</div> `;
+      manageDiv.innerHTML = html;
+      manageDiv.style.display = 'block';
+    };
+
+    window.guardarComentarioInline = async (id) => {
+      const i = intervencionesCache[id];
+      if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para comentar aquí'); return; }
+      const input = document.getElementById(`prev-inline-comm-${id}`);
+      const txt = input.value.trim();
+      if (!txt) return;
+
+      const comms = i.comentarios || [];
+      const newComm = {
+        texto: txt,
+        autor: currentUserDoc.nombre || 'Usuario',
+        autorId: currentUser.uid,
+        timestamp: Date.now(),
+        fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
       };
 
-      window.guardarComentarioInline = async (id) => {
-        const i = intervencionesCache[id];
-        if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para comentar aquí'); return; }
-        const input = document.getElementById(`prev-inline-comm-${id}`);
-        const txt = input.value.trim();
-        if (!txt) return;
-
-        const comms = i.comentarios || [];
-        const newComm = {
-          texto: txt,
-          autor: currentUserDoc.nombre || 'Usuario',
-          autorId: currentUser.uid,
-          timestamp: Date.now(),
-          fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-        };
-
-        try {
-          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
-            comentarios: [...comms, newComm],
-            actualizadoEn: serverTimestamp()
-          });
-          input.value = '';
-          mostrarToast('Comentario añadido');
-        } catch (e) { alert('Error: ' + e.message); }
-      };
-
-      window.editarComentarioInline = async (id, index) => {
-        const i = intervencionesCache[id];
-        if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para editar comentarios'); return; }
-        if (!i || !i.comentarios || !i.comentarios[index]) return;
-        const newText = prompt('Editar comentario:', i.comentarios[index].texto);
-        if (newText === null) return;
-        const cleanText = newText.trim();
-        if (!cleanText) return;
-
-        const newComms = [...i.comentarios];
-        newComms[index] = { ...newComms[index], texto: cleanText, editado: true, editadoEn: serverTimestamp() };
-
-        try {
-          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
-            comentarios: newComms,
-            actualizadoEn: serverTimestamp()
-          });
-          mostrarToast('Comentario actualizado');
-        } catch (e) { alert('Error: ' + e.message); }
-      };
-
-      window.cerrarModalGestionInt = () => { /* No longer used in V.7.1.0 */ };
-
-      window.asignarRecursoIntervencion = async (id, recurso) => {
-        const i = intervencionesCache[id];
-        if (!i) return;
-        const v = window.globalVehiculos && window.globalVehiculos[recurso];
-        const indicativo = v?.indicativo || recurso;
-
-        let icon = '🚐';
-        if (v?.tipo === 'Camión') icon = '🚒';
-        else if (v?.tipo === 'Ambulancia') icon = '🚑';
-        else if (v?.tipo?.includes('Terreno')) icon = '🛻';
-
-        const logComm = {
-          texto: `${icon} Recurso asignado: ${indicativo}`,
-          autor: currentUserDoc.nombre || 'Usuario',
-          autorId: currentUser.uid,
-          timestamp: Date.now(),
-          fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
-        };
-
-        const recs = [...(i.recursosAsignados || []), recurso];
-        const comms = [...(i.comentarios || []), logComm];
-
-        try {
-          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
-            recursosAsignados: recs,
-            comentarios: comms,
-            actualizadoEn: serverTimestamp()
-          });
-          mostrarToast('Recurso asignado');
-          // Refrescar modal si sigue abierta
-          abrirGestionIntervencion(id);
-        } catch (e) { console.error(e); }
-      };
-
-      window.handleSearchPreventivos = (q) => {
-        document.getElementById('prev-search-clear').style.display = q ? 'block' : 'none';
-        const cards = document.querySelectorAll('#preventivos-list .op-card');
-        cards.forEach(c => {
-          const txt = c.textContent.toLowerCase();
-          c.style.display = txt.includes(q.toLowerCase()) ? 'block' : 'none';
+      try {
+        await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
+          comentarios: [...comms, newComm],
+          actualizadoEn: serverTimestamp()
         });
+        input.value = '';
+        mostrarToast('Comentario añadido');
+      } catch (e) { alert('Error: ' + e.message); }
+    };
+
+    window.editarComentarioInline = async (id, index) => {
+      const i = intervencionesCache[id];
+      if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para editar comentarios'); return; }
+      if (!i || !i.comentarios || !i.comentarios[index]) return;
+      const newText = prompt('Editar comentario:', i.comentarios[index].texto);
+      if (newText === null) return;
+      const cleanText = newText.trim();
+      if (!cleanText) return;
+
+      const newComms = [...i.comentarios];
+      newComms[index] = { ...newComms[index], texto: cleanText, editado: true, editadoEn: serverTimestamp() };
+
+      try {
+        await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
+          comentarios: newComms,
+          actualizadoEn: serverTimestamp()
+        });
+        mostrarToast('Comentario actualizado');
+      } catch (e) { alert('Error: ' + e.message); }
+    };
+
+    window.cerrarModalGestionInt = () => { /* No longer used in V.7.1.0 */ };
+
+    window.asignarRecursoIntervencion = async (id, recurso) => {
+      const i = intervencionesCache[id];
+      if (!i) return;
+      const v = window.globalVehiculos && window.globalVehiculos[recurso];
+      const indicativo = v?.indicativo || recurso;
+
+      let icon = '🚐';
+      if (v?.tipo === 'Camión') icon = '🚒';
+      else if (v?.tipo === 'Ambulancia') icon = '🚑';
+      else if (v?.tipo?.includes('Terreno')) icon = '🛻';
+
+      const logComm = {
+        texto: `${icon} Recurso asignado: ${indicativo}`,
+        autor: currentUserDoc.nombre || 'Usuario',
+        autorId: currentUser.uid,
+        timestamp: Date.now(),
+        fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
       };
 
-      window.clearSearchPreventivos = () => {
-        const i = document.getElementById('prev-search');
-        i.value = '';
-        window.handleSearchPreventivos('');
-        i.focus();
-      };
+      const recs = [...(i.recursosAsignados || []), recurso];
+      const comms = [...(i.comentarios || []), logComm];
+
+      try {
+        await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
+          recursosAsignados: recs,
+          comentarios: comms,
+          actualizadoEn: serverTimestamp()
+        });
+        mostrarToast('Recurso asignado');
+        // Refrescar modal si sigue abierta
+        abrirGestionIntervencion(id);
+      } catch (e) { console.error(e); }
+    };
+
+    window.handleSearchPreventivos = (q) => {
+      document.getElementById('prev-search-clear').style.display = q ? 'block' : 'none';
+      const cards = document.querySelectorAll('#preventivos-list .op-card');
+      cards.forEach(c => {
+        const txt = c.textContent.toLowerCase();
+        c.style.display = txt.includes(q.toLowerCase()) ? 'block' : 'none';
+      });
+    };
+
+    window.clearSearchPreventivos = () => {
+      const i = document.getElementById('prev-search');
+      i.value = '';
+      window.handleSearchPreventivos('');
+      i.focus();
+    };
 
 
-      // Sobreescribir el renderDetalle y cerrarDetalle para manejar el botón de mapa en mobile
-      const originalAbrirDetalle = window.abrirDetalle;
-      window.abrirDetalle = (id) => {
-        originalAbrirDetalle(id);
-        if (window.innerWidth <= 900) {
-          document.getElementById('btn-mobile-map-toggle').style.display = 'none';
-        }
-      };
+    // Sobreescribir el renderDetalle y cerrarDetalle para manejar el botón de mapa en mobile
+    const originalAbrirDetalle = window.abrirDetalle;
+    window.abrirDetalle = (id) => {
+      originalAbrirDetalle(id);
+      if (window.innerWidth <= 900) {
+        document.getElementById('btn-mobile-map-toggle').style.display = 'none';
+      }
+    };
 
-      const originalCerrarDetalle = window.cerrarDetalle;
-      window.cerrarDetalle = () => {
-        originalCerrarDetalle();
-        if (window.innerWidth <= 900 && filtro === 'all') { // O ajusta según lógica
-          document.getElementById('btn-mobile-map-toggle').style.display = 'block';
-        } else if (window.innerWidth <= 900) {
-          // Asegurar que si estamos en operaciones se vea el botón
-          const activeSec = document.querySelector('.nav-item.on')?.dataset.sec || 'operaciones';
-          if (activeSec === 'operaciones') document.getElementById('btn-mobile-map-toggle').style.display = 'block';
-        }
-      };
+    const originalCerrarDetalle = window.cerrarDetalle;
+    window.cerrarDetalle = () => {
+      originalCerrarDetalle();
+      if (window.innerWidth <= 900 && filtro === 'all') { // O ajusta según lógica
+        document.getElementById('btn-mobile-map-toggle').style.display = 'block';
+      } else if (window.innerWidth <= 900) {
+        // Asegurar que si estamos en operaciones se vea el botón
+        const activeSec = document.querySelector('.nav-item.on')?.dataset.sec || 'operaciones';
+        if (activeSec === 'operaciones') document.getElementById('btn-mobile-map-toggle').style.display = 'block';
+      }
+    };
   </script>
 
   <!-- Google Maps se carga dinámicamente desde el script superior -->
@@ -11442,20 +11424,20 @@ ${dataContext}
   <div id="toast"></div>
 
   <script>
-      setInterval(() => {
-        const now = new Date();
-        const elClock = document.getElementById('clock');
-        if (elClock) elClock.textContent = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        const elDate = document.getElementById('date');
-        if (elDate) {
-          const weekday = now.toLocaleDateString('es-ES', { weekday: 'long' });
-          const capitalizedWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
-          const day = String(now.getDate()).padStart(2, '0');
-          const month = String(now.getMonth() + 1).padStart(2, '0');
-          const year = now.getFullYear();
-          elDate.textContent = `${capitalizedWeekday}, ${day} /${month}/${year}`;
-        }
-      }, 1000);
+    setInterval(() => {
+      const now = new Date();
+      const elClock = document.getElementById('clock');
+      if (elClock) elClock.textContent = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const elDate = document.getElementById('date');
+      if (elDate) {
+        const weekday = now.toLocaleDateString('es-ES', { weekday: 'long' });
+        const capitalizedWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+        const day = String(now.getDate()).padStart(2, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const year = now.getFullYear();
+        elDate.textContent = `${capitalizedWeekday}, ${day} /${month}/${year}`;
+      }
+    }, 1000);
   </script>
   <script src="app.js"></script>
 </body>
