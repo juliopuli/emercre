@@ -11853,8 +11853,8 @@ ${dataContext}
   <script>
     setInterval(() => {
       const now = new Date();
-      const elClock docetElementById('clock');
-      if (elClock) elClock.textContent = now.toLocaleTimeString('es-ES', { hour: -dignute: '2-digit', second: '2-digit' });
+      const elClock = document.getElementById('clock');
+      if (elClock) elClock.textContent = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       const elDate = document.getElementById('date');
       if (elDate) {
         const weekday = now.toLocaleDateString('es-ES', { weekday: 'long' });
@@ -11862,7 +11862,7 @@ ${dataContext}
         const day = String(now.getDate()).padStart(2, '0');
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const year = now.getFullYear();
-        elDate.textContent = `${capitalizedWeekday}, ${day} /${month}/${year}`;
+        elDate.textContent = `${capitalizedWeekday}, ${day}/${month}/${year}`;
       }
     }, 1000);
   </script>
