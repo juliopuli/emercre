@@ -498,6 +498,7 @@
       }
     };
     console.log("EmerCRE V.8.1.5 Loaded");
+    console.log("EmerCRE V.8.1.6 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1526,7 +1527,7 @@
         });
         // Si ya tenemos marcadores Oysta, refrescarlos para aplicar posibles cambios de icono
         // V.8.1.0: Gating robusto
-        if (Object.keys(oystaMarkers).length > 0 && currentUserDoc.canSeeVehicles) cargarVehiculosOysta();
+        if (Object.keys(oystaMarkers).length > 0) cargarVehiculosOysta();
       });
     }
 
@@ -1799,11 +1800,11 @@
       // V.8.1.0: Asegurar que los vehículos Oysta se ven tras renderizar el mapa
       // V.8.1.0: Gating robusto
       // V.8.1.0: Si no hay vehículos en el panel, forzamos una carga para poblar la lista
-      if (currentUserDoc.canSeeVehicles) {
-        const listContainer = document.getElementById('oysta-vehicle-list');
-        // V.8.1.0: El placeholder "Cargando..." cuenta como 1 hijo, así que <=1 significa vacío
-        const listEmpty = !listContainer || listContainer.children.length <= 1;
-        console.log(`[Oysta] renderMapa: listEmpty=${listEmpty}, children=${listContainer ? listContainer.children.length : 'N/A'}`);
+      const listContainer = document.getElementById('oysta-vehicle-list');
+      const listEmpty = !listContainer || listContainer.children.length <= 1;
+      const isPreventivos = document.getElementById('section-preventivos') && document.getElementById('section-preventivos').style.display === 'flex';
+
+      if (currentUserDoc.canSeeVehicles || isPreventivos) {
         cargarVehiculosOysta(listEmpty);
       }
     }
@@ -4805,12 +4806,10 @@ ${dataContext}
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         });
 
-        // V.8.1.0: Asegurar script Oysta tras cargar el mapa
+        // V.8.1.6: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
         google.maps.event.addListenerOnce(mapPreventivos, 'tilesloaded', function () {
-          if (currentUserDoc && currentUserDoc.canSeeVehicles) {
-            ensureOystaScriptIsRunning();
-            cargarVehiculosOysta(true);
-          }
+          ensureOystaScriptIsRunning();
+          cargarVehiculosOysta(true);
         });
       } catch (e) {
         console.error("Error en initMapPreventivos:", e);
@@ -4821,9 +4820,7 @@ ${dataContext}
     window.refreshPreventivosMap = () => {
       if (mapPreventivos) {
         google.maps.event.trigger(mapPreventivos, 'resize');
-        if (Object.values(visibleVehiclesPrev).some(v => v === true)) {
-          cargarVehiculosOysta(true);
-        }
+        cargarVehiculosOysta(true);
       }
     };
 
@@ -10906,7 +10903,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.8.1.5
+          V.8.1.6
         </div>
       </div>
 
@@ -11136,7 +11133,7 @@ ${dataContext}
 
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.8.1.5
+          V.8.1.6
         </div>
       </div>
 
@@ -11952,7 +11949,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.1.5
+            Versión V.8.1.6
           </div>
         </div>
         <div class="field" id="j-prov-row">
