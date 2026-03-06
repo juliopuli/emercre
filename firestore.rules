@@ -53,12 +53,17 @@ service cloud.firestore {
         allow create, update: if logueado();
         allow delete: if logueado() && rol() in ['super_admin', 'manager', 'admin', 'autonomica', 'provincial'];
 
-        match /intervenciones/{intId} {
+      match /intervenciones/{intId} {
           allow read: if logueado();
           allow create, update: if logueado();
           allow delete: if logueado() && rol() in ['super_admin', 'manager', 'admin', 'autonomica', 'provincial'];
         }
       }
+    }
+
+    // V.7.8.1: Permitir consultas de grupo (collectionGroup) para intervenciones preventivas
+    match /{path=**}/intervenciones/{intId} {
+      allow read: if logueado();
     }
 
     match /vehiculos/{vId} {
