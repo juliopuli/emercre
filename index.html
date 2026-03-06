@@ -484,7 +484,7 @@
         mostrarToast('Capa de ferrocarril activada');
       }
     };
-    console.log("EmerCRE V.8.0.7 Loaded");
+    console.log("EmerCRE V.8.0.8 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1795,9 +1795,11 @@
     // ── OYSTA INTEGRATION (V.8.0.7) ──────────────────────────────────
     async function cargarVehiculosOysta(force = false) {
       console.log(`[Oysta] cargarVehiculosOysta called (force=${force})`);
-      // V.8.0.7: Implementar pausa automática si no hay vehículos visibles en NINGÚN mapa.
+      // V.8.0.8: Implementar pausa automática si no hay vehículos visibles, excepto en Preventivos (para rutas dinámicas)
       const anyVisibleGlobal = Object.values(visibleVehicles).some(v => v === true) || Object.values(visibleVehiclesPrev).some(v => v === true);
-      if (!anyVisibleGlobal && !force) {
+      const isPreventivosActive = document.getElementById('section-preventivos') && document.getElementById('section-preventivos').style.display === 'flex';
+
+      if (!anyVisibleGlobal && !force && !isPreventivosActive) {
         console.log("[Oysta] No vehicles visible and force=false, skipping fetch.");
         // Si no hay ninguno, aseguramos limpiar el indicador y salir
         const statusText = document.getElementById('oysta-status-text');
@@ -5205,6 +5207,10 @@ ${dataContext}
           if (recCont) selectSubpreventivo(currentPreventivoDiaId);
         }
       }).catch(e => console.error("Error cargando vehículos:", e));
+
+      // V.8.0.8: Hacer zoom ajustado al interactuar
+      window._preventivosNeedsZoom = true;
+      if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
     };
 
     window.backToPreventivosList = () => {
@@ -5362,6 +5368,10 @@ ${dataContext}
           if (btn) btn.style.display = 'block';
         }
       }
+
+      // V.8.0.8: Hacer zoom ajustado al interactuar
+      window._preventivosNeedsZoom = true;
+      if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
     };
 
     window.guardarPreventivoDia = async () => {
@@ -5473,10 +5483,10 @@ ${dataContext}
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
               ${(isClosed ? canReopenEverything() : canEditSubpreventivo(d)) && currentRole !== 'usuario' ? `
-              <button class="btn-nueva" style="background:${isClosed ? 'var(--accent)' : '#c0392b'}; color:#fff; border:none; padding:2px 8px; font-size:10px; height:20px;" 
-                      onclick="toggleSubpreventivoStatus('${id}')">
-                ${isClosed ? '🔓 Reabrir Día' : '🔒 Cerrar Día'}
-              </button>` : ''}
+              <span onclick="event.stopPropagation(); window.togglePreventivoDiaStatus('${id}')" style="cursor:pointer; font-size:14px;" title="${isClosed ? 'Reabrir' : 'Finalizar'}">
+                ${isClosed ? '🔓' : '🔒'}
+              </span>` : ''}
+              ${canDeleteSubpreventivo() ? `<span onclick="event.stopPropagation(); window.borrarPreventivoDia('${id}')" style="cursor:pointer; opacity:0.7; font-size:14px;" title="Borrar Día">🗑️</span>` : ''}
               <button class="btn-nueva" style="background:var(--bg-3); color:var(--text-1); border:1px solid var(--border-mid); padding:2px 8px; font-size:10px; height:20px;" 
                       onclick="abrirComentarios('${id}', 'dia')">
                 💬 Comentarios
@@ -10988,7 +10998,8 @@ ${dataContext}
     <div id="section-preventivos" style="display:none;">
       <button id="btn-mobile-map-toggle-prev" class="btn-mobile-map-toggle" onclick="toggleMobileMapPrev()"
         style="display:none;">Ver Mapa 🗺</button>
-      <div class="panel-left">
+      <div class="panel-left"
+        onclick="if(event.target === this) { window._preventivosNeedsZoom = true; window.refreshGlobalPreventivoMarkers(); }">
         <div class="panel-left-head" onclick="if(event.target === this) cerrarDetallePreventivo()">
           <div class="search-box">
             <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
