@@ -182,6 +182,15 @@
       if (currentRole === 'admin') return i ? i.abierta !== false : true;
       return false;
     }
+    // V.7.1.1: Permisos específicos para comentarios
+    function canCommentSubpreventivo(d) {
+      if (currentRole === 'manager' || currentRole === 'super_admin' || currentRole === 'admin') return true;
+      return d ? d.abierta !== false : true;
+    }
+    function canCommentIntervencion(i) {
+      if (currentRole === 'manager' || currentRole === 'super_admin' || currentRole === 'admin') return true;
+      return i ? i.abierta !== false : true;
+    }
     function canDeleteIntervencion() {
       return currentRole === 'admin' || currentRole === 'manager' || currentRole === 'super_admin';
     }
@@ -5915,10 +5924,10 @@ ${dataContext}
       renderComentariosList(data.comentarios || []);
       document.getElementById('prev-comentario-txt').value = '';
 
-      // V.7.1.0: Ocultar controles de añadir comentario para usuarios
-      const canEdit = (mode === 'intervencion') ? canEditIntervencion(data) : canEditSubpreventivo(data);
-      document.querySelector('#overlay-prev-comentarios .field').style.display = canEdit ? 'block' : 'none';
-      document.querySelector('#overlay-prev-comentarios .btn-reg').style.display = canEdit ? 'inline-block' : 'none';
+      // V.7.1.1: Ocultar controles de añadir comentario solo si no puede comentar (relajado)
+      const canComment = (mode === 'intervencion') ? canCommentIntervencion(data) : canCommentSubpreventivo(data);
+      document.querySelector('#overlay-prev-comentarios .field').style.display = canComment ? 'block' : 'none';
+      document.querySelector('#overlay-prev-comentarios .btn-reg').style.display = canComment ? 'inline-block' : 'none';
 
       document.getElementById('overlay-prev-comentarios').style.display = 'flex';
     };
@@ -5951,9 +5960,9 @@ ${dataContext}
       let data = (currentComMode === 'intervencion') ? intervencionesCache[currentComIntId] : subpreventivosCache[currentComIntId];
       if (!data) return;
 
-      // V.7.1.0: Guard de seguridad
-      const canEdit = (currentComMode === 'intervencion') ? canEditIntervencion(data) : canEditSubpreventivo(data);
-      if (!canEdit) { mostrarToast('No tienes permiso para comentar aquí'); return; }
+      // V.7.1.1: Guard de seguridad relajado para comentarios
+      const canComment = (currentComMode === 'intervencion') ? canCommentIntervencion(data) : canCommentSubpreventivo(data);
+      if (!canComment) { mostrarToast('No tienes permiso para comentar aquí (posiblemente cerrado)'); return; }
 
       const comms = data.comentarios || [];
       const newComm = {
@@ -6117,8 +6126,8 @@ ${dataContext}
         <div style="margin-top:-4px;">
             <div class="field-lbl" style="font-size:9px; margin-bottom:4px;">Añadir Comentario</div>
             <div style="display:flex; flex-direction:column; gap:6px;">
-              <textarea id="prev-inline-comm-${id}" class="f-input" style="width:100%; font-size:11px; height:50px; resize:none; padding:6px; background:var(--bg-1);" placeholder="Escribe aquí..." ${!canEdit ? 'disabled' : ''}></textarea>
-              ${canEdit ? `<button class="btn-reg" style="width:100%; height:28px; font-size:11px; font-weight:600;" onclick="guardarComentarioInline('${id}')">➤ Enviar Comentario</button>` : ''}
+              <textarea id="prev-inline-comm-${id}" class="f-input" style="width:100%; font-size:11px; height:50px; resize:none; padding:6px; background:var(--bg-1);" placeholder="Escribe aquí..." ${!canCommentIntervencion(i) ? 'disabled' : ''}></textarea>
+              ${canCommentIntervencion(i) ? `<button class="btn-reg" style="width:100%; height:28px; font-size:11px; font-weight:600;" onclick="guardarComentarioInline('${id}')">➤ Enviar Comentario</button>` : ''}
             </div>
           </div>
 
@@ -6157,7 +6166,7 @@ ${dataContext}
 
     window.guardarComentarioInline = async (id) => {
       const i = intervencionesCache[id];
-      if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para comentar aquí'); return; }
+      if (!canCommentIntervencion(i)) { mostrarToast('No tienes permiso para comentar aquí'); return; }
       const input = document.getElementById(`prev-inline-comm-${id}`);
       const txt = input.value.trim();
       if (!txt) return;
