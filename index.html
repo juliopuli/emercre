@@ -1364,9 +1364,13 @@
         document.getElementById('mnav-tablas').style.display = canManageUsers ? 'block' : 'none';
       }
 
-      const isPrivileged = currentRole === 'super_admin' || currentRole === 'manager' || currentRole === 'admin';
-      const sideToggle = document.getElementById('sidebar-toggle-cerradas');
-      if (sideToggle) sideToggle.style.display = isPrivileged ? 'flex' : 'none';
+      const canShowCerradas = canShowHidden();
+      const stOp = document.getElementById('sidebar-toggle-cerradas');
+      if (stOp) stOp.style.display = canShowCerradas ? 'flex' : 'none';
+      const stPrevG = document.getElementById('prev-sidebar-toggle-cerrados-global');
+      if (stPrevG) stPrevG.style.display = canShowCerradas ? 'flex' : 'none';
+      const stPrevI = document.getElementById('prev-sidebar-toggle-cerradas');
+      if (stPrevI) stPrevI.style.display = canShowCerradas ? 'flex' : 'none';
 
       suscribirOps();
       suscribirJefesSelect();
@@ -1653,7 +1657,7 @@
         if (!isOpVisible(op)) return false;
         if (selectedProvincia !== 'Andalucía' && op.provincia !== selectedProvincia) return false;
         // Ocultas filter
-        if (op.oculta === true && !mostrarCerradas) return false;
+        if (op.oculta === true && (!mostrarCerradas || !canShowHidden())) return false;
         // Search filter
         if (q) {
           const fields = [
@@ -2082,7 +2086,7 @@
       // Lógica de filtrado de intervenciones ocultas (V.7.1.0)
       visible = visible.filter(op => {
         const isOculta = op.oculta === true;
-        if (isOculta) return mostrarCerradas;
+        if (isOculta) return mostrarCerradas && canShowHidden();
         return true;
       });
 
@@ -2571,6 +2575,15 @@
     };
 
     window.toggleGlobalCerradas = (checked) => {
+      if (checked && !canShowHidden()) {
+        mostrarToast('No tienes permiso para ver elementos cerrados.');
+        mostrarCerradas = false;
+        // Forzar checkbox a false
+        document.querySelectorAll('input[type="checkbox"][onchange*="toggleGlobalCerradas"]').forEach(cb => {
+          cb.checked = false;
+        });
+        return;
+      }
       mostrarCerradas = checked;
 
       // V.7.1.0: Sincronizar todos los toggles de la app
@@ -4766,7 +4779,8 @@ ${dataContext}
         const id = doc.id;
         preventivosCache[id] = p;
 
-        // V.7.1.0: Filtrar si está oculto (aunque no hay flag de cerrada para preventivos principal aún, lo preparamos)
+        // V.7.1.0: Filtrar si está finalizado/oculto
+        if (p.abierta === false && !canShowHidden()) return '';
         if (p.oculta === true && !mostrarCerradas) return '';
 
         const fechaRange = p.fechaInicio ? `${p.fechaInicio} al ${p.fechaFin || '?'}` : 'Sin fecha';
@@ -5078,6 +5092,8 @@ ${dataContext}
         const id = doc.id;
         subpreventivosCache[id] = d;
 
+        // V.7.1.0: Filtrar si está cerrado/oculto
+        if (d.abierta === false && !canShowHidden()) return '';
         if (d.oculta === true && !mostrarCerradas) return '';
 
         const isSelected = (id === currentPreventivoDiaId);
@@ -10310,7 +10326,7 @@ ${dataContext}
           <button id="btn-nuevo-prev" class="btn-nueva" onclick="abrirModalPreventivoMain()"
             style="margin-top: 10px; width: 100%;">+ Nuevo Preventivo</button>
           <div id="prev-sidebar-toggle-cerrados-global"
-            style="display:flex; align-items:center; gap:8px; padding:10px 0 0; border-top:1px dashed var(--border-mid); margin-top:10px;">
+            style="display:none; align-items:center; gap:8px; padding:10px 0 0; border-top:1px dashed var(--border-mid); margin-top:10px;">
             <span style="font-size:10px; color:var(--text-3); font-weight:600;">Mostrar preventivos/días cerrados</span>
             <label class="switch">
               <input type="checkbox" onchange="toggleGlobalCerradas(this.checked)">
@@ -10377,7 +10393,7 @@ ${dataContext}
         <div class="ops-list" id="preventivos-intervenciones-list"
           style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
           <div id="prev-sidebar-toggle-cerradas"
-            style="display:flex; align-items:center; gap:8px; padding:4px 16px 8px; border-bottom:1px dashed var(--border-mid);">
+            style="display:none; align-items:center; gap:8px; padding:4px 16px 8px; border-bottom:1px dashed var(--border-mid);">
             <span style="font-size:10px; color:var(--text-3); font-weight:600;">Mostrar intervenciones cerradas</span>
             <label class="switch">
               <input type="checkbox" onchange="toggleGlobalCerradas(this.checked)">
