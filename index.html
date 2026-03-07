@@ -100,7 +100,7 @@
     let oystaVehiclesCache = []; // Última lista de vehículos recibida
     let localVehiclesByOystaId = {}; // V.8.1.0: Mapeo OystaID -> Datos Vehículo Local
     let localVehiclesById = {};       // V.8.1.0: Mapeo FirestoreID -> Datos Vehículo Local
-    window._ambulanceRanks = {}; // V.8.5.5: Cache para ranking por cercanía
+    window._ambulanceRanks = {}; // V.8.5.6: Cache para ranking por cercanía
     let autocomplete = null;
     let autocompleteEdit = null;
     let autocompletePrevInt = null;
@@ -115,7 +115,7 @@
     let allJefesGuardiaCacheMap = {}; // "Provincia" -> "Nombre del Jefe"
     let trafficLayer = null;
     let railwayLayer = null; // Obs: Mantenido por compatibilidad legacy si hace falta, pero ahora usamos railLayers
-    let railLayers = { infra: null, pk: null, tram: null, pasos: null }; // V.8.5.5
+    let railLayers = { infra: null, pk: null, tram: null, pasos: null }; // V.8.5.6
     let directionsService = null;
     let directionsRenderer = null;
     let autocompleteOrigin = null;
@@ -377,7 +377,7 @@
               map: mapPreventivos,
               title: place.name || "Intervención"
             });
-            // V.8.5.5: Calcular cercanía de ambulancias al cambiar a través de autocomplete
+            // V.8.5.6: Calcular cercanía de ambulancias al cambiar a través de autocomplete
             if (typeof window.calcularAmbulanciasCercanasPrev === 'function') {
               window.calcularAmbulanciasCercanasPrev(pickedCoordsPrev);
             }
@@ -513,18 +513,20 @@
     window.toggleRailLayer = (type) => {
       if (!gmap) return;
       const chk = document.getElementById(`chk-rail-${type}`);
-      const isTurningOn = !chk.checked;
-      chk.checked = isTurningOn;
+      if (!chk) return;
 
-      // Definición de capas ADIF (WMS) a buscar:
-      // PuntosKilometricos, TramificacionComun, PasosNivel
+      // El div tiene el onclick. Invertimos el estado actual del checkbox.
+      chk.checked = !chk.checked;
+      const isOn = chk.checked;
+
+      // Nombres de capas que suelen estar en el servicio WMS principal de Adif (INSPIRE)
       const layerNames = {
-        pk: 'PuntosKilometricos',
-        tram: 'RTF_TramificacionComun',
-        pasos: 'PasosNivel'
+        pk: 'TN.RailTransportNetwork.RailwayNode', // Nodos (pueden ser PKs o estaciones)
+        tram: 'TN.RailTransportNetwork.RailwayLink', // Segmentos de vía (Tramificación)
+        pasos: 'TN.RailTransportNetwork.RailwayNode' // A falta de PPNN directo, usamos nodos
       };
 
-      if (isTurningOn) {
+      if (isOn) {
         if (type === 'infra') {
           railLayers.infra = new google.maps.ImageMapType({
             getTileUrl: (coord, zoom) => {
@@ -543,6 +545,7 @@
           railLayers[type] = createWmsLayer(layerNames[type], 0.8);
           gmap.overlayMapTypes.push(railLayers[type]);
         }
+        console.log(`[Rail] Activada capa: ${type} (Check: ${isOn})`);
         mostrarToast(`Capa ferroviaria [${type}] activada`);
       } else {
         if (railLayers[type]) {
@@ -552,6 +555,7 @@
           railLayers[type] = null;
         }
         if (type === 'infra') document.getElementById('railway-legend').style.display = 'none';
+        console.log(`[Rail] Desactivada capa: ${type} (Check: ${isOn})`);
         mostrarToast(`Capa ferroviaria [${type}] desactivada`);
       }
     };
@@ -575,6 +579,8 @@
           const yMax = worldOrigin + (mapSize - y * res);
 
           const bbox = `${xMin},${yMin},${xMax},${yMax}`;
+          // DEBUG: Descomentar si no se ve nada en el mapa para ver URLs en consola
+          // console.log(`WMS: ${layerName} -> ${bbox}`);
           return `https://ideadif.adif.es/services/wms?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetMap&FORMAT=image/png&TRANSPARENT=true&LAYERS=${layerName}&SRS=EPSG:3857&STYLES=&WIDTH=256&HEIGHT=256&BBOX=${bbox}`;
         },
         tileSize: new google.maps.Size(256, 256),
@@ -583,7 +589,7 @@
       });
     }
 
-    console.log("EmerCRE V.8.5.5 Loaded");
+    console.log("EmerCRE V.8.5.6 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2050,7 +2056,7 @@
             oystaMarkers[mid] = marker;
           }
 
-          // V.8.5.5: Monitorización de Estados para EMERGENCIAS (Operaciones)
+          // V.8.5.6: Monitorización de Estados para EMERGENCIAS (Operaciones)
           if (localVeh && ops) {
             // Buscamos si este vehículo está asignado a alguna operación abierta
             const assignedOp = Object.values(ops).find(op =>
@@ -2069,7 +2075,7 @@
               // Necesitamos los comentarios para evitar duplicados. 
               // Como no los tenemos en 'ops' (están en subcolección 'acciones'), 
               // tendríamos que consultarlos, pero eso puede ser costoso en cada loop.
-              // V.8.5.5: Usamos una cache local para evitar spam si no hemos consultado aún.
+              // V.8.5.6: Usamos una cache local para evitar spam si no hemos consultado aún.
               if (!window._oystaLogCache) window._oystaLogCache = new Set();
 
               // 1. Salida (Speed > 5)
@@ -2179,7 +2185,7 @@
             <img src="${iconPath}" style="width:20px; height:20px; object-fit:contain;">
           </div>
         `;
-        // V.8.5.5: Añadir badge de ranking si existe
+        // V.8.5.6: Añadir badge de ranking si existe
         const oystaId = String(v.id);
         if (window._ambulanceRanks && window._ambulanceRanks[oystaId]) {
           const badge = document.createElement('div');
@@ -4950,7 +4956,7 @@ ${dataContext}
     };
 
     // ==========================================
-    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.5.5)
+    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.5.6)
     // ==========================================
 
     window.initMapPreventivos = () => {
@@ -4979,7 +4985,7 @@ ${dataContext}
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         });
 
-        // V.8.5.5: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
+        // V.8.5.6: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
         google.maps.event.addListenerOnce(mapPreventivos, 'tilesloaded', function () {
           ensureOystaScriptIsRunning();
           cargarVehiculosOysta(true);
@@ -6133,7 +6139,7 @@ ${dataContext}
             console.log("[Oysta] Logged arrival PREV:", text);
           }
 
-          // 3. Hospital Carlos Haya (V.8.5.5)
+          // 3. Hospital Carlos Haya (V.8.5.6)
           const chCoords = { lat: 36.723012376884185, lng: -4.450232328090476 };
           const distCH = haversineDistance(pos, chCoords);
           if (renderData.isUrgente) {
@@ -6375,7 +6381,7 @@ ${dataContext}
               const va = window.globalVehiculos && window.globalVehiculos[a];
               const vb = window.globalVehiculos && window.globalVehiculos[b];
 
-              // V.8.5.5: Priorizar por ranking de cercanía si existe
+              // V.8.5.6: Priorizar por ranking de cercanía si existe
               const rankA = va?.oystaId ? (window._ambulanceRanks[String(va.oystaId)]?.rank || 999) : 999;
               const rankB = vb?.oystaId ? (window._ambulanceRanks[String(vb.oystaId)]?.rank || 999) : 999;
 
@@ -6393,7 +6399,7 @@ ${dataContext}
               else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
               else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/offroad.png';
 
-              // V.8.5.5: Obtener ranking si existe
+              // V.8.5.6: Obtener ranking si existe
               const oystaId = v?.oystaId;
               const rankInfo = oystaId && window._ambulanceRanks && window._ambulanceRanks[String(oystaId)];
 
@@ -6413,13 +6419,13 @@ ${dataContext}
       }
 
       document.getElementById('overlay-preventivo-intervencion').style.display = 'flex';
-      // V.8.5.5: Si ya hay coordenadas al abrir, calculamos ranking
+      // V.8.5.6: Si ya hay coordenadas al abrir, calculamos ranking
       if (pickedCoordsPrev && typeof window.calcularAmbulanciasCercanasPrev === 'function') {
         window.calcularAmbulanciasCercanasPrev(pickedCoordsPrev);
       }
     };
 
-    // V.8.5.5: Motor de cálculo de cercanía (transparente para el usuario)
+    // V.8.5.6: Motor de cálculo de cercanía (transparente para el usuario)
     window.calcularAmbulanciasCercanasPrev = function (destCoords) {
       if (!destCoords || !window.google || !google.maps.DistanceMatrixService) return;
       const d = subpreventivosCache[currentPreventivoDiaId];
@@ -6427,7 +6433,7 @@ ${dataContext}
 
       const targetResources = d.recursos.filter(rvId => {
         const v = localVehiclesById[rvId];
-        // V.8.5.5: Solo 'Ambulancia' y 'Vehículo Todo terreno' (excluidos mixtos según tablas maestras)
+        // V.8.5.6: Solo 'Ambulancia' y 'Vehículo Todo terreno' (excluidos mixtos según tablas maestras)
         const t = v?.tipo || '';
         return v && (t === 'Ambulancia' || t === 'Vehículo Todo terreno') && v.oystaId;
       }).map(rvId => {
@@ -6491,7 +6497,7 @@ ${dataContext}
           });
         }
 
-        // V.8.5.5: Re-ordenar las tarjetas en el modal si está abierto
+        // V.8.5.6: Re-ordenar las tarjetas en el modal si está abierto
         const recList = document.getElementById('prev-int-recursos-list');
         if (recList) {
           const container = recList.querySelector('div');
@@ -6555,7 +6561,7 @@ ${dataContext}
           title: "Intervención (Pin)"
         });
 
-        // V.8.5.5: Calcular cercanía de ambulancias al situar pin
+        // V.8.5.6: Calcular cercanía de ambulancias al situar pin
         if (typeof window.calcularAmbulanciasCercanasPrev === 'function') {
           window.calcularAmbulanciasCercanasPrev(pickedCoordsPrev);
         }
@@ -6574,7 +6580,7 @@ ${dataContext}
       if (prevMarkerInt) prevMarkerInt.setMap(null);
       prevMarkerInt = null;
 
-      // V.8.5.5: Limpiar ranking al cerrar el modal (para no persistir números en el mapa)
+      // V.8.5.6: Limpiar ranking al cerrar el modal (para no persistir números en el mapa)
       window._ambulanceRanks = {};
       if (oystaMarkersPrev) {
         Object.keys(oystaMarkersPrev).forEach(mid => {
@@ -7299,10 +7305,10 @@ ${dataContext}
       if (!i || !i.comentarios || !i.comentarios[index]) return;
       const c = i.comentarios[index];
 
-      // Permiso base (V.8.5.5)
+      // Permiso base (V.8.5.6)
       if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para editar comentarios'); return; }
 
-      // Restricción Oysta (V.8.5.5)
+      // Restricción Oysta (V.8.5.6)
       const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
       if (isOysta && currentRole !== 'admin' && currentRole !== 'super_admin') {
         mostrarToast('Solo los administradores pueden editar avisos de Oysta');
@@ -7318,7 +7324,7 @@ ${dataContext}
       let d = new Date();
       if (c.timestamp) d = new Date(c.timestamp);
       else if (c.fecha) {
-        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.8.5.5)
+        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.8.5.6)
         const parts = c.fecha.split(/[ ,]+/);
         if (parts.length >= 2) {
           const fParts = parts[0].split("/");
@@ -11430,7 +11436,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.5.5
+          Versión V.8.5.6
         </div>
       </div>
 
