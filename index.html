@@ -100,6 +100,7 @@
     let oystaVehiclesCache = []; // Última lista de vehículos recibida
     let localVehiclesByOystaId = {}; // V.8.1.0: Mapeo OystaID -> Datos Vehículo Local
     let localVehiclesById = {};       // V.8.1.0: Mapeo FirestoreID -> Datos Vehículo Local
+    window._ambulanceRanks = {}; // V.8.4.0: Cache para ranking por cercanía
     let autocomplete = null;
     let autocompleteEdit = null;
     let autocompletePrevInt = null;
@@ -374,6 +375,10 @@
               map: mapPreventivos,
               title: place.name || "Intervención"
             });
+            // V.8.4.0: Calcular cercanía de ambulancias al cambiar a través de autocomplete
+            if (typeof window.calcularAmbulanciasCercanasPrev === 'function') {
+              window.calcularAmbulanciasCercanasPrev(pickedCoordsPrev);
+            }
           }
         });
       }
@@ -505,7 +510,7 @@
       }
     };
 
-    console.log("EmerCRE V.8.3.2 Loaded");
+    console.log("EmerCRE V.8.4.0 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1972,7 +1977,7 @@
             oystaMarkers[mid] = marker;
           }
 
-          // V.8.3.2: Monitorización de Estados para EMERGENCIAS (Operaciones)
+          // V.8.4.0: Monitorización de Estados para EMERGENCIAS (Operaciones)
           if (localVeh && ops) {
             // Buscamos si este vehículo está asignado a alguna operación abierta
             const assignedOp = Object.values(ops).find(op =>
@@ -1991,7 +1996,7 @@
               // Necesitamos los comentarios para evitar duplicados. 
               // Como no los tenemos en 'ops' (están en subcolección 'acciones'), 
               // tendríamos que consultarlos, pero eso puede ser costoso en cada loop.
-              // V.8.3.2: Usamos una cache local para evitar spam si no hemos consultado aún.
+              // V.8.4.0: Usamos una cache local para evitar spam si no hemos consultado aún.
               if (!window._oystaLogCache) window._oystaLogCache = new Set();
 
               // 1. Salida (Speed > 5)
@@ -2087,6 +2092,7 @@
       if (localVeh) {
         content.className = `custom-marker oysta-linked-marker ${statusClass}`;
         content.style.setProperty('--nivel-color', statusClass === 'moving' ? '#27ae60' : '#e67e22');
+        content.style.position = 'relative'; // Para el badge global
         const iconMap = {
           'Camión': 'assets/icons/truck.png',
           'Vehículo transporte personal': 'assets/icons/van.png',
@@ -2100,6 +2106,15 @@
             <img src="${iconPath}" style="width:20px; height:20px; object-fit:contain;">
           </div>
         `;
+        // V.8.4.0: Añadir badge de ranking si existe
+        const oystaId = String(v.id);
+        if (window._ambulanceRanks && window._ambulanceRanks[oystaId]) {
+          const badge = document.createElement('div');
+          badge.className = 'ranking-badge';
+          badge.innerText = window._ambulanceRanks[oystaId].rank;
+          badge.title = `Llegada aprox en: ${window._ambulanceRanks[oystaId].duration}`;
+          content.appendChild(badge);
+        }
       } else {
         content.className = `oysta-marker ${statusClass}`;
         content.innerHTML = v.name;
@@ -4862,7 +4877,7 @@ ${dataContext}
     };
 
     // ==========================================
-    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.3.2)
+    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.4.0)
     // ==========================================
 
     window.initMapPreventivos = () => {
@@ -4891,7 +4906,7 @@ ${dataContext}
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         });
 
-        // V.8.3.2: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
+        // V.8.4.0: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
         google.maps.event.addListenerOnce(mapPreventivos, 'tilesloaded', function () {
           ensureOystaScriptIsRunning();
           cargarVehiculosOysta(true);
@@ -6052,7 +6067,7 @@ ${dataContext}
             console.log("[Oysta] Logged arrival PREV:", text);
           }
 
-          // 3. Hospital Carlos Haya (V.8.3.2)
+          // 3. Hospital Carlos Haya (V.8.4.0)
           const chCoords = { lat: 36.723012376884185, lng: -4.450232328090476 };
           const distCH = haversineDistance(pos, chCoords);
           if (renderData.isUrgente) {
@@ -6312,12 +6327,17 @@ ${dataContext}
               else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
               else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/offroad.png';
 
+              // V.8.4.0: Obtener ranking si existe
+              const oystaId = v?.oystaId;
+              const rankInfo = oystaId && window._ambulanceRanks && window._ambulanceRanks[String(oystaId)];
+
               return `
                   <div class="prev-int-res-card" data-id="${rvId}" data-selected="${isSelected}"
-                       style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:${isSelected ? 'var(--accent)' : 'var(--bg-1)'}; color:${isSelected ? '#fff' : 'var(--text-1)'}; border:1px solid ${isSelected ? 'var(--accent)' : 'var(--border-mid)'}; border-radius:6px; cursor:pointer; transition:all 0.2s;"
+                       style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:${isSelected ? 'var(--accent)' : 'var(--bg-1)'}; color:${isSelected ? '#fff' : 'var(--text-1)'}; border:1px solid ${isSelected ? 'var(--accent)' : 'var(--border-mid)'}; border-radius:6px; cursor:pointer; transition:all 0.2s; position:relative;"
                        onclick="this.dataset.selected=(this.dataset.selected==='true'?'false':'true'); this.style.background=(this.dataset.selected==='true'?'var(--accent)':'var(--bg-1)'); this.style.color=(this.dataset.selected==='true'?'#fff':'var(--text-1)'); this.style.borderColor=(this.dataset.selected==='true'?'var(--accent)':'var(--border-mid)');">
                     <img src="${iconUrl}" style="width:14px; height:14px; filter:${isSelected ? 'brightness(0) invert(1)' : 'none'};">
                     <span style="font-size:12px; font-weight:600;">${v?.indicativo || rvId}</span>
+                    ${rankInfo ? `<div class="ranking-badge ranking-badge-small" title="Aproximadamente ${rankInfo.duration}">${rankInfo.rank}</div>` : ''}
                   </div>
                 `;
             }).join('')
@@ -6327,6 +6347,83 @@ ${dataContext}
       }
 
       document.getElementById('overlay-preventivo-intervencion').style.display = 'flex';
+      // V.8.4.0: Si ya hay coordenadas al abrir, calculamos ranking
+      if (pickedCoordsPrev && typeof window.calcularAmbulanciasCercanasPrev === 'function') {
+        window.calcularAmbulanciasCercanasPrev(pickedCoordsPrev);
+      }
+    };
+
+    // V.8.4.0: Motor de cálculo de cercanía (transparente para el usuario)
+    window.calcularAmbulanciasCercanasPrev = function (destCoords) {
+      if (!destCoords || !window.google || !google.maps.DistanceMatrixService) return;
+      const d = subpreventivosCache[currentPreventivoDiaId];
+      if (!d || !d.recursos) return;
+
+      // Filtrar ambulancias del día que tengan una posición Oysta conocida
+      const ambulances = d.recursos.filter(rvId => {
+        const v = localVehiclesById[rvId];
+        return v && v.tipo === 'Ambulancia' && v.oystaId;
+      }).map(rvId => {
+        const v = localVehiclesById[rvId];
+        const oystaPos = oystaVehiclesCache.find(ov => String(ov.id) === String(v.oystaId));
+        return {
+          id: rvId,
+          oystaId: String(v.oystaId),
+          pos: oystaPos ? { lat: parseFloat(oystaPos.lat), lng: parseFloat(oystaPos.lng) } : null
+        };
+      }).filter(a => a.pos && !isNaN(a.pos.lat));
+
+      if (ambulances.length === 0) return;
+
+      const matrix = new google.maps.DistanceMatrixService();
+      matrix.getDistanceMatrix({
+        origins: ambulances.map(a => a.pos),
+        destinations: [destCoords],
+        travelMode: google.maps.TravelMode.DRIVING
+      }, (response, status) => {
+        if (status === 'OK' && response.rows[0]) {
+          const results = response.rows.map((row, i) => ({
+            oystaId: ambulances[i].oystaId,
+            duration: row.elements[0]?.duration
+          })).filter(r => r.duration);
+
+          results.sort((a, b) => a.duration.value - b.duration.value);
+
+          // Limpiar ranks viejos y poner nuevos
+          window._ambulanceRanks = {};
+          results.forEach((r, idx) => {
+            window._ambulanceRanks[r.oystaId] = { rank: idx + 1, duration: r.duration.text };
+          });
+
+          // 1. Refrescar marcadores en mapa Preventivos
+          if (oystaMarkersPrev) {
+            Object.keys(oystaMarkersPrev).forEach(mid => {
+              const v = oystaVehiclesCache.find(ov => String(ov.id) === mid);
+              if (v) window.syncOystaMarkerPrev(v);
+            });
+          }
+
+          // 2. Actualizar badges en las tarjetas del modal (si está abierto)
+          ambulances.forEach(a => {
+            const card = document.querySelector(`.prev-int-res-card[data-id="${a.id}"]`);
+            if (card) {
+              const info = window._ambulanceRanks[a.oystaId];
+              let b = card.querySelector('.ranking-badge');
+              if (info) {
+                if (!b) {
+                  b = document.createElement('div');
+                  b.className = 'ranking-badge ranking-badge-small';
+                  card.appendChild(b);
+                }
+                b.innerText = info.rank;
+                b.title = `Aproximadamente ${info.duration}`;
+              } else if (b) {
+                b.remove();
+              }
+            }
+          });
+        }
+      });
     };
 
     let pickedCoordsPrev = null;
@@ -6350,6 +6447,11 @@ ${dataContext}
           map: mapPreventivos,
           title: "Intervención (Pin)"
         });
+
+        // V.8.4.0: Calcular cercanía de ambulancias al situar pin
+        if (typeof window.calcularAmbulanciasCercanasPrev === 'function') {
+          window.calcularAmbulanciasCercanasPrev(pickedCoordsPrev);
+        }
       });
     };
 
@@ -7081,10 +7183,10 @@ ${dataContext}
       if (!i || !i.comentarios || !i.comentarios[index]) return;
       const c = i.comentarios[index];
 
-      // Permiso base (V.8.3.2)
+      // Permiso base (V.8.4.0)
       if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para editar comentarios'); return; }
 
-      // Restricción Oysta (V.8.3.2)
+      // Restricción Oysta (V.8.4.0)
       const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
       if (isOysta && currentRole !== 'admin' && currentRole !== 'super_admin') {
         mostrarToast('Solo los administradores pueden editar avisos de Oysta');
@@ -7100,7 +7202,7 @@ ${dataContext}
       let d = new Date();
       if (c.timestamp) d = new Date(c.timestamp);
       else if (c.fecha) {
-        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.8.3.2)
+        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.8.4.0)
         const parts = c.fecha.split(/[ ,]+/);
         if (parts.length >= 2) {
           const fParts = parts[0].split("/");
@@ -7281,6 +7383,33 @@ ${dataContext}
   <!-- Google Maps se carga dinámicamente desde el script superior -->
 
   <style>
+    .ranking-badge {
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      background: #e74c3c;
+      color: white;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      font-size: 11px;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid white;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      z-index: 1100;
+    }
+
+    .ranking-badge-small {
+      width: 16px;
+      height: 16px;
+      font-size: 10px;
+      top: -5px;
+      right: -5px;
+    }
+
     :root {
       --bg: #f4f2ee;
       --bg-1: #fff;
@@ -11183,7 +11312,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.3.2
+          Versión V.8.4.0
         </div>
       </div>
 
@@ -11413,7 +11542,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.3.2
+          Versión V.8.4.0
         </div>
       </div>
 
@@ -12105,7 +12234,7 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL EDITAR COMENTARIO (V.8.3.2) -->
+  <!-- MODAL EDITAR COMENTARIO (V.8.4.0) -->
   <div class="overlay" id="overlay-edit-comentario" style="display:none;"
     onclick="if(event.target===this) window.cerrarModalEditComentario()">
     <div class="modal" style="width:380px;">
@@ -12260,7 +12389,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.3.2
+            Versión V.8.4.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
