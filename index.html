@@ -505,7 +505,7 @@
       }
     };
 
-    console.log("EmerCRE V.8.2.9 Loaded");
+    console.log("EmerCRE V.8.3.1 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1971,6 +1971,82 @@
 
             oystaMarkers[mid] = marker;
           }
+
+          // V.8.3.1: Monitorización de Estados para EMERGENCIAS (Operaciones)
+          if (localVeh && ops) {
+            // Buscamos si este vehículo está asignado a alguna operación abierta
+            const assignedOp = Object.values(ops).find(op =>
+              op.estado === 'activa' &&
+              op.recursosAsignadosIds &&
+              op.recursosAsignadosIds.includes(localVeh.id)
+            );
+
+            if (assignedOp) {
+              const opId = assignedOp.id;
+              const indicativo = localVeh.indicativo || v.name;
+              const speed = parseFloat(v.speed);
+              const opCoords = assignedOp.coords;
+              const opRef = doc(db, 'operaciones', opId);
+
+              // Necesitamos los comentarios para evitar duplicados. 
+              // Como no los tenemos en 'ops' (están en subcolección 'acciones'), 
+              // tendríamos que consultarlos, pero eso puede ser costoso en cada loop.
+              // V.8.3.1: Usamos una cache local para evitar spam si no hemos consultado aún.
+              if (!window._oystaLogCache) window._oystaLogCache = new Set();
+
+              // 1. Salida (Speed > 5)
+              const depKey = `dep_${opId}_${mid}`;
+              if (speed > 5 && !window._oystaLogCache.has(depKey)) {
+                // Consultamos acciones reales para confirmar
+                getDocs(query(collection(db, 'operaciones', opId, 'acciones'), where('texto', '>=', `⚡️ ${indicativo} sale hacia`)))
+                  .then(snap => {
+                    const already = snap.docs.some(d => {
+                      const t = d.data().texto;
+                      return t && t.includes(indicativo) && t.includes("(");
+                    });
+                    if (!already) {
+                      const text = `⚡️ ${indicativo} sale hacia el lugar (${assignedOp.dir || 'sin dirección'}).`;
+                      addDoc(collection(db, 'operaciones', opId, 'acciones'), {
+                        texto: text,
+                        autor: 'Sist. Oysta',
+                        autorId: 'system',
+                        timestamp: serverTimestamp(),
+                        prioridad: 'Baja'
+                      });
+                      console.log("[Oysta] Logged departure for Emergencia:", text);
+                    }
+                    window._oystaLogCache.add(depKey);
+                  });
+              }
+
+              // 2. Llegada (Dist < 0.1km)
+              if (opCoords) {
+                const dist = haversineDistance(pos, opCoords);
+                const arrKey = `arr_${opId}_${mid}`;
+                if (dist < 0.1 && !window._oystaLogCache.has(arrKey)) {
+                  getDocs(query(collection(db, 'operaciones', opId, 'acciones'), where('texto', '>=', `✅ ${indicativo} llega al lugar`)))
+                    .then(snap => {
+                      const already = snap.docs.some(d => {
+                        const t = d.data().texto;
+                        return t && t.includes(indicativo) && t.includes("(");
+                      });
+                      if (!already) {
+                        const text = `✅ ${indicativo} llega al lugar del aviso (${assignedOp.dir || 'sin dirección'}).`;
+                        addDoc(collection(db, 'operaciones', opId, 'acciones'), {
+                          texto: text,
+                          autor: 'Sist. Oysta',
+                          autorId: 'system',
+                          timestamp: serverTimestamp(),
+                          prioridad: 'Baja'
+                        });
+                        console.log("[Oysta] Logged arrival for Emergencia:", text);
+                      }
+                      window._oystaLogCache.add(arrKey);
+                    });
+                }
+              }
+            }
+          }
         });
       } catch (err) {
         console.error("Error crítico cargando vehículos Oysta:", err);
@@ -2483,6 +2559,7 @@
 
             await updateDoc(opRef, {
               recursosSummary: rSum,
+              recursosAsignadosIds: arrayUnion(itemId),
               actualizadoEn: serverTimestamp()
             });
           } catch (e) { console.error("Error updating recursosSummary:", e); }
@@ -2528,6 +2605,7 @@
 
           await updateDoc(opRef, {
             recursosSummary: rSum,
+            recursosAsignadosIds: arrayRemove(id),
             actualizadoEn: serverTimestamp()
           });
         } catch (e) { console.error("Error updating recursosSummary:", e); }
@@ -4784,7 +4862,7 @@ ${dataContext}
     };
 
     // ==========================================
-    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.2.9)
+    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.3.1)
     // ==========================================
 
     window.initMapPreventivos = () => {
@@ -4813,7 +4891,7 @@ ${dataContext}
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         });
 
-        // V.8.2.9: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
+        // V.8.3.1: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
         google.maps.event.addListenerOnce(mapPreventivos, 'tilesloaded', function () {
           ensureOystaScriptIsRunning();
           cargarVehiculosOysta(true);
@@ -5928,35 +6006,47 @@ ${dataContext}
 
           // 1. Salida: Se considera "en movimiento" si speed > 5
           const isMoving = parseFloat(oystaVeh.speed) > 5;
-          const hasDeparted = comments.some(c => c.texto && c.texto.includes("sale hacia el lugar") && c.texto.includes(indicativo));
+          // V.8.3.1: Solo consideramos que ha salido si existe el comentario Y este incluye paréntesis (dirección)
+          const hasDeparted = comments.some(c => {
+            const t = c.texto || '';
+            return t.includes("sale hacia el lugar") && t.includes(indicativo) && t.includes("(");
+          });
 
           if (!hasDeparted && isMoving) {
+            const text = `⚡️ ${indicativo} sale hacia el lugar (${iData.direccion || 'sin dirección'}).`;
             const logComm = {
-              texto: `⚡️ ${indicativo} sale hacia el lugar (${iData.direccion || 'sin dirección'}).`,
+              texto: text,
               autor: 'Sist. Oysta',
               autorId: 'system',
               timestamp: Date.now(),
               fecha: formatCommentFecha(new Date())
             };
+            console.log("[Oysta] Intentando loggear salida en Preventivos:", text);
             updateDoc(iDoc.ref, { comentarios: [...comments, logComm] });
           }
 
           // 2. Llegada: En un radio de 100m (0.1km)
           dist = haversineDistance(pos, iData.coords);
-          hasArrived = comments.some(c => c.texto && c.texto.includes("llega al lugar del aviso") && c.texto.includes(indicativo));
+          // V.8.3.1: Solo consideramos que ha llegado si existe el comentario Y este incluye paréntesis (dirección)
+          hasArrived = comments.some(c => {
+            const t = c.texto || '';
+            return t.includes("llega al lugar del aviso") && t.includes(indicativo) && t.includes("(");
+          });
 
           if (!hasArrived && dist < 0.1) {
+            const text = `✅ ${indicativo} llega al lugar del aviso (${iData.direccion || 'sin dirección'}).`;
             const logComm = {
-              texto: `✅ ${indicativo} llega al lugar del aviso (${iData.direccion || 'sin dirección'}).`,
+              texto: text,
               autor: 'Sist. Oysta',
               autorId: 'system',
               timestamp: Date.now(),
               fecha: formatCommentFecha(new Date())
             };
+            console.log("[Oysta] Intentando loggear llegada en Preventivos:", text);
             updateDoc(iDoc.ref, { comentarios: [...(iData.comentarios || []), logComm] });
           }
 
-          // 3. Hospital Carlos Haya (V.8.2.9)
+          // 3. Hospital Carlos Haya (V.8.3.1)
           const chCoords = { lat: 36.723012376884185, lng: -4.450232328090476 };
           const distCH = haversineDistance(pos, chCoords);
           if (renderData.isUrgente) {
@@ -6985,10 +7075,10 @@ ${dataContext}
       if (!i || !i.comentarios || !i.comentarios[index]) return;
       const c = i.comentarios[index];
 
-      // Permiso base (V.8.2.9)
+      // Permiso base (V.8.3.1)
       if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para editar comentarios'); return; }
 
-      // Restricción Oysta (V.8.2.9)
+      // Restricción Oysta (V.8.3.1)
       const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
       if (isOysta && currentRole !== 'admin' && currentRole !== 'super_admin') {
         mostrarToast('Solo los administradores pueden editar avisos de Oysta');
@@ -7004,7 +7094,7 @@ ${dataContext}
       let d = new Date();
       if (c.timestamp) d = new Date(c.timestamp);
       else if (c.fecha) {
-        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.8.2.9)
+        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.8.3.1)
         const parts = c.fecha.split(/[ ,]+/);
         if (parts.length >= 2) {
           const fParts = parts[0].split("/");
@@ -11087,7 +11177,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.2.9
+          Versión V.8.3.1
         </div>
       </div>
 
@@ -11317,7 +11407,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.2.9
+          Versión V.8.3.1
         </div>
       </div>
 
@@ -12009,7 +12099,7 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL EDITAR COMENTARIO (V.8.2.9) -->
+  <!-- MODAL EDITAR COMENTARIO (V.8.3.1) -->
   <div class="overlay" id="overlay-edit-comentario" style="display:none;"
     onclick="if(event.target===this) window.cerrarModalEditComentario()">
     <div class="modal" style="width:380px;">
@@ -12164,7 +12254,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.2.9
+            Versión V.8.3.1
           </div>
         </div>
         <div class="field" id="j-prov-row">
