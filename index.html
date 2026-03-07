@@ -505,7 +505,7 @@
       }
     };
 
-    console.log("EmerCRE V.8.2.4 Loaded");
+    console.log("EmerCRE V.8.2.5 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -4784,7 +4784,7 @@ ${dataContext}
     };
 
     // ==========================================
-    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.2.4)
+    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.2.5)
     // ==========================================
 
     window.initMapPreventivos = () => {
@@ -4813,7 +4813,7 @@ ${dataContext}
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         });
 
-        // V.8.2.4: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
+        // V.8.2.5: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
         google.maps.event.addListenerOnce(mapPreventivos, 'tilesloaded', function () {
           ensureOystaScriptIsRunning();
           cargarVehiculosOysta(true);
@@ -5955,6 +5955,39 @@ ${dataContext}
             };
             updateDoc(iDoc.ref, { comentarios: [...(iData.comentarios || []), logComm] });
           }
+
+          // 3. Hospital Carlos Haya (V.8.2.5)
+          const chCoords = { lat: 36.723012376884185, lng: -4.450232328090476 };
+          const distCH = haversineDistance(pos, chCoords);
+          if (renderData.isUrgente) {
+            const hospComms = comments.filter(c => c.texto && c.texto.includes("Hospital Regional Carlos Haya") && c.texto.includes(indicativo));
+            const lastHosp = hospComms[hospComms.length - 1];
+            const isAtHosp = lastHosp && lastHosp.texto.includes("llega a Hospital Regional Carlos Haya");
+
+            // Llegada CH
+            if (!isAtHosp && distCH < 0.1) {
+              const logCH = {
+                texto: `🏥 ${indicativo} llega a Hospital Regional Carlos Haya.`,
+                autor: 'Sist. Oysta',
+                autorId: 'system',
+                timestamp: Date.now(),
+                fecha: formatCommentFecha(new Date())
+              };
+              updateDoc(iDoc.ref, { comentarios: [...(iData.comentarios || []), logCH] });
+            }
+            // Salida CH (decalaje 2 min)
+            if (isAtHosp && distCH > 0.2) {
+              const tsDec = Date.now() - 120000;
+              const logCH = {
+                texto: `🏥 ${indicativo} sale de Hospital Regional Carlos Haya.`,
+                autor: 'Sist. Oysta',
+                autorId: 'system',
+                timestamp: tsDec,
+                fecha: formatCommentFecha(new Date(tsDec))
+              };
+              updateDoc(iDoc.ref, { comentarios: [...(iData.comentarios || []), logCH] });
+            }
+          }
         }
 
         // ------ B. RUTA DINÁMICA ------
@@ -6952,10 +6985,10 @@ ${dataContext}
       if (!i || !i.comentarios || !i.comentarios[index]) return;
       const c = i.comentarios[index];
 
-      // Permiso base (V.8.2.4)
+      // Permiso base (V.8.2.5)
       if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para editar comentarios'); return; }
 
-      // Restricción Oysta (V.8.2.4)
+      // Restricción Oysta (V.8.2.5)
       const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
       if (isOysta && currentRole !== 'admin' && currentRole !== 'super_admin') {
         mostrarToast('Solo los administradores pueden editar avisos de Oysta');
@@ -6971,7 +7004,7 @@ ${dataContext}
       let d = new Date();
       if (c.timestamp) d = new Date(c.timestamp);
       else if (c.fecha) {
-        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.8.2.4)
+        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.8.2.5)
         const parts = c.fecha.split(/[ ,]+/);
         if (parts.length >= 2) {
           const fParts = parts[0].split("/");
@@ -11054,7 +11087,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.8.2.4
+          V.8.2.5
         </div>
       </div>
 
@@ -11284,7 +11317,7 @@ ${dataContext}
 
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.8.2.4
+          V.8.2.5
         </div>
       </div>
 
@@ -11976,7 +12009,7 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL EDITAR COMENTARIO (V.8.2.4) -->
+  <!-- MODAL EDITAR COMENTARIO (V.8.2.5) -->
   <div class="overlay" id="overlay-edit-comentario" style="display:none;"
     onclick="if(event.target===this) window.cerrarModalEditComentario()">
     <div class="modal" style="width:380px;">
@@ -12131,7 +12164,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.2.4
+            Versión V.8.2.5
           </div>
         </div>
         <div class="field" id="j-prov-row">
