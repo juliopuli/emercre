@@ -5060,12 +5060,27 @@ ${dataContext}
       document.getElementById('overlay-preventivo-main').style.display = 'flex';
       setTimeout(() => document.getElementById('prev-main-nombre').focus(), 100);
 
-      // Precargar si ya hay provincia
+      // Precargar si ya hay provincia y buscar recursos si es 1 día
       const prov = document.getElementById('prev-main-provincia').value;
-      if (prov) cargarRecursoPreventivoMain(prov);
+      let preselected = [];
+      if (editId && (preventivosCache[editId]?.dias || 1) === 1) {
+        try {
+          const qSub = query(collection(db, 'preventivos', editId, 'subpreventivos'));
+          const snapSub = await getDocs(qSub);
+          snapSub.forEach(docSub => {
+            // Asumimos que si hay solo uno o se llama "Día Único" es el que queremos
+            if (docSub.data().nombre === 'Día Único' || snapSub.size === 1) {
+              preselected = docSub.data().recursos || [];
+            }
+          });
+        } catch (e) {
+          console.error("Error al precargar recursos del preventivo:", e);
+        }
+      }
+      if (prov) cargarRecursoPreventivoMain(prov, preselected);
     };
 
-    window.cargarRecursoPreventivoMain = async (prov) => {
+    window.cargarRecursoPreventivoMain = async (prov, preselected = []) => {
       const resList = document.getElementById('prev-main-recursos-list');
       resList.innerHTML = 'Cargando...';
       const q = query(collection(db, 'vehiculos'), where('provincia', '==', prov));
@@ -5078,9 +5093,13 @@ ${dataContext}
           let iconUrl = 'assets/icons/van.png';
           if (v.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
           else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
+          else if (v.tipo?.includes('Terreno')) iconUrl = 'assets/icons/offroad.png';
+          else if (v.tipo?.includes('transporte') || v.tipo?.includes('mixto')) iconUrl = 'assets/icons/van.png';
+
+          const isChecked = preselected.includes(dv.id);
           return `
             <label style="display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer;">
-              <input type="checkbox" name="prev-main-recurso-v" value="${dv.id}">
+              <input type="checkbox" name="prev-main-recurso-v" value="${dv.id}" ${isChecked ? 'checked' : ''}>
               <img src="${iconUrl}" style="width:14px; height:14px;">
               <span style="font-size:12px; font-weight:600;">${v.indicativo || 'SIN IND'}</span>
             </label>
@@ -5134,7 +5153,42 @@ ${dataContext}
             jefeDispositivo: jefe,
             actualizadoEn: serverTimestamp()
           });
+
+          // V.8.1.0: Si al editar sigue siendo 1 día, sincronizar el subpreventivo "Día Único"
+          if (dias === 1) {
+            const recursos = Array.from(document.querySelectorAll('input[name="prev-main-recurso-v"]:checked')).map(cb => cb.value);
+            const qSub = query(collection(db, 'preventivos', editingPreventivoId, 'subpreventivos'));
+            const snapSub = await getDocs(qSub);
+            let subIdToUpdate = null;
+            snapSub.forEach(docSub => {
+              if (docSub.data().nombre === 'Día Único' || snapSub.size === 1) {
+                subIdToUpdate = docSub.id;
+              }
+            });
+
+            if (subIdToUpdate) {
+              await updateDoc(doc(db, 'preventivos', editingPreventivoId, 'subpreventivos', subIdToUpdate), {
+                fecha: fIni,
+                recursos: recursos,
+                actualizadoEn: serverTimestamp()
+              });
+            } else if (snapSub.empty) {
+              // Si no existía (ej: pasó de multi-día a 1-día), crearlo
+              await addDoc(collection(db, 'preventivos', editingPreventivoId, 'subpreventivos'), {
+                nombre: 'Día Único',
+                fecha: fIni,
+                recursos: recursos,
+                abierta: true,
+                creadoEn: serverTimestamp()
+              });
+            }
+          }
+
           mostrarToast('Preventivo actualizado');
+          // Provocamos re-render si estaba abierto
+          if (currentPreventivoId === editingPreventivoId) {
+            selectPreventivo(editingPreventivoId);
+          }
         } else {
           const ref = await addDoc(collection(db, 'preventivos'), {
             nombre,
@@ -5145,7 +5199,7 @@ ${dataContext}
             jefeDispositivo: jefe,
             creadorId: currentUser.uid,
             creadorNombre: currentUserDoc.nombre,
-            abierta: true, // V.8.1.0
+            abierta: true,
             creadoEn: serverTimestamp()
           });
 
@@ -5156,7 +5210,7 @@ ${dataContext}
               nombre: 'Día Único',
               fecha: fIni,
               recursos: recursos,
-              abierta: true, // V.8.1.0: Explícito
+              abierta: true,
               creadoEn: serverTimestamp()
             });
           }
@@ -5166,7 +5220,10 @@ ${dataContext}
 
         cerrarModalPreventivoMain();
         if (!editingPreventivoId) mostrarToast('Preventivo creado correctamente.');
-      } catch (e) { alert('Error: ' + e.message); }
+      } catch (e) {
+        console.error(e);
+        alert('Error: ' + e.message);
+      }
     };
 
     window.abrirModalPreventivoDiaDesdeAcordeon = (id) => {
@@ -11949,7 +12006,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.1.7
+            Versión V.8.1.8
           </div>
         </div>
         <div class="field" id="j-prov-row">
