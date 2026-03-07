@@ -498,7 +498,7 @@
       }
     };
 
-    console.log("EmerCRE V.8.1.8 Loaded");
+    console.log("EmerCRE V.8.2.0 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -4777,7 +4777,7 @@ ${dataContext}
     };
 
     // ==========================================
-    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.1.8)
+    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.2.0)
     // ==========================================
 
     window.initMapPreventivos = () => {
@@ -4806,7 +4806,7 @@ ${dataContext}
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         });
 
-        // V.8.1.8: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
+        // V.8.2.0: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
         google.maps.event.addListenerOnce(mapPreventivos, 'tilesloaded', function () {
           ensureOystaScriptIsRunning();
           cargarVehiculosOysta(true);
@@ -6780,12 +6780,14 @@ ${dataContext}
         ? `<div style="max-height:200px; overflow-y:auto; margin-bottom:10px; border-bottom:1px solid var(--border-mid); padding-bottom:10px; border-left:2px solid var(--border-mid); padding-left:10px;">
         ${(i.comentarios || []).slice().reverse().map((c, idx) => {
           const originalIdx = (i.comentarios.length - 1) - idx;
+          const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
+          const canEditCom = canEdit && (!isOysta || (currentRole === 'admin' || currentRole === 'super_admin'));
           return `
               <div class="tl-entry" style="margin-bottom:12px; border:none; padding:0; background:transparent;">
                 <div class="tl-body" style="border:none; padding:0;">
                   <div class="tl-meta" style="display:flex; align-items:center; margin-bottom:2px;">
                     <span class="tl-ts" style="font-size:9px;">${c.fecha || ''}</span>
-                    ${canEdit ? `<button class="btn-cancel-m" style="padding: 2px 6px; font-size: 9px; margin-left: auto; height:18px; line-height:1;" onclick="editarComentarioInline('${id}', ${originalIdx})">✏️ Editar</button>` : ''}
+                    ${canEditCom ? `<button class="btn-cancel-m" style="padding: 2px 6px; font-size: 9px; margin-left: auto; height:18px; line-height:1;" onclick="editarComentarioInline('${id}', ${originalIdx})">✏️ Editar</button>` : ''}
                   </div>
                   <div class="tl-text" style="font-size:11px; background:var(--bg-1); padding:6px 8px; border-radius:4px; border:1px solid var(--border-mid);">${c.texto}</div>
                   <div class="tl-author" style="font-size:9px; margin-top:2px;">— ${c.autor || 'Usuario'}</div>
@@ -6925,17 +6927,87 @@ ${dataContext}
       } catch (e) { alert('Error: ' + e.message); }
     };
 
+    let editingCommIntId = null;
+    let editingCommIndex = null;
+
+    window.cerrarModalEditComentario = () => {
+      document.getElementById('overlay-edit-comentario').style.display = 'none';
+      editingCommIntId = null;
+      editingCommIndex = null;
+    };
+
     window.editarComentarioInline = async (id, index) => {
       const i = intervencionesCache[id];
-      if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para editar comentarios'); return; }
       if (!i || !i.comentarios || !i.comentarios[index]) return;
-      const newText = prompt('Editar comentario:', i.comentarios[index].texto);
-      if (newText === null) return;
-      const cleanText = newText.trim();
-      if (!cleanText) return;
+      const c = i.comentarios[index];
+
+      // Permiso base (V.8.2.0)
+      if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para editar comentarios'); return; }
+
+      // Restricción Oysta (V.8.2.0)
+      const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
+      if (isOysta && currentRole !== 'admin' && currentRole !== 'super_admin') {
+        mostrarToast('Solo los administradores pueden editar avisos de Oysta');
+        return;
+      }
+
+      editingCommIntId = id;
+      editingCommIndex = index;
+
+      document.getElementById('edit-com-texto').value = c.texto || '';
+
+      // Tentar a reconstruir data a partir do timestamp ou string de fecha
+      let d = new Date();
+      if (c.timestamp) d = new Date(c.timestamp);
+      else if (c.fecha) {
+        // Formato dd/mm, hh:mm — No tiene año, asumimos el actual
+        const [f, h] = c.fecha.split(', ');
+        if (f && h) {
+          const [day, month] = f.split('/');
+          const [hour, min] = h.split(':');
+          d.setDate(parseInt(day));
+          d.setMonth(parseInt(month) - 1);
+          d.setHours(parseInt(hour));
+          d.setMinutes(parseInt(min));
+        }
+      }
+
+      const isoDate = d.toISOString().split('T')[0];
+      const isoTime = d.toTimeString().substring(0, 5);
+
+      document.getElementById('edit-com-date').value = isoDate;
+      document.getElementById('edit-com-time').value = isoTime;
+
+      const saveBtn = document.getElementById('btn-save-edit-com');
+      saveBtn.onclick = () => window.guardarEditComentario();
+
+      document.getElementById('overlay-edit-comentario').style.display = 'flex';
+    };
+
+    window.guardarEditComentario = async () => {
+      if (!editingCommIntId || editingCommIndex === null) return;
+
+      const id = editingCommIntId;
+      const index = editingCommIndex;
+      const i = intervencionesCache[id];
+      const newText = document.getElementById('edit-com-texto').value.trim();
+      const newDate = document.getElementById('edit-com-date').value;
+      const newTime = document.getElementById('edit-com-time').value;
+
+      if (!newText || !newDate || !newTime) return alert('Todos los campos son obligatorios');
+
+      const fullDate = new Date(`${newDate}T${newTime}`);
+      const formattedFecha = fullDate.toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
       const newComms = [...i.comentarios];
-      newComms[index] = { ...newComms[index], texto: cleanText, editado: true, editadoEn: serverTimestamp() };
+      newComms[index] = {
+        ...newComms[index],
+        texto: newText,
+        fecha: formattedFecha,
+        timestamp: fullDate.getTime(),
+        editado: true,
+        editadoEn: serverTimestamp()
+      };
 
       try {
         await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
@@ -6943,7 +7015,13 @@ ${dataContext}
           actualizadoEn: serverTimestamp()
         });
         mostrarToast('Comentario actualizado');
-      } catch (e) { alert('Error: ' + e.message); }
+        cerrarModalEditComentario();
+        // Forzar refresco del panel si está abierto
+        if (activeIntManageId === id) abrirGestionIntervencion(id, true);
+      } catch (e) {
+        console.error(e);
+        alert('Error al guardar el comentario');
+      }
     };
 
     window.cerrarModalGestionInt = () => { /* No longer used in V.8.1.0 */ };
@@ -10960,7 +11038,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.8.1.8
+          V.8.2.0
         </div>
       </div>
 
@@ -11190,7 +11268,7 @@ ${dataContext}
 
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.8.1.8
+          V.8.2.0
         </div>
       </div>
 
@@ -11882,6 +11960,37 @@ ${dataContext}
     </div>
   </div>
 
+  <!-- MODAL EDITAR COMENTARIO (V.8.2.0) -->
+  <div class="overlay" id="overlay-edit-comentario" style="display:none;"
+    onclick="if(event.target===this) window.cerrarModalEditComentario()">
+    <div class="modal" style="width:380px;">
+      <div class="modal-head">
+        <div class="modal-title">Editar Comentario</div>
+        <button class="btn-close-dp" onclick="window.cerrarModalEditComentario()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <div class="field-lbl">Texto del comentario</div>
+          <textarea class="f-input" id="edit-com-texto" rows="4" style="width:100%"></textarea>
+        </div>
+        <div class="field-row" style="margin-top:10px; display:flex; gap:10px;">
+          <div class="field" style="flex:1;">
+            <div class="field-lbl">Fecha</div>
+            <input type="date" class="f-input" id="edit-com-date" style="width:100%">
+          </div>
+          <div class="field" style="flex:1;">
+            <div class="field-lbl">Hora</div>
+            <input type="time" class="f-input" id="edit-com-time" style="width:100%">
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel" onclick="window.cerrarModalEditComentario()">Cancelar</button>
+        <button class="btn-reg" id="btn-save-edit-com">Guardar Cambios</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL USUARIO -->
   <div class="overlay" id="overlay-user">
     <div class="modal" style="width:420px;">
@@ -12006,7 +12115,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.1.8
+            Versión V.8.2.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
