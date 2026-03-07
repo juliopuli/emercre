@@ -498,7 +498,7 @@
       }
     };
     console.log("EmerCRE V.8.1.5 Loaded");
-    console.log("EmerCRE V.8.1.7 Loaded");
+    console.log("EmerCRE V.8.1.8 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -4777,7 +4777,7 @@ ${dataContext}
     };
 
     // ==========================================
-    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.1.7)
+    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.1.8)
     // ==========================================
 
     window.initMapPreventivos = () => {
@@ -4806,7 +4806,7 @@ ${dataContext}
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         });
 
-        // V.8.1.7: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
+        // V.8.1.8: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
         google.maps.event.addListenerOnce(mapPreventivos, 'tilesloaded', function () {
           ensureOystaScriptIsRunning();
           cargarVehiculosOysta(true);
@@ -10960,7 +10960,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.8.1.7
+          V.8.1.8
         </div>
       </div>
 
@@ -11190,7 +11190,7 @@ ${dataContext}
 
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.8.1.7
+          V.8.1.8
         </div>
       </div>
 
