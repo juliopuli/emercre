@@ -100,7 +100,7 @@
     let oystaVehiclesCache = []; // Última lista de vehículos recibida
     let localVehiclesByOystaId = {}; // V.8.1.0: Mapeo OystaID -> Datos Vehículo Local
     let localVehiclesById = {};       // V.8.1.0: Mapeo FirestoreID -> Datos Vehículo Local
-    window._ambulanceRanks = {}; // V.8.4.1: Cache para ranking por cercanía
+    window._ambulanceRanks = {}; // V.8.5.0: Cache para ranking por cercanía
     let autocomplete = null;
     let autocompleteEdit = null;
     let autocompletePrevInt = null;
@@ -375,7 +375,7 @@
               map: mapPreventivos,
               title: place.name || "Intervención"
             });
-            // V.8.4.1: Calcular cercanía de ambulancias al cambiar a través de autocomplete
+            // V.8.5.0: Calcular cercanía de ambulancias al cambiar a través de autocomplete
             if (typeof window.calcularAmbulanciasCercanasPrev === 'function') {
               window.calcularAmbulanciasCercanasPrev(pickedCoordsPrev);
             }
@@ -458,6 +458,14 @@
     }
 
     // Helper para cálculo de distancia (Haversine) - V.8.1.5
+    const getVehiclePriority = (type) => {
+      if (type === 'Ambulancia') return 1;
+      if (type?.includes('Terreno')) return 2;
+      if (type?.includes('transporte') || type === 'Van') return 3;
+      if (type === 'Camión') return 4;
+      return 5;
+    };
+
     function haversineDistance(p1, p2) {
       if (!p1 || !p2) return 999;
       const R = 6371; // Radio de la Tierra en km
@@ -510,7 +518,7 @@
       }
     };
 
-    console.log("EmerCRE V.8.4.1 Loaded");
+    console.log("EmerCRE V.8.5.0 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1977,7 +1985,7 @@
             oystaMarkers[mid] = marker;
           }
 
-          // V.8.4.1: Monitorización de Estados para EMERGENCIAS (Operaciones)
+          // V.8.5.0: Monitorización de Estados para EMERGENCIAS (Operaciones)
           if (localVeh && ops) {
             // Buscamos si este vehículo está asignado a alguna operación abierta
             const assignedOp = Object.values(ops).find(op =>
@@ -1996,7 +2004,7 @@
               // Necesitamos los comentarios para evitar duplicados. 
               // Como no los tenemos en 'ops' (están en subcolección 'acciones'), 
               // tendríamos que consultarlos, pero eso puede ser costoso en cada loop.
-              // V.8.4.1: Usamos una cache local para evitar spam si no hemos consultado aún.
+              // V.8.5.0: Usamos una cache local para evitar spam si no hemos consultado aún.
               if (!window._oystaLogCache) window._oystaLogCache = new Set();
 
               // 1. Salida (Speed > 5)
@@ -2106,7 +2114,7 @@
             <img src="${iconPath}" style="width:20px; height:20px; object-fit:contain;">
           </div>
         `;
-        // V.8.4.1: Añadir badge de ranking si existe
+        // V.8.5.0: Añadir badge de ranking si existe
         const oystaId = String(v.id);
         if (window._ambulanceRanks && window._ambulanceRanks[oystaId]) {
           const badge = document.createElement('div');
@@ -4877,7 +4885,7 @@ ${dataContext}
     };
 
     // ==========================================
-    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.4.1)
+    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.5.0)
     // ==========================================
 
     window.initMapPreventivos = () => {
@@ -4906,7 +4914,7 @@ ${dataContext}
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         });
 
-        // V.8.4.1: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
+        // V.8.5.0: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
         google.maps.event.addListenerOnce(mapPreventivos, 'tilesloaded', function () {
           ensureOystaScriptIsRunning();
           cargarVehiculosOysta(true);
@@ -5588,13 +5596,6 @@ ${dataContext}
     };
 
     window.renderResourceBadges = (recursos, occupiedResources) => {
-      const getVehiclePriority = (type) => {
-        if (type === 'Ambulancia') return 1;
-        if (type?.includes('Terreno')) return 2;
-        if (type?.includes('transporte') || type === 'Van') return 3;
-        if (type === 'Camión') return 4;
-        return 5;
-      };
 
       const sortedRecs = (recursos || []).slice().sort((a, b) => {
         const va = window.globalVehiculos && window.globalVehiculos[a];
@@ -6067,7 +6068,7 @@ ${dataContext}
             console.log("[Oysta] Logged arrival PREV:", text);
           }
 
-          // 3. Hospital Carlos Haya (V.8.4.1)
+          // 3. Hospital Carlos Haya (V.8.5.0)
           const chCoords = { lat: 36.723012376884185, lng: -4.450232328090476 };
           const distCH = haversineDistance(pos, chCoords);
           if (renderData.isUrgente) {
@@ -6301,14 +6302,6 @@ ${dataContext}
           }
         });
 
-        const getVehiclePriority = (type) => {
-          if (type === 'Ambulancia') return 1;
-          if (type?.includes('Terreno')) return 2;
-          if (type?.includes('transporte') || type === 'Van') return 3;
-          if (type === 'Camión') return 4;
-          return 5;
-        };
-
         recList.innerHTML = `
         <div style="display:flex; flex-wrap:wrap; gap:6px;">
           ${d.recursos
@@ -6316,6 +6309,14 @@ ${dataContext}
             .sort((a, b) => {
               const va = window.globalVehiculos && window.globalVehiculos[a];
               const vb = window.globalVehiculos && window.globalVehiculos[b];
+
+              // V.8.5.0: Priorizar por ranking de cercanía si existe
+              const rankA = va?.oystaId ? (window._ambulanceRanks[String(va.oystaId)]?.rank || 999) : 999;
+              const rankB = vb?.oystaId ? (window._ambulanceRanks[String(vb.oystaId)]?.rank || 999) : 999;
+
+              if (rankA !== rankB) return rankA - rankB;
+
+              // Fallback a prioridad por tipo
               return getVehiclePriority(va?.tipo) - getVehiclePriority(vb?.tipo);
             })
             .map(rvId => {
@@ -6327,7 +6328,7 @@ ${dataContext}
               else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
               else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/offroad.png';
 
-              // V.8.4.1: Obtener ranking si existe
+              // V.8.5.0: Obtener ranking si existe
               const oystaId = v?.oystaId;
               const rankInfo = oystaId && window._ambulanceRanks && window._ambulanceRanks[String(oystaId)];
 
@@ -6347,21 +6348,21 @@ ${dataContext}
       }
 
       document.getElementById('overlay-preventivo-intervencion').style.display = 'flex';
-      // V.8.4.1: Si ya hay coordenadas al abrir, calculamos ranking
+      // V.8.5.0: Si ya hay coordenadas al abrir, calculamos ranking
       if (pickedCoordsPrev && typeof window.calcularAmbulanciasCercanasPrev === 'function') {
         window.calcularAmbulanciasCercanasPrev(pickedCoordsPrev);
       }
     };
 
-    // V.8.4.1: Motor de cálculo de cercanía (transparente para el usuario)
+    // V.8.5.0: Motor de cálculo de cercanía (transparente para el usuario)
     window.calcularAmbulanciasCercanasPrev = function (destCoords) {
       if (!destCoords || !window.google || !google.maps.DistanceMatrixService) return;
       const d = subpreventivosCache[currentPreventivoDiaId];
       if (!d || !d.recursos) return;
 
-      const ambulances = d.recursos.filter(rvId => {
+      const targetResources = d.recursos.filter(rvId => {
         const v = localVehiclesById[rvId];
-        return v && v.tipo === 'Ambulancia' && v.oystaId;
+        return v && (v.tipo === 'Ambulancia' || v.tipo?.includes('Terreno')) && v.oystaId;
       }).map(rvId => {
         const v = localVehiclesById[rvId];
         const oystaPos = oystaVehiclesCache.find(ov => String(ov.id) === String(v.oystaId));
@@ -6372,17 +6373,17 @@ ${dataContext}
         };
       }).filter(a => a.pos && !isNaN(a.pos.lat));
 
-      if (ambulances.length === 0) return;
+      if (targetResources.length === 0) return;
 
       const matrix = new google.maps.DistanceMatrixService();
       matrix.getDistanceMatrix({
-        origins: ambulances.map(a => a.pos),
+        origins: targetResources.map(a => a.pos),
         destinations: [destCoords],
         travelMode: google.maps.TravelMode.DRIVING
       }, (response, status) => {
         if (status === 'OK' && response.rows[0]) {
           const results = response.rows.map((row, i) => ({
-            oystaId: ambulances[i].oystaId,
+            oystaId: targetResources[i].oystaId,
             duration: row.elements[0]?.duration
           })).filter(r => r.duration);
 
@@ -6398,7 +6399,7 @@ ${dataContext}
       });
 
       function fallbackRanking() {
-        const results = ambulances.map(a => {
+        const results = targetResources.map(a => {
           const distKm = haversineDistance(a.pos, destCoords);
           const min = Math.round(distKm * 1.2); // ~50km/h
           return {
@@ -6423,24 +6424,45 @@ ${dataContext}
           });
         }
 
-        ambulances.forEach(a => {
-          const card = document.querySelector(`.prev-int-res-card[data-id="${a.id}"]`);
-          if (card) {
-            const info = window._ambulanceRanks[a.oystaId];
-            let b = card.querySelector('.ranking-badge');
-            if (info) {
-              if (!b) {
-                b = document.createElement('div');
-                b.className = 'ranking-badge ranking-badge-small';
-                card.appendChild(b);
+        // V.8.5.0: Re-ordenar las tarjetas en el modal si está abierto
+        const recList = document.getElementById('prev-int-recursos-list');
+        if (recList) {
+          const container = recList.querySelector('div');
+          if (container) {
+            const cards = Array.from(container.querySelectorAll('.prev-int-res-card'));
+            cards.sort((a, b) => {
+              const idA = a.dataset.id;
+              const idB = b.dataset.id;
+              const va = window.globalVehiculos && window.globalVehiculos[idA];
+              const vb = window.globalVehiculos && window.globalVehiculos[idB];
+
+              const rankA = va?.oystaId ? (window._ambulanceRanks[String(va.oystaId)]?.rank || 999) : 999;
+              const rankB = vb?.oystaId ? (window._ambulanceRanks[String(vb.oystaId)]?.rank || 999) : 999;
+
+              if (rankA !== rankB) return rankA - rankB;
+              return getVehiclePriority(va?.tipo) - getVehiclePriority(vb?.tipo);
+            });
+
+            cards.forEach(card => {
+              container.appendChild(card); // Re-insertar en orden
+              const resId = card.dataset.id;
+              const v = window.globalVehiculos && window.globalVehiculos[resId];
+              const rankInfo = v?.oystaId && window._ambulanceRanks[String(v.oystaId)];
+              let b = card.querySelector('.ranking-badge');
+              if (rankInfo) {
+                if (!b) {
+                  b = document.createElement('div');
+                  b.className = 'ranking-badge ranking-badge-small';
+                  card.appendChild(b);
+                }
+                b.innerText = rankInfo.rank;
+                b.title = `Aproximadamente ${rankInfo.duration}`;
+              } else if (b) {
+                b.remove();
               }
-              b.innerText = info.rank;
-              b.title = `Aproximadamente ${info.duration}`;
-            } else if (b) {
-              b.remove();
-            }
+            });
           }
-        });
+        }
       }
     };
 
@@ -6466,7 +6488,7 @@ ${dataContext}
           title: "Intervención (Pin)"
         });
 
-        // V.8.4.1: Calcular cercanía de ambulancias al situar pin
+        // V.8.5.0: Calcular cercanía de ambulancias al situar pin
         if (typeof window.calcularAmbulanciasCercanasPrev === 'function') {
           window.calcularAmbulanciasCercanasPrev(pickedCoordsPrev);
         }
@@ -7087,13 +7109,6 @@ ${dataContext}
         const availableResources = dayResources.filter(r => !occupiedResources.has(r) && !(i.recursosAsignados || []).includes(r));
 
         // Construir lista de recursos disponibles con iconos y ORDENADOS
-        const getVehiclePriority = (type) => {
-          if (type === 'Ambulancia') return 1;
-          if (type?.includes('Terreno')) return 2;
-          if (type?.includes('transporte') || type === 'Van') return 3;
-          if (type === 'Camión') return 4;
-          return 5;
-        };
 
         const resListHtml = availableResources.length > 0
           ? availableResources
@@ -7208,10 +7223,10 @@ ${dataContext}
       if (!i || !i.comentarios || !i.comentarios[index]) return;
       const c = i.comentarios[index];
 
-      // Permiso base (V.8.4.1)
+      // Permiso base (V.8.5.0)
       if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para editar comentarios'); return; }
 
-      // Restricción Oysta (V.8.4.1)
+      // Restricción Oysta (V.8.5.0)
       const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
       if (isOysta && currentRole !== 'admin' && currentRole !== 'super_admin') {
         mostrarToast('Solo los administradores pueden editar avisos de Oysta');
@@ -7227,7 +7242,7 @@ ${dataContext}
       let d = new Date();
       if (c.timestamp) d = new Date(c.timestamp);
       else if (c.fecha) {
-        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.8.4.1)
+        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.8.5.0)
         const parts = c.fecha.split(/[ ,]+/);
         if (parts.length >= 2) {
           const fParts = parts[0].split("/");
@@ -11337,7 +11352,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.4.1
+          Versión V.8.5.0
         </div>
       </div>
 
@@ -11567,7 +11582,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.4.1
+          Versión V.8.5.0
         </div>
       </div>
 
@@ -12259,7 +12274,7 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL EDITAR COMENTARIO (V.8.4.1) -->
+  <!-- MODAL EDITAR COMENTARIO (V.8.5.0) -->
   <div class="overlay" id="overlay-edit-comentario" style="display:none;"
     onclick="if(event.target===this) window.cerrarModalEditComentario()">
     <div class="modal" style="width:380px;">
@@ -12414,7 +12429,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.4.1
+            Versión V.8.5.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
