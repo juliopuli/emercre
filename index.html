@@ -465,9 +465,16 @@
       return R * c;
     }
 
+    const formatCommentFecha = (date) => {
+      const d = (date instanceof Date) ? date : new Date(date);
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      const hour = String(d.getHours()).padStart(2, '0');
+      const min = String(d.getMinutes()).padStart(2, '0');
+      return `${day}/${month}/${year} ${hour}:${min}`;
+    };
 
-
-    let railwayLayer = null;
     window.toggleRailway = () => {
       const btn = document.getElementById('btn-toggle-railway');
       const isOn = btn.classList.contains('active');
@@ -498,7 +505,7 @@
       }
     };
 
-    console.log("EmerCRE V.8.2.0 Loaded");
+    console.log("EmerCRE V.8.2.1 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2588,7 +2595,7 @@
 
       const ir = document.getElementById('dp-info-row');
       const ts = op.creadoEn?.toDate
-        ? op.creadoEn.toDate().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' })
+        ? formatCommentFecha(op.creadoEn.toDate())
         : '—';
       ir.innerHTML = '';
       // V.8.1.0: Sanitización XSS — usar textContent para campos de usuario
@@ -2693,7 +2700,7 @@
       }
       tl.innerHTML = acciones.map(a => {
         const ts = a.timestamp?.toDate
-          ? a.timestamp.toDate().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+          ? formatCommentFecha(a.timestamp.toDate())
           : '—';
 
         const isAdmin = currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'manager';
@@ -4777,7 +4784,7 @@ ${dataContext}
     };
 
     // ==========================================
-    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.2.0)
+    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.2.1)
     // ==========================================
 
     window.initMapPreventivos = () => {
@@ -4806,7 +4813,7 @@ ${dataContext}
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         });
 
-        // V.8.2.0: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
+        // V.8.2.1: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
         google.maps.event.addListenerOnce(mapPreventivos, 'tilesloaded', function () {
           ensureOystaScriptIsRunning();
           cargarVehiculosOysta(true);
@@ -5927,7 +5934,7 @@ ${dataContext}
               autor: 'Sist. Oysta',
               autorId: 'system',
               timestamp: Date.now(),
-              fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+              fecha: formatCommentFecha(new Date())
             };
             updateDoc(iDoc.ref, { comentarios: [...comments, logComm] });
           }
@@ -5942,7 +5949,7 @@ ${dataContext}
               autor: 'Sist. Oysta',
               autorId: 'system',
               timestamp: Date.now(),
-              fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+              fecha: formatCommentFecha(new Date())
             };
             updateDoc(iDoc.ref, { comentarios: [...(iData.comentarios || []), logComm] });
           }
@@ -6279,7 +6286,7 @@ ${dataContext}
               autor: currentUserDoc.nombre || 'Usuario',
               autorId: currentUser.uid,
               timestamp: Date.now(),
-              fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+              fecha: formatCommentFecha(new Date())
             });
           }
           data.comentarios = initialComms;
@@ -6384,14 +6391,14 @@ ${dataContext}
             autor: 'Sistema',
             autorId: 'system',
             timestamp: Date.now(),
-            fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+            fecha: formatCommentFecha(new Date())
           };
           const closureComm = {
             texto: `🔒 DÍA CERRADO: ${motivo.trim()}`,
             autor: currentUserDoc.nombre || 'Usuario',
             autorId: currentUser.uid,
             timestamp: Date.now(),
-            fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+            fecha: formatCommentFecha(new Date())
           };
 
           const isSingleDay = (p.dias || 1) === 1;
@@ -6407,7 +6414,7 @@ ${dataContext}
                 return {
                   texto: `📤 Recurso liberado por cierre del día: ${indicativo}`,
                   autor: 'Sistema', autorId: 'system', timestamp: Date.now(),
-                  fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                  fecha: formatCommentFecha(new Date())
                 };
               });
               await updateDoc(intDoc.ref, {
@@ -6417,7 +6424,7 @@ ${dataContext}
                 comentarios: [...(intData.comentarios || []), ...releases, {
                   texto: '🔒 Intervención cerrada automáticamente por cierre de día.',
                   autor: 'Sistema', autorId: 'system', timestamp: Date.now(),
-                  fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                  fecha: formatCommentFecha(new Date())
                 }],
                 actualizadoEn: serverTimestamp()
               });
@@ -6444,7 +6451,7 @@ ${dataContext}
             autor: currentUserDoc.nombre || 'Usuario',
             autorId: currentUser.uid,
             timestamp: Date.now(),
-            fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+            fecha: formatCommentFecha(new Date())
           };
           await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', id), {
             abierta: true,
@@ -6499,7 +6506,7 @@ ${dataContext}
                     return {
                       texto: `📤 Recurso liberado por cierre de preventivo: ${indicativo}`,
                       autor: 'Sistema', autorId: 'system', timestamp: Date.now(),
-                      fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                      fecha: formatCommentFecha(new Date())
                     };
                   });
                   await updateDoc(intDoc.ref, {
@@ -6509,7 +6516,7 @@ ${dataContext}
                     comentarios: [...(intData.comentarios || []), ...releases, {
                       texto: '🔒 Intervención cerrada automáticamente por cierre de preventivo global.',
                       autor: 'Sistema', autorId: 'system', timestamp: Date.now(),
-                      fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                      fecha: formatCommentFecha(new Date())
                     }],
                     actualizadoEn: serverTimestamp()
                   });
@@ -6523,7 +6530,7 @@ ${dataContext}
                 comentarios: [...(dataSub.comentarios || []), {
                   texto: '🔒 Día cerrado automáticamente por cierre de preventivo global.',
                   autor: 'Sistema', autorId: 'system', timestamp: Date.now(),
-                  fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+                  fecha: formatCommentFecha(new Date())
                 }],
                 actualizadoEn: serverTimestamp()
               });
@@ -6565,7 +6572,7 @@ ${dataContext}
           autor: currentUserDoc.nombre || 'Usuario',
           autorId: currentUser.uid,
           timestamp: Date.now(),
-          fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+          fecha: formatCommentFecha(new Date())
         };
 
         // Liberar recursos
@@ -6577,7 +6584,7 @@ ${dataContext}
             autor: 'Sistema',
             autorId: 'system',
             timestamp: Date.now(),
-            fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+            fecha: formatCommentFecha(new Date())
           };
         });
       }
@@ -6593,7 +6600,7 @@ ${dataContext}
             autor: currentUserDoc.nombre || 'Usuario',
             autorId: currentUser.uid,
             timestamp: Date.now(),
-            fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+            fecha: formatCommentFecha(new Date())
           }],
           actualizadoEn: serverTimestamp()
         });
@@ -6716,7 +6723,7 @@ ${dataContext}
         autor: currentUserDoc.nombre || 'Usuario',
         autorId: currentUser.uid,
         timestamp: Date.now(),
-        fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        fecha: formatCommentFecha(new Date())
       };
 
       try {
@@ -6914,7 +6921,7 @@ ${dataContext}
         autor: currentUserDoc.nombre || 'Usuario',
         autorId: currentUser.uid,
         timestamp: Date.now(),
-        fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        fecha: formatCommentFecha(new Date())
       };
 
       try {
@@ -6941,10 +6948,10 @@ ${dataContext}
       if (!i || !i.comentarios || !i.comentarios[index]) return;
       const c = i.comentarios[index];
 
-      // Permiso base (V.8.2.0)
+      // Permiso base (V.8.2.1)
       if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para editar comentarios'); return; }
 
-      // Restricción Oysta (V.8.2.0)
+      // Restricción Oysta (V.8.2.1)
       const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
       if (isOysta && currentRole !== 'admin' && currentRole !== 'super_admin') {
         mostrarToast('Solo los administradores pueden editar avisos de Oysta');
@@ -6960,15 +6967,20 @@ ${dataContext}
       let d = new Date();
       if (c.timestamp) d = new Date(c.timestamp);
       else if (c.fecha) {
-        // Formato dd/mm, hh:mm — No tiene año, asumimos el actual
-        const [f, h] = c.fecha.split(', ');
-        if (f && h) {
-          const [day, month] = f.split('/');
-          const [hour, min] = h.split(':');
-          d.setDate(parseInt(day));
-          d.setMonth(parseInt(month) - 1);
-          d.setHours(parseInt(hour));
-          d.setMinutes(parseInt(min));
+        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.8.2.1)
+        const parts = c.fecha.split(/[ ,]+/);
+        if (parts.length >= 2) {
+          const fParts = parts[0].split("/");
+          const hParts = parts[1].split(":");
+          if (fParts.length >= 2) {
+            d.setDate(parseInt(fParts[0]));
+            d.setMonth(parseInt(fParts[1]) - 1);
+            if (fParts.length === 3) d.setFullYear(parseInt(fParts[2]));
+          }
+          if (hParts.length >= 2) {
+            d.setHours(parseInt(hParts[0]));
+            d.setMinutes(parseInt(hParts[1]));
+          }
         }
       }
 
@@ -6997,7 +7009,7 @@ ${dataContext}
       if (!newText || !newDate || !newTime) return alert('Todos los campos son obligatorios');
 
       const fullDate = new Date(`${newDate}T${newTime}`);
-      const formattedFecha = fullDate.toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      const formattedFecha = formatCommentFecha(fullDate);
 
       const newComms = [...i.comentarios];
       newComms[index] = {
@@ -7042,7 +7054,7 @@ ${dataContext}
         autor: currentUserDoc.nombre || 'Usuario',
         autorId: currentUser.uid,
         timestamp: Date.now(),
-        fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        fecha: formatCommentFecha(new Date())
       };
 
       const recs = [...(i.recursosAsignados || []), recurso];
@@ -7076,7 +7088,7 @@ ${dataContext}
         autor: currentUserDoc.nombre || 'Usuario',
         autorId: currentUser.uid,
         timestamp: Date.now(),
-        fecha: new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+        fecha: formatCommentFecha(new Date())
       };
 
       const recs = (i.recursosAsignados || []).filter(r => r !== recurso);
@@ -11038,7 +11050,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.8.2.0
+          V.8.2.1
         </div>
       </div>
 
@@ -11268,7 +11280,7 @@ ${dataContext}
 
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.8.2.0
+          V.8.2.1
         </div>
       </div>
 
@@ -11960,7 +11972,7 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL EDITAR COMENTARIO (V.8.2.0) -->
+  <!-- MODAL EDITAR COMENTARIO (V.8.2.1) -->
   <div class="overlay" id="overlay-edit-comentario" style="display:none;"
     onclick="if(event.target===this) window.cerrarModalEditComentario()">
     <div class="modal" style="width:380px;">
@@ -12115,7 +12127,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.2.0
+            Versión V.8.2.1
           </div>
         </div>
         <div class="field" id="j-prov-row">
