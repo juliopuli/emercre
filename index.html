@@ -505,7 +505,7 @@
       }
     };
 
-    console.log("EmerCRE V.8.2.2 Loaded");
+    console.log("EmerCRE V.8.2.3 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -4784,7 +4784,7 @@ ${dataContext}
     };
 
     // ==========================================
-    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.2.2)
+    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.2.3)
     // ==========================================
 
     window.initMapPreventivos = () => {
@@ -4813,7 +4813,7 @@ ${dataContext}
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         });
 
-        // V.8.2.2: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
+        // V.8.2.3: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
         google.maps.event.addListenerOnce(mapPreventivos, 'tilesloaded', function () {
           ensureOystaScriptIsRunning();
           cargarVehiculosOysta(true);
@@ -5918,6 +5918,8 @@ ${dataContext}
         window._prevIntVehicleMarkers[vehicleId] = marker;
 
         // V.8.1.5: Monitorización de Estados (Salida y Llegada Automática)
+        let dist = 999;
+        let hasArrived = false;
         const iDoc = interventionDocs.find(d => d.id === renderData.interventionId);
         if (iDoc) {
           const iData = iDoc.data();
@@ -5940,8 +5942,8 @@ ${dataContext}
           }
 
           // 2. Llegada: En un radio de 100m (0.1km)
-          const dist = haversineDistance(pos, iData.coords);
-          const hasArrived = comments.some(c => c.texto && c.texto.includes("llega al lugar del aviso") && c.texto.includes(indicativo));
+          dist = haversineDistance(pos, iData.coords);
+          hasArrived = comments.some(c => c.texto && c.texto.includes("llega al lugar del aviso") && c.texto.includes(indicativo));
 
           if (!hasArrived && dist < 0.1) {
             const logComm = {
@@ -5956,8 +5958,10 @@ ${dataContext}
         }
 
         // ------ B. RUTA DINÁMICA ------
-        // V.8.1.0: Sólo trazamos ruta si la intervención es Atención Urgente (rojo)
-        if (directionsService && renderData.interventionCoords && renderData.isUrgente) {
+        const reachedLocation = (dist < 0.1) || (hasArrived);
+
+        // V.8.1.0: Sólo trazamos ruta si la intervención es Atención Urgente (rojo) y NO ha llegado
+        if (directionsService && renderData.interventionCoords && renderData.isUrgente && !reachedLocation) {
           const routeKey = `${vehicleId}_${renderData.interventionId}`;
           activeRouteKeys.add(routeKey);
 
@@ -6948,10 +6952,10 @@ ${dataContext}
       if (!i || !i.comentarios || !i.comentarios[index]) return;
       const c = i.comentarios[index];
 
-      // Permiso base (V.8.2.2)
+      // Permiso base (V.8.2.3)
       if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para editar comentarios'); return; }
 
-      // Restricción Oysta (V.8.2.2)
+      // Restricción Oysta (V.8.2.3)
       const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
       if (isOysta && currentRole !== 'admin' && currentRole !== 'super_admin') {
         mostrarToast('Solo los administradores pueden editar avisos de Oysta');
@@ -6967,7 +6971,7 @@ ${dataContext}
       let d = new Date();
       if (c.timestamp) d = new Date(c.timestamp);
       else if (c.fecha) {
-        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.8.2.2)
+        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.8.2.3)
         const parts = c.fecha.split(/[ ,]+/);
         if (parts.length >= 2) {
           const fParts = parts[0].split("/");
@@ -11050,7 +11054,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.8.2.2
+          V.8.2.3
         </div>
       </div>
 
@@ -11280,7 +11284,7 @@ ${dataContext}
 
         <div
           style="padding: 8px 16px; font-size: 11px; color: var(--text-4); border-top: 1px solid var(--border); text-align: left; font-family: monospace; flex-shrink: 0;">
-          V.8.2.2
+          V.8.2.3
         </div>
       </div>
 
@@ -11972,7 +11976,7 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL EDITAR COMENTARIO (V.8.2.2) -->
+  <!-- MODAL EDITAR COMENTARIO (V.8.2.3) -->
   <div class="overlay" id="overlay-edit-comentario" style="display:none;"
     onclick="if(event.target===this) window.cerrarModalEditComentario()">
     <div class="modal" style="width:380px;">
@@ -12127,7 +12131,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.2.2
+            Versión V.8.2.3
           </div>
         </div>
         <div class="field" id="j-prov-row">
