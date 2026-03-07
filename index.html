@@ -505,7 +505,7 @@
       }
     };
 
-    console.log("EmerCRE V.8.3.1 Loaded");
+    console.log("EmerCRE V.8.3.2 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1972,7 +1972,7 @@
             oystaMarkers[mid] = marker;
           }
 
-          // V.8.3.1: Monitorización de Estados para EMERGENCIAS (Operaciones)
+          // V.8.3.2: Monitorización de Estados para EMERGENCIAS (Operaciones)
           if (localVeh && ops) {
             // Buscamos si este vehículo está asignado a alguna operación abierta
             const assignedOp = Object.values(ops).find(op =>
@@ -1991,7 +1991,7 @@
               // Necesitamos los comentarios para evitar duplicados. 
               // Como no los tenemos en 'ops' (están en subcolección 'acciones'), 
               // tendríamos que consultarlos, pero eso puede ser costoso en cada loop.
-              // V.8.3.1: Usamos una cache local para evitar spam si no hemos consultado aún.
+              // V.8.3.2: Usamos una cache local para evitar spam si no hemos consultado aún.
               if (!window._oystaLogCache) window._oystaLogCache = new Set();
 
               // 1. Salida (Speed > 5)
@@ -4862,7 +4862,7 @@ ${dataContext}
     };
 
     // ==========================================
-    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.3.1)
+    // MÓDULO DE PREVENTIVOS - LÓGICA (V.8.3.2)
     // ==========================================
 
     window.initMapPreventivos = () => {
@@ -4891,7 +4891,7 @@ ${dataContext}
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         });
 
-        // V.8.3.1: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
+        // V.8.3.2: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
         google.maps.event.addListenerOnce(mapPreventivos, 'tilesloaded', function () {
           ensureOystaScriptIsRunning();
           cargarVehiculosOysta(true);
@@ -6006,47 +6006,53 @@ ${dataContext}
 
           // 1. Salida: Se considera "en movimiento" si speed > 5
           const isMoving = parseFloat(oystaVeh.speed) > 5;
-          // V.8.3.1: Solo consideramos que ha salido si existe el comentario Y este incluye paréntesis (dirección)
+          if (!window._oystaSentPreventivos) window._oystaSentPreventivos = new Set();
+          const depKey = `dep_prev_${renderData.interventionId}_${vehicleId}`;
+
           const hasDeparted = comments.some(c => {
             const t = c.texto || '';
-            return t.includes("sale hacia el lugar") && t.includes(indicativo) && t.includes("(");
+            return t.includes("sale hacia el lugar") && t.includes(indicativo);
           });
 
-          if (!hasDeparted && isMoving) {
+          if (!hasDeparted && isMoving && !window._oystaSentPreventivos.has(depKey)) {
             const text = `⚡️ ${indicativo} sale hacia el lugar (${iData.direccion || 'sin dirección'}).`;
-            const logComm = {
-              texto: text,
-              autor: 'Sist. Oysta',
-              autorId: 'system',
-              timestamp: Date.now(),
-              fecha: formatCommentFecha(new Date())
-            };
-            console.log("[Oysta] Intentando loggear salida en Preventivos:", text);
-            updateDoc(iDoc.ref, { comentarios: [...comments, logComm] });
+            window._oystaSentPreventivos.add(depKey);
+            updateDoc(iDoc.ref, {
+              comentarios: [...(iData.comentarios || []), {
+                texto: text,
+                autor: 'Sist. Oysta',
+                autorId: 'system',
+                timestamp: Date.now(),
+                fecha: formatCommentFecha(new Date())
+              }]
+            });
+            console.log("[Oysta] Logged departure PREV:", text);
           }
 
           // 2. Llegada: En un radio de 100m (0.1km)
           dist = haversineDistance(pos, iData.coords);
-          // V.8.3.1: Solo consideramos que ha llegado si existe el comentario Y este incluye paréntesis (dirección)
-          hasArrived = comments.some(c => {
+          const arrKey = `arr_prev_${renderData.interventionId}_${vehicleId}`;
+          const hasArrivedRemote = comments.some(c => {
             const t = c.texto || '';
-            return t.includes("llega al lugar del aviso") && t.includes(indicativo) && t.includes("(");
+            return t.includes("llega al lugar del aviso") && t.includes(indicativo);
           });
 
-          if (!hasArrived && dist < 0.1) {
+          if (!hasArrivedRemote && dist < 0.1 && !window._oystaSentPreventivos.has(arrKey)) {
             const text = `✅ ${indicativo} llega al lugar del aviso (${iData.direccion || 'sin dirección'}).`;
-            const logComm = {
-              texto: text,
-              autor: 'Sist. Oysta',
-              autorId: 'system',
-              timestamp: Date.now(),
-              fecha: formatCommentFecha(new Date())
-            };
-            console.log("[Oysta] Intentando loggear llegada en Preventivos:", text);
-            updateDoc(iDoc.ref, { comentarios: [...(iData.comentarios || []), logComm] });
+            window._oystaSentPreventivos.add(arrKey);
+            updateDoc(iDoc.ref, {
+              comentarios: [...(iData.comentarios || []), {
+                texto: text,
+                autor: 'Sist. Oysta',
+                autorId: 'system',
+                timestamp: Date.now(),
+                fecha: formatCommentFecha(new Date())
+              }]
+            });
+            console.log("[Oysta] Logged arrival PREV:", text);
           }
 
-          // 3. Hospital Carlos Haya (V.8.3.1)
+          // 3. Hospital Carlos Haya (V.8.3.2)
           const chCoords = { lat: 36.723012376884185, lng: -4.450232328090476 };
           const distCH = haversineDistance(pos, chCoords);
           if (renderData.isUrgente) {
@@ -7075,10 +7081,10 @@ ${dataContext}
       if (!i || !i.comentarios || !i.comentarios[index]) return;
       const c = i.comentarios[index];
 
-      // Permiso base (V.8.3.1)
+      // Permiso base (V.8.3.2)
       if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para editar comentarios'); return; }
 
-      // Restricción Oysta (V.8.3.1)
+      // Restricción Oysta (V.8.3.2)
       const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
       if (isOysta && currentRole !== 'admin' && currentRole !== 'super_admin') {
         mostrarToast('Solo los administradores pueden editar avisos de Oysta');
@@ -7094,7 +7100,7 @@ ${dataContext}
       let d = new Date();
       if (c.timestamp) d = new Date(c.timestamp);
       else if (c.fecha) {
-        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.8.3.1)
+        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.8.3.2)
         const parts = c.fecha.split(/[ ,]+/);
         if (parts.length >= 2) {
           const fParts = parts[0].split("/");
@@ -11177,7 +11183,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.3.1
+          Versión V.8.3.2
         </div>
       </div>
 
@@ -11407,7 +11413,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.3.1
+          Versión V.8.3.2
         </div>
       </div>
 
@@ -12099,7 +12105,7 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL EDITAR COMENTARIO (V.8.3.1) -->
+  <!-- MODAL EDITAR COMENTARIO (V.8.3.2) -->
   <div class="overlay" id="overlay-edit-comentario" style="display:none;"
     onclick="if(event.target===this) window.cerrarModalEditComentario()">
     <div class="modal" style="width:380px;">
@@ -12254,7 +12260,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.3.1
+            Versión V.8.3.2
           </div>
         </div>
         <div class="field" id="j-prov-row">
