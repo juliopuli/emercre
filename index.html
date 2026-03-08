@@ -5578,6 +5578,8 @@ ${dataContext}
       if (unsubSubpreventivos) unsubSubpreventivos();
       if (unsubIntervenciones) unsubIntervenciones();
 
+      window.clearPreventivoMapEffects(); // V.8.0.1
+
       document.querySelectorAll('[id^="prev-dias-wrap-"]').forEach(el => el.style.display = 'none');
       document.querySelectorAll('#preventivos-list .op-card').forEach(c => c.style.border = '');
 
@@ -5715,7 +5717,7 @@ ${dataContext}
     window.cerrarDetallePreventivo = () => {
       currentPreventivoDiaId = null;
       activeIntManageId = null;
-      window.clearAmbulanceRanking(); // V.8.0.0: Limpiar mapa al salir del día
+      window.clearPreventivoMapEffects(); // V.8.0.1: Limpiar mapa al salir del día
       document.getElementById('preventivos-detail-panel').classList.remove('open');
       // Refrescar acordeón para quitar resaltado
       if (currentPreventivoId) cargarSubpreventivos(currentPreventivoId);
@@ -6669,6 +6671,32 @@ ${dataContext}
       }
     };
 
+    window.clearPreventivoMapEffects = () => {
+      // 1. Limpiar Marcadores de Intervención (Iconos)
+      clearPreventivoMarkers();
+      // 2. Limpiar Marcadores de Vehículos Asignados
+      if (window._prevIntVehicleMarkers) {
+        Object.values(window._prevIntVehicleMarkers).forEach(m => { try { m.map = null; } catch (e) { } });
+        window._prevIntVehicleMarkers = {};
+      }
+      // 3. Limpiar Rutas y sus Etiquetas
+      if (window._prevIntRoutes) {
+        Object.keys(window._prevIntRoutes).forEach(k => {
+          const r = window._prevIntRoutes[k];
+          if (r.renderer) r.renderer.setMap(null);
+          if (r.fallbackLine) r.fallbackLine.setMap(null);
+          if (r.labelMarker) {
+            r.labelMarker.map = null;
+            r.labelMarker = null;
+          }
+        });
+        window._prevIntRoutes = {};
+      }
+      // 4. Limpiar Rankings y Badges de Oysta
+      window.clearAmbulanceRanking();
+      console.log("[Preventivos] Map effects cleared.");
+    };
+
     window.clearAmbulanceRanking = () => {
       window._ambulanceRanks = {};
       // 1. Refrescar Mapa de Preventivos
@@ -7084,7 +7112,7 @@ ${dataContext}
         });
         if (newStatus === false) {
           activeIntManageId = null;
-          window.clearAmbulanceRanking(); // V.8.0.0: Limpiar mapa al cerrar intervención
+          window.clearPreventivoMapEffects(); // V.8.0.1
         }
 
         mostrarToast(newStatus ? 'Intervención reabierta' : 'Intervención cerrada y recursos liberados');
@@ -7108,7 +7136,7 @@ ${dataContext}
       if (!confirm('¿Seguro que deseas eliminar esta intervención permanentemente?')) return;
       try {
         await deleteDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id));
-        window.clearAmbulanceRanking(); // V.8.0.0
+        window.clearPreventivoMapEffects(); // V.8.0.1
         mostrarToast('Intervención eliminada');
       } catch (e) { alert('Error al borrar: ' + e.message); }
     };
@@ -7117,12 +7145,16 @@ ${dataContext}
       if (!canDeleteSubpreventivo()) { mostrarToast('No tienes permiso para borrar días'); return; }
       if (!confirm('¿Seguro que deseas eliminar este día y todas sus intervenciones permanentemente?')) return;
       try {
-        // En un entorno real se deberían borrar las subcolecciones, pero Firestore SDK web no lo hace automático.
-        // Por ahora borramos el documento del día.
+        // V.8.0.1: Borrado paulatino de intervenciones
+        const intSnap = await getDocs(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos', id, 'intervenciones'));
+        for (const intDoc of intSnap.docs) {
+          // Si estaba abierta, liberamos (opcional por ser borrado, pero más seguro)
+          await deleteDoc(intDoc.ref);
+        }
         await deleteDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', id));
-        window.clearAmbulanceRanking(); // V.8.0.0
+        window.clearPreventivoMapEffects(); // V.8.0.1
         if (currentPreventivoDiaId === id) cerrarDetallePreventivo();
-        mostrarToast('Día eliminado');
+        mostrarToast('Día e intervenciones eliminadas');
       } catch (e) { alert('Error al borrar: ' + e.message); }
     };
 
@@ -7130,9 +7162,17 @@ ${dataContext}
       if (!canDeletePreventivo()) { mostrarToast('No tienes permiso para borrar preventivos'); return; }
       if (!confirm('¿Seguro que deseas eliminar este preventivo y TODO su contenido permanentemente?')) return;
       try {
+        // V.8.0.1: Borrado paulatino (recursivo)
+        const snap = await getDocs(collection(db, 'preventivos', id, 'subpreventivos'));
+        for (const docSub of snap.docs) {
+          const intSnap = await getDocs(collection(db, 'preventivos', id, 'subpreventivos', docSub.id, 'intervenciones'));
+          for (const intDoc of intSnap.docs) await deleteDoc(intDoc.ref);
+          await deleteDoc(docSub.ref);
+        }
         await deleteDoc(doc(db, 'preventivos', id));
+        window.clearPreventivoMapEffects(); // V.8.0.1
         if (currentPreventivoId === id) backToPreventivosList();
-        mostrarToast('Preventivo eliminado');
+        mostrarToast('Preventivo y todo su contenido eliminado');
       } catch (e) { alert('Error al borrar: ' + e.message); }
     };
 
@@ -11966,7 +12006,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.0.0
+          Versión V.8.0.1
         </div>
       </div>
 
@@ -12269,7 +12309,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.0.0
+          Versión V.8.0.1
         </div>
       </div>
 
