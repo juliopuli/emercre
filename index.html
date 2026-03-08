@@ -6651,10 +6651,26 @@ ${dataContext}
 
     window.clearAmbulanceRanking = () => {
       window._ambulanceRanks = {};
+      // 1. Refrescar Mapa de Preventivos
       if (oystaMarkersPrev) {
         Object.keys(oystaMarkersPrev).forEach(mid => {
           const v = oystaVehiclesCache.find(ov => String(ov.id) === mid);
           if (v) window.syncOystaMarkerPrev(v);
+        });
+      }
+      // 2. Refrescar Mapa Principal (Emergencias)
+      if (oystaMarkers) {
+        Object.keys(oystaMarkers).forEach(mid => {
+          const v = oystaVehiclesCache.find(ov => String(ov.id) === mid);
+          if (v) {
+            const statusClass = (parseFloat(v.speed) > 5) ? 'moving' : 'stopped';
+            const localVeh = localVehiclesByOystaId[mid];
+            const isVisible = visibleVehicles[mid] !== false;
+            if (typeof window.createOystaMarkerContent === 'function') {
+              oystaMarkers[mid].content = window.createOystaMarkerContent(v, localVeh, statusClass);
+            }
+            if (gmap) oystaMarkers[mid].setMap((isVisible && currentUserDoc?.canSeeVehicles) ? gmap : null);
+          }
         });
       }
     };
@@ -7072,6 +7088,7 @@ ${dataContext}
       if (!confirm('¿Seguro que deseas eliminar esta intervención permanentemente?')) return;
       try {
         await deleteDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id));
+        window.clearAmbulanceRanking(); // V.8.8.3
         mostrarToast('Intervención eliminada');
       } catch (e) { alert('Error al borrar: ' + e.message); }
     };
@@ -7083,6 +7100,7 @@ ${dataContext}
         // En un entorno real se deberían borrar las subcolecciones, pero Firestore SDK web no lo hace automático.
         // Por ahora borramos el documento del día.
         await deleteDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', id));
+        window.clearAmbulanceRanking(); // V.8.8.3
         if (currentPreventivoDiaId === id) cerrarDetallePreventivo();
         mostrarToast('Día eliminado');
       } catch (e) { alert('Error al borrar: ' + e.message); }
@@ -12231,7 +12249,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.8.2
+          Versión V.8.8.3
         </div>
       </div>
 
@@ -13078,7 +13096,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.8.2
+            Versión V.8.8.3
           </div>
         </div>
         <div class="field" id="j-prov-row">
