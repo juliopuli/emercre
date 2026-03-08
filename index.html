@@ -595,7 +595,7 @@
       });
     }
 
-    console.log("EmerCRE V.8.6.8 Loaded");
+    console.log("EmerCRE V.8.6.9 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7644,8 +7644,12 @@ ${dataContext}
           estCost = n(mData.maps_load) * 0.007 + n(mData.maps_route) * 0.005 + n(mData.maps_places) * 0.017 + n(mData.maps_geocode) * 0.005;
           estReqs = n(mData.maps_load) + n(mData.maps_route) + n(mData.maps_places) + n(mData.maps_geocode);
 
+          const geminiReal = n(real.gemini.day);
+          const geminiEst = n(dData.ia_report);
+          const geminiLimit = n(real.gemini.limit) || 1500;
+
           // Actualizamos otros campos con real si están disponibles
-          updateUsageUI('gemini', n(real.gemini), 1500, null, `Peticiones (Real: ${n(real.gemini)} / Est: ${n(dData.ia_report)})`);
+          updateUsageUI('gemini', geminiReal, geminiLimit, `${geminiEst} (Est) / ${geminiReal} (Real)`, `Peticiones hoy (Límite: ${geminiLimit})`);
           updateUsageUI('fs-reads', n(real.firestore.reads), 50000, null, `Lecturas (Real: ${n(real.firestore.reads)} / Est: ${n(dData.fs_read)})`);
           updateUsageUI('fs-writes', n(real.firestore.writes), 20000, null, `Escrituras (Real: ${n(real.firestore.writes)} / Est: ${n(dData.fs_write)})`);
         } catch (e) { }
@@ -11848,7 +11852,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.6.8
+          Versión V.8.6.9
         </div>
       </div>
 
@@ -12151,7 +12155,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.6.8
+          Versión V.8.6.9
         </div>
       </div>
 
@@ -12998,7 +13002,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.6.8
+            Versión V.8.6.9
           </div>
         </div>
         <div class="field" id="j-prov-row">
