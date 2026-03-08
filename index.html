@@ -595,7 +595,7 @@
       });
     }
 
-    console.log("EmerCRE V.8.7.5 Loaded");
+    console.log("EmerCRE V.8.8.0 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -743,10 +743,12 @@
         renderChatList();
       };
 
-      // Escuchar mensajes PRIVADOS (Sin limit ni orderBy)
+      // Escuchar mensajes PRIVADOS (Limitado a los últ. 100 para ahorrar lecturas) (V.8.8.0)
       const qPriv = query(
         collection(db, 'chat_mensajes'),
-        or(where('destinatarioId', '==', currentUser.uid), where('remitenteId', '==', currentUser.uid))
+        or(where('destinatarioId', '==', currentUser.uid), where('remitenteId', '==', currentUser.uid)),
+        orderBy('timestamp', 'desc'),
+        limit(100)
       );
       unsubChatPrivateGlobal = onSnapshot(qPriv, snap => {
         unreadMessagesPrivados = {};
@@ -892,7 +894,7 @@
     let allUsersCache = [];
     async function cargarUsuariosParaChat() {
       if (unsubUserPresence) unsubUserPresence();
-      // V.8.7.5: Solo cargar usuarios que no sean anónimos y limitar a 100 para ahorrar lecturas
+      // V.8.8.0: Solo cargar usuarios que no sean anónimos y limitar a 100 para ahorrar lecturas
       const q = query(collection(db, 'users'), where('role', '!=', 'anonimo'), limit(100));
       unsubUserPresence = onSnapshot(q, snap => {
         allUsersCache = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
@@ -943,11 +945,14 @@
       msgsDiv.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-4);">Cargando mensajes...</div>';
 
       // Chat privado: usamos 'or' para cubrir remitente/destinatario de forma segura con las reglas
+      // V.8.8.0: Limitar a los últimos 50 mensajes y ordenar por servidor
       const q = query(collection(db, 'chat_mensajes'),
         or(
           and(where('remitenteId', '==', currentUser.uid), where('destinatarioId', '==', chatId)),
           and(where('remitenteId', '==', chatId), where('destinatarioId', '==', currentUser.uid))
-        )
+        ),
+        orderBy('timestamp', 'desc'),
+        limit(50)
       );
 
       unsubChatDetail = onSnapshot(q, async snap => {
@@ -956,6 +961,8 @@
 
         // Ordenar en cliente para evitar necesidad de índices compuestos en Firebase
         const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        // Invertimos el orden para que en el chat el más nuevo esté abajo si el diseño lo requiere, 
+        // pero el query nos lo trae en orden descendente (el más nuevo primero)
         docs.sort((a, b) => (a.timestamp?.toMillis ? a.timestamp.toMillis() : 0) - (b.timestamp?.toMillis ? b.timestamp.toMillis() : 0));
 
         docs.forEach(m => {
@@ -1467,9 +1474,12 @@
       document.getElementById('hdr-user').textContent = currentUserDoc.nombre || currentUser.email;
       document.getElementById('hdr-role').textContent = ROL_LABELS[currentRole] || currentRole;
 
-      // V.8.6.0: Logs Admin visibility
+      // V.8.8.0: Logs Admin visibility (Desktop & Mobile)
       const btnLogsAdmin = document.getElementById('btn-logs-admin');
-      if (btnLogsAdmin) btnLogsAdmin.style.display = (currentRole === 'super_admin') ? 'flex' : 'none';
+      const mnavLogsAdmin = document.getElementById('mnav-logs-admin');
+      const showLogs = (currentRole === 'super_admin');
+      if (btnLogsAdmin) btnLogsAdmin.style.display = showLogs ? 'flex' : 'none';
+      if (mnavLogsAdmin) mnavLogsAdmin.style.display = showLogs ? 'flex' : 'none';
 
       // Actualizar título de oficina y selector de provincia
       const officeTitle = document.getElementById('hdr-office-title');
@@ -1620,9 +1630,14 @@
     let unsubVehiculos = null;
     function suscribirVehiculosLocales() {
       if (unsubVehiculos) unsubVehiculos();
-      // V.8.7.5: Si ya cargamos los vehículos una vez, no hace falta escucharlos todos continuamente 
-      // a menos que cambien. Mantenemos el listener pero podríamos limitarlo si fuera una flota gigante.
-      unsubVehiculos = onSnapshot(collection(db, 'vehiculos'), snap => {
+      // V.8.8.0: Optimización - Filtrar por provincia si el usuario tiene una asignada (no autonómico)
+      let q = collection(db, 'vehiculos');
+      if (currentUserDoc && currentUserDoc.provincia && currentUserDoc.provincia !== 'Andalucía') {
+        console.log(`[Vehículos] Aplicando filtro provincial: ${currentUserDoc.provincia}`);
+        q = query(q, where('provincia', '==', currentUserDoc.provincia));
+      }
+
+      unsubVehiculos = onSnapshot(q, snap => {
         localVehiclesByOystaId = {};
         localVehiclesById = {}; // V.8.1.0
         snap.forEach(doc => {
@@ -1641,7 +1656,7 @@
     // ── SUSCRIPCIÓN OPERACIONES ────────────────────────────────────────
     function suscribirOps() {
       if (unsubOps) unsubOps();
-      // V.8.7.5: Limitar a las últimas 30 operaciones para evitar cargar todo el histórico
+      // V.8.8.0: Limitar a las últimas 30 operaciones para evitar cargar todo el histórico
       const q = query(collection(db, 'operaciones'), orderBy('creadoEn', 'desc'), limit(30));
       let initialLoad = true;
 
@@ -2528,7 +2543,8 @@
 
     function suscribirAcciones(opId) {
       if (unsubAcciones) unsubAcciones();
-      const q = query(collection(db, 'operaciones', opId, 'acciones'), orderBy('timestamp', 'desc'));
+      // V.8.8.0: Limitar a las últimas 50 acciones del timeline
+      const q = query(collection(db, 'operaciones', opId, 'acciones'), orderBy('timestamp', 'desc'), limit(50));
       unsubAcciones = onSnapshot(q, snap => {
         const acciones = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         currentAcciones = {};
@@ -2540,7 +2556,8 @@
     let currentAssignedIds = [];
     function suscribirRecursos(opId) {
       if (unsubRecursos) unsubRecursos();
-      const q = query(collection(db, 'operaciones', opId, 'recursos'), orderBy('asignadoEn', 'desc'));
+      // V.8.8.0: Limitar a 50 recursos asignados
+      const q = query(collection(db, 'operaciones', opId, 'recursos'), orderBy('asignadoEn', 'desc'), limit(50));
       unsubRecursos = onSnapshot(q, snap => {
         const recursos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
         currentAssignedIds = recursos.map(r => r.recursoId);
@@ -2560,13 +2577,11 @@
       if (!currentOp) return;
 
       if (cat === 'vehiculos') {
-        const snap = await getDocs(collection(db, 'vehiculos'));
+        // V.8.8.0: Filtrar por provincia directamente en el servidor
+        const q = query(collection(db, 'vehiculos'), where('provincia', '==', currentOp.provincia || 'Málaga'));
+        const snap = await getDocs(q);
         opcionesRecursosCache.vehiculos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        // Filtrar vehículos por el ámbito de la operación
-        let filtered = opcionesRecursosCache.vehiculos.filter(v => {
-          const prov = v.provincia || 'Málaga';
-          return prov === currentOp.provincia;
-        });
+        let filtered = opcionesRecursosCache.vehiculos;
 
         // FILTRO: No mostrar los que ya están asignados
         filtered = filtered.filter(v => !currentAssignedIds.includes(v.id));
@@ -2575,26 +2590,22 @@
           sel.innerHTML += `<option value="${v.id}">${v.indicativo} - ${v.tipo} (${v.matricula})</option>`;
         });
       } else if (cat === 'erbes') {
-        const snap = await getDocs(collection(db, 'erbes'));
+        // V.8.7.5: Filtrar por provincia directamente en el servidor
+        const q = query(collection(db, 'erbes'), where('provincia', '==', currentOp.provincia || 'Málaga'));
+        const snap = await getDocs(q);
         opcionesRecursosCache.erbes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        let filtered = opcionesRecursosCache.erbes.filter(e => {
-          const prov = e.provincia || 'Málaga';
-          return prov === currentOp.provincia;
-        });
-
+        let filtered = opcionesRecursosCache.erbes;
         filtered = filtered.filter(e => !currentAssignedIds.includes(e.id));
 
         filtered.forEach(e => {
           sel.innerHTML += `<option value="${e.id}">ERBE ${e.localidad} (${e.provincia})</option>`;
         });
       } else if (cat === 'eries') {
-        const snap = await getDocs(collection(db, 'eries'));
+        // V.8.7.5: Filtrar por provincia directamente en el servidor
+        const q = query(collection(db, 'eries'), where('provincia', '==', currentOp.provincia || 'Málaga'));
+        const snap = await getDocs(q);
         opcionesRecursosCache.eries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-        let filtered = opcionesRecursosCache.eries.filter(e => {
-          const prov = e.provincia || 'Málaga';
-          return prov === currentOp.provincia;
-        });
-
+        let filtered = opcionesRecursosCache.eries;
         filtered = filtered.filter(e => !currentAssignedIds.includes(e.id));
 
         filtered.forEach(e => {
@@ -3821,7 +3832,7 @@ ${dataContext}
 
     function suscribirUsuarios() {
       if (unsubUsuarios) unsubUsuarios();
-      // V.8.7.5: Limitar a 100 usuarios en la tabla de gestión
+      // V.8.8.0: Limitar a 100 usuarios en la tabla de gestión
       const q = query(collection(db, 'users'), limit(100));
       unsubUsuarios = onSnapshot(q, snap => {
         cachedUsersSnap = snap;
@@ -3979,7 +3990,8 @@ ${dataContext}
       const tbody = document.getElementById('log-tbody');
       tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;padding:20px;">Cargando historial...</td></tr>';
 
-      const q = query(collection(db, 'users', uid, 'sessions'), orderBy('timestamp', 'desc'));
+      // V.8.8.0: Limitar a las últimas 50 sesiones de inicio/cierre
+      const q = query(collection(db, 'users', uid, 'sessions'), orderBy('timestamp', 'desc'), limit(50));
       if (unsubUserLog) unsubUserLog();
 
       unsubUserLog = onSnapshot(q, snap => {
@@ -5128,7 +5140,8 @@ ${dataContext}
 
     window.cargarPreventivos = () => {
       if (unsubPreventivos) unsubPreventivos();
-      const q = query(collection(db, 'preventivos'), orderBy('creadoEn', 'desc'));
+      // V.8.8.0: Limitar a los 50 preventivos más recientes
+      const q = query(collection(db, 'preventivos'), orderBy('creadoEn', 'desc'), limit(50));
       unsubPreventivos = onSnapshot(q, snap => {
         // V.8.1.0: Poblar cache inmediatamente para evitar problemas de sincronía con intervenciones
         snap.forEach(doc => {
@@ -5803,7 +5816,8 @@ ${dataContext}
 
     function cargarIntervenciones(pId, dId) {
       if (unsubIntervenciones) unsubIntervenciones();
-      const q = query(collection(db, 'preventivos', pId, 'subpreventivos', dId, 'intervenciones'), orderBy('timestamp', 'desc'));
+      // V.8.8.0: Limitar a las últimas 50 intervenciones del día
+      const q = query(collection(db, 'preventivos', pId, 'subpreventivos', dId, 'intervenciones'), orderBy('timestamp', 'desc'), limit(50));
       unsubIntervenciones = onSnapshot(q, snap => {
         lastIntervencionesSnap = snap;
         renderPreventivoIntervenciones(snap);
@@ -5945,7 +5959,7 @@ ${dataContext}
 
       // Sin filtro where para evitar error de índice en collectionGroup.
       // El filtro de abierta===true se hace en el cliente dentro de refreshGlobalPreventivoMarkers.
-      // V.8.7.5: CRÍTICO - Filtrar en servidor solo intervenciones ABIERTAS.
+      // V.8.8.0: CRÍTICO - Filtrar en servidor solo intervenciones ABIERTAS.
       // Esto ahorra miles de lecturas al no descargar el histórico cerrado.
       const q = query(collectionGroup(db, 'intervenciones'), where('abierta', '==', true));
 
@@ -11822,6 +11836,9 @@ ${dataContext}
             <label class="switch"><input type="checkbox" id="toggle-notif-chat" checked
                 onchange="toggleNotifPreference('chat', this.checked)"><span class="slider"></span></label>
           </div>
+          <button id="mnav-logs-admin" onclick="abrirModalLogsAdmin(); toggleMobileMenu();"
+            style="width:100%; padding:10px; background:var(--bg-2); border:1px solid var(--border-mid); color:var(--text-2); cursor:pointer; font-family:inherit; font-size:13px; font-weight:500; border-radius:4px; display:none; align-items:center; justify-content:center; gap:8px;">📜
+            Logs de sistema</button>
           <button onclick="abrirModalChangePass(); toggleMobileMenu();"
             style="width:100%; padding:10px; background:var(--bg-2); border:1px solid var(--border-mid); color:var(--text-2); cursor:pointer; font-family:inherit; font-size:13px; font-weight:500; border-radius:4px; display:flex; align-items:center; justify-content:center; gap:8px;">🔑
             Cambiar contrasena</button>
@@ -11866,7 +11883,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.7.1
+          Versión V.8.8.0
         </div>
       </div>
 
@@ -12169,7 +12186,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.7.1
+          Versión V.8.8.0
         </div>
       </div>
 
@@ -13016,7 +13033,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.7.1
+            Versión V.8.8.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
