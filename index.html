@@ -590,7 +590,7 @@
       });
     }
 
-    console.log("EmerCRE V.8.5.7 Loaded");
+    console.log("EmerCRE V.8.6.0 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1457,6 +1457,10 @@
     function initApp() {
       document.getElementById('hdr-user').textContent = currentUserDoc.nombre || currentUser.email;
       document.getElementById('hdr-role').textContent = ROL_LABELS[currentRole] || currentRole;
+
+      // V.8.6.0: Logs Admin visibility
+      const btnLogsAdmin = document.getElementById('btn-logs-admin');
+      if (btnLogsAdmin) btnLogsAdmin.style.display = (currentRole === 'super_admin') ? 'flex' : 'none';
 
       // Actualizar título de oficina y selector de provincia
       const officeTitle = document.getElementById('hdr-office-title');
@@ -7501,6 +7505,66 @@ ${dataContext}
         if (activeSec === 'operaciones') document.getElementById('btn-mobile-map-toggle').style.display = 'block';
       }
     };
+
+    // ── LOGS ADMIN JS (V.8.6.0) ────────────────────────────────────────
+    window.abrirModalLogsAdmin = () => {
+      document.getElementById('overlay-logs-admin').classList.add('open');
+    };
+    window.cerrarModalLogsAdmin = () => {
+      document.getElementById('overlay-logs-admin').classList.remove('open');
+    };
+
+    window.abrirModalOystaLogs = () => {
+      cerrarModalLogsAdmin();
+      document.getElementById('overlay-oysta-logs').classList.add('open');
+      cargarOystaLogs();
+    };
+    window.cerrarModalOystaLogs = () => {
+      document.getElementById('overlay-oysta-logs').classList.remove('open');
+    };
+
+    window.cargarOystaLogs = async () => {
+      const tbody = document.getElementById('oysta-logs-tbody');
+      const loader = document.getElementById('oysta-logs-loading');
+      const emptyMsg = document.getElementById('oysta-logs-empty');
+
+      tbody.innerHTML = '';
+      loader.style.display = 'block';
+      emptyMsg.style.display = 'none';
+
+      try {
+        const q = query(collection(db, 'oysta_logs'), orderBy('fecha', 'desc'), limit(50));
+        const snap = await getDocs(q);
+        loader.style.display = 'none';
+
+        if (snap.empty) {
+          emptyMsg.style.display = 'block';
+          return;
+        }
+
+        snap.forEach(docSnap => {
+          const d = docSnap.data();
+          const tr = document.createElement('tr');
+
+          let fechaStr = '--';
+          if (d.fecha) {
+            const date = d.fecha.toDate();
+            fechaStr = date.toLocaleString('es-ES');
+          }
+
+          tr.innerHTML = `
+            <td style="font-family: monospace;">${fechaStr}</td>
+            <td style="font-weight: 600;">${d.usuario || 'Desconocido'}</td>
+            <td><span class="logs-badge-oysta">Oysta</span> ${d.info || ''}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } catch (e) {
+        console.error("Error cargando oysta logs:", e);
+        loader.style.display = 'none';
+        alert('Error al cargar logs: ' + e.message);
+      }
+    };
   </script>
 
   <!-- Google Maps se carga dinámicamente desde el script superior -->
@@ -11159,6 +11223,100 @@ ${dataContext}
       height: 12px;
       border-radius: 2px;
     }
+
+    /* ═══════ LOGS ADMIN (V.8.5.8) ═══════ */
+    .logs-choice-container {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      padding: 10px 0;
+    }
+
+    .logs-choice-card {
+      background: var(--bg-2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .logs-choice-card:hover {
+      background: var(--bg-3);
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .logs-choice-icon {
+      font-size: 32px;
+    }
+
+    .logs-choice-title {
+      font-weight: 700;
+      color: var(--text-1);
+      font-size: 14px;
+    }
+
+    .logs-choice-desc {
+      font-size: 11px;
+      color: var(--text-3);
+    }
+
+    .logs-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .logs-table th {
+      text-align: left;
+      padding: 12px 16px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-3);
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-1);
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+
+    .logs-table td {
+      padding: 12px 16px;
+      font-size: 12px;
+      color: var(--text-2);
+      border-bottom: 1px solid var(--border-light);
+    }
+
+    .logs-table tr:hover {
+      background: rgba(0, 0, 0, 0.02);
+    }
+
+    .logs-badge-oysta {
+      background: rgba(11, 34, 65, 0.1);
+      color: #0b2241;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 10px;
+      font-weight: 700;
+      border: 1px solid #0b2241;
+    }
+
+    .btn-logs-admin {
+      background: transparent;
+      border: 1px solid var(--accent) !important;
+      color: var(--accent) !important;
+      font-weight: 700 !important;
+      display: none;
+      align-items: center;
+      gap: 6px;
+    }
   </style>
 </head>
 
@@ -11283,7 +11441,7 @@ ${dataContext}
         </button>
 
         <div class="hdr-div"></div>
-
+        <button id="btn-logs-admin" class="btn-logout btn-logs-admin" onclick="abrirModalLogsAdmin()">📜 Logs</button>
         <button id="btn-nueva-op" class="btn-nueva" onclick="abrirModalOp()">+ Nueva operación</button>
         <button class="btn-logout" onclick="doLogout()">Salir</button>
       </div>
@@ -11437,7 +11595,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.5.7
+          Versión V.8.6.0
         </div>
       </div>
 
@@ -11740,7 +11898,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.5.5
+          Versión V.8.6.0
         </div>
       </div>
 
@@ -12587,7 +12745,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.5.5
+            Versión V.8.6.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
@@ -12862,6 +13020,65 @@ ${dataContext}
       </div>
       <div class="modal-foot">
         <button class="btn-cancel-m" onclick="cerrarLogUsuario()">Cerrar historial</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL SELECCIÓN LOGS ADMIN (V.8.5.8) -->
+  <div class="overlay" id="overlay-logs-admin">
+    <div class="modal" style="width:450px;">
+      <div class="modal-head">
+        <div class="modal-title">Administración de Logs</div>
+        <button class="btn-close-dp" onclick="cerrarModalLogsAdmin()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="logs-choice-container">
+          <div class="logs-choice-card" onclick="abrirModalOystaLogs()">
+            <div class="logs-choice-icon">🛰️</div>
+            <div class="logs-choice-title">Oysta</div>
+            <div class="logs-choice-desc">Logins realizados en el puente Oysta</div>
+          </div>
+          <div class="logs-choice-card" style="opacity:0.6; cursor:not-allowed;">
+            <div class="logs-choice-icon">🔑</div>
+            <div class="logs-choice-title">Api Key</div>
+            <div class="logs-choice-desc">Próximamente...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL LISTADO LOGS OYSTA (V.8.5.8) -->
+  <div class="overlay" id="overlay-oysta-logs">
+    <div class="modal" style="width:700px; max-width:95vw;">
+      <div class="modal-head">
+        <div class="modal-title">Logs de Autenticación Oysta</div>
+        <button class="btn-close-dp" onclick="cerrarModalOystaLogs()">✕</button>
+      </div>
+      <div id="oysta-logs-loading" style="text-align:center; padding:20px; display:none;">
+        <div class="spinner" style="margin:0 auto 10px;"></div>
+        <span>Cargando logs...</span>
+      </div>
+      <div class="modal-body" style="max-height:70vh; overflow-y:auto; padding:0;">
+        <table class="logs-table">
+          <thead>
+            <tr>
+              <th>Fecha y Hora</th>
+              <th>Usuario</th>
+              <th>Detalle</th>
+            </tr>
+          </thead>
+          <tbody id="oysta-logs-tbody">
+            <!-- Cargado vía JS -->
+          </tbody>
+        </table>
+        <div id="oysta-logs-empty" style="padding:40px; text-align:center; display:none; color:var(--text-3);">
+          <div style="font-size:32px; margin-bottom:10px;">📋</div>
+          No hay registros de login en Oysta.
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel-m" onclick="cerrarModalOystaLogs()">Cerrar</button>
       </div>
     </div>
   </div>
