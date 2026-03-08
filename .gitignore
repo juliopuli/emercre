@@ -5,3 +5,4 @@ functions/.env
 *.log
 .firebase/
 firestore.rules
+RULES.md
