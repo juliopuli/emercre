@@ -194,10 +194,10 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     }
 
     const key = require("./usage-key.json");
-    const projectId = key.project_id || "emercre";
-    if (!client.options.credentials) {
-        client.options.credentials = key;
-    }
+    const targetProjectId = key.project_id || "emercre";
+
+    // Si el cliente no tiene las credenciales correctas, las re-instanciamos
+    const monitoringClient = new monitoring.MetricServiceClient({ credentials: key });
 
     const now = Math.floor(Date.now() / 1000);
     const startOfMonth = Math.floor(new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime() / 1000);
@@ -205,7 +205,7 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
 
     const getMetric = async (metricType, filter = "", startTime) => {
         const request = {
-            name: client.projectPath(projectId),
+            name: `projects/${targetProjectId}`,
             filter: `metric.type = "${metricType}" ${filter}`,
             interval: {
                 startTime: { seconds: startTime },
@@ -214,7 +214,7 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
             view: "FULL"
         };
         try {
-            const [timeSeries] = await client.listTimeSeries(request);
+            const [timeSeries] = await monitoringClient.listTimeSeries(request);
             let total = 0;
             timeSeries.forEach(s => {
                 s.points.forEach(p => {
