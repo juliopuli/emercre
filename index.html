@@ -595,7 +595,7 @@
       });
     }
 
-    console.log("EmerCRE V.8.6.7 Loaded");
+    console.log("EmerCRE V.8.6.8 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7615,6 +7615,7 @@ ${dataContext}
       try {
         const getReal = httpsCallable(functions, 'getRealApiUsage');
         const res = await getReal();
+        const real = res.data;
         const n = (v) => Number(v || 0);
 
         const realCost =
@@ -11847,7 +11848,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.6.7
+          Versión V.8.6.8
         </div>
       </div>
 
@@ -12150,7 +12151,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.6.7
+          Versión V.8.6.8
         </div>
       </div>
 
@@ -12997,7 +12998,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.6.7
+            Versión V.8.6.8
           </div>
         </div>
         <div class="field" id="j-prov-row">
