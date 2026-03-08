@@ -176,12 +176,20 @@ exports.sendPushNotification = functions.https.onCall(async (data, context) => {
 
 // 3. Get Real API Usage (V.8.6.1 - Using Service Account)
 const monitoring = require("@google-cloud/monitoring");
+const path = require("path");
 const client = new monitoring.MetricServiceClient({
-    keyFilename: "./usage-key.json"
+    keyFilename: path.join(__dirname, "usage-key.json")
 });
 
 exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
-    if (!context.auth || context.auth.token.role !== "super_admin") {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "Debe estar autenticado.");
+    }
+
+    const userSnap = await admin.firestore().collection("users").doc(context.auth.uid).get();
+    const role = userSnap.exists ? userSnap.data().role : null;
+
+    if (role !== "super_admin") {
         throw new functions.https.HttpsError("permission-denied", "Solo el super_admin puede ver costos reales.");
     }
 
