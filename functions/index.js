@@ -225,7 +225,7 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     };
 
     // Consultamos datos reales
-    const [mapsLoad, mapsPlaces, mapsRoute, mapsGeocode, geminiDay, geminiMonth, fsReads, fsWrites] = await Promise.all([
+    const [mapsLoad, mapsPlaces, mapsRoute, mapsGeocode, geminiDay, geminiMonth, fsReads, fsWrites, fsDeletes] = await Promise.all([
         getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "maps-backend.googleapis.com"', startOfMonth),
         getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "places-backend.googleapis.com"', startOfMonth),
         getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "directions-backend.googleapis.com"', startOfMonth),
@@ -233,12 +233,13 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
         getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "generativelanguage.googleapis.com"', startOfDay),
         getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "generativelanguage.googleapis.com"', startOfMonth),
         getMetric("firestore.googleapis.com/document/read_ops_count", "", startOfDay),
-        getMetric("firestore.googleapis.com/document/write_ops_count", "", startOfDay)
+        getMetric("firestore.googleapis.com/document/write_ops_count", "", startOfDay),
+        getMetric("firestore.googleapis.com/document/delete_ops_count", "", startOfDay)
     ]);
 
     return {
         maps: { load: mapsLoad, places: mapsPlaces, route: mapsRoute, geocode: mapsGeocode },
         gemini: { day: geminiDay, month: geminiMonth, limit: 1500 },
-        firestore: { reads: fsReads, writes: fsWrites }
+        firestore: { reads: fsReads, writes: fsWrites, deletes: fsDeletes }
     };
 });

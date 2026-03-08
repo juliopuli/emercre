@@ -595,7 +595,7 @@
       });
     }
 
-    console.log("EmerCRE V.8.6.9 Loaded");
+    console.log("EmerCRE V.8.7.0 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7648,10 +7648,15 @@ ${dataContext}
           const geminiEst = n(dData.ia_report);
           const geminiLimit = n(real.gemini.limit) || 1500;
 
+          const fsR_Real = n(real.firestore.reads);
+          const fsR_Est = n(dData.fs_read);
+          const fsW_Real = n(real.firestore.writes);
+          const fsW_Est = n(dData.fs_write);
+
           // Actualizamos otros campos con real si están disponibles
           updateUsageUI('gemini', geminiReal, geminiLimit, `${geminiEst} (Est) / ${geminiReal} (Real)`, `Peticiones hoy (Límite: ${geminiLimit})`);
-          updateUsageUI('fs-reads', n(real.firestore.reads), 50000, null, `Lecturas (Real: ${n(real.firestore.reads)} / Est: ${n(dData.fs_read)})`);
-          updateUsageUI('fs-writes', n(real.firestore.writes), 20000, null, `Escrituras (Real: ${n(real.firestore.writes)} / Est: ${n(dData.fs_write)})`);
+          updateUsageUI('fs-reads', fsR_Real, 50000, `${fsR_Est} (Est) / ${fsR_Real} (Real)`, `Lecturas hoy (Límite: 50,000)`);
+          updateUsageUI('fs-writes', fsW_Real, 20000, `${fsW_Est} (Est) / ${fsW_Real} (Real)`, `Escrituras hoy (Límite: 20,000)`);
         } catch (e) { }
 
         const combinedLabel = `$${estCost.toFixed(2)} (Est) / $${realCost.toFixed(2)} (Real)`;
@@ -7691,9 +7696,9 @@ ${dataContext}
         const totalMapsReqs = n(mData.maps_load) + n(mData.maps_route) + n(mData.maps_places) + n(mData.maps_geocode);
 
         updateUsageUI('maps', mapsCost, 200, `$${mapsCost.toFixed(2)} (Est) / - (Real)`, `${totalMapsReqs} (Est) / - (Real) peticiones`);
-        updateUsageUI('gemini', n(dData.ia_report), 1500, null, `Peticiones (Est: ${n(dData.ia_report)} / Real: -)`);
-        updateUsageUI('fs-reads', n(dData.fs_read), 50000, null, `Lecturas (Est: ${n(dData.fs_read)} / Real: -)`);
-        updateUsageUI('fs-writes', n(dData.fs_write), 20000, null, `Escrituras (Est: ${n(dData.fs_write)} / Real: -)`);
+        updateUsageUI('gemini', n(dData.ia_report), 1500, `${n(dData.ia_report)} (Est) / - (Real)`, `Peticiones hoy (Límite: 1500)`);
+        updateUsageUI('fs-reads', n(dData.fs_read), 50000, `${n(dData.fs_read)} (Est) / - (Real)`, `Lecturas hoy (Límite: 50,000)`);
+        updateUsageUI('fs-writes', n(dData.fs_write), 20000, `${n(dData.fs_write)} (Est) / - (Real)`, `Escrituras hoy (Límite: 20,000)`);
       } catch (e) {
         console.error("Error cargando consumo local:", e);
       }
@@ -11852,7 +11857,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.6.9
+          Versión V.8.7.0
         </div>
       </div>
 
@@ -12155,7 +12160,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.6.9
+          Versión V.8.7.0
         </div>
       </div>
 
@@ -13002,7 +13007,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.6.9
+            Versión V.8.7.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
