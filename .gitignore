@@ -8,4 +8,4 @@ firestore.rules
 RULES.md
 functions/usage-key.json
 firebase.json
-functions/
+functions/node_modules/
