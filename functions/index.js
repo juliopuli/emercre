@@ -213,7 +213,8 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
             let total = 0;
             timeSeries.forEach(s => {
                 s.points.forEach(p => {
-                    total += p.value.int64Value || p.value.doubleValue || 0;
+                    const val = p.value.int64Value || p.value.doubleValue || 0;
+                    total += Number(val);
                 });
             });
             return total;
