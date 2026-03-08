@@ -24,7 +24,7 @@
     import {
       getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
       onSnapshot, query, where, orderBy, limit, limitToLast, serverTimestamp, getDoc, getDocs, arrayUnion, or, and,
-      collectionGroup
+      collectionGroup, increment
     }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
     import { initializeAppCheck, ReCaptchaV3Provider }
@@ -249,6 +249,8 @@
 
     // ── GOOGLE MAPS INIT ──────────────────────────────────────────────
     window.initGoogleMap = function () {
+      console.log('🗺️ Google Map initialized');
+      incrementApiUsage('maps_load');
       gmap = new google.maps.Map(document.getElementById('map'), {
         center: { lat: 40.4, lng: -3.7 },
         zoom: 6,
@@ -303,6 +305,7 @@
         });
         autocomplete.addListener('place_changed', () => {
           const place = autocomplete.getPlace();
+          incrementApiUsage('maps_places');
           if (!place.geometry) return;
           pickedCoords = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
           pickedAddress = place.formatted_address || place.name || '';
@@ -330,6 +333,7 @@
         });
         autocompleteEdit.addListener('place_changed', () => {
           const place = autocompleteEdit.getPlace();
+          incrementApiUsage('maps_places');
           if (!place.geometry) return;
           editPickedCoords = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
           editPickedAddress = place.formatted_address || place.name || '';
@@ -358,6 +362,7 @@
         });
         autocompletePrevInt.addListener('place_changed', () => {
           const place = autocompletePrevInt.getPlace();
+          incrementApiUsage('maps_places');
           if (!place.geometry || !place.geometry.location) return;
 
           pickedCoordsPrev = {
@@ -590,7 +595,7 @@
       });
     }
 
-    console.log("EmerCRE V.8.6.0 Loaded");
+    console.log("EmerCRE V.8.6.1 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -638,6 +643,7 @@
       btn.disabled = true; btn.textContent = '...';
       if (info) info.style.display = 'none';
 
+      incrementApiUsage('maps_route');
       directionsService.route({
         origin: origin,
         destination: dest,
@@ -680,6 +686,7 @@
 
       routingPickListener = gmap.addListener('click', e => {
         const gc = new google.maps.Geocoder();
+        incrementApiUsage('maps_geocode');
         gc.geocode({ location: e.latLng }, (results, status) => {
           if (status === 'OK' && results[0]) {
             const addr = results[0].formatted_address;
@@ -2153,6 +2160,7 @@
       pickListener = gmap.addListener('click', e => {
         pickedCoords = { lat: e.latLng.lat(), lng: e.latLng.lng() };
         const gc = new google.maps.Geocoder();
+        incrementApiUsage('maps_geocode');
         gc.geocode({ location: e.latLng }, (results, status) => {
           if (status === 'OK' && results[0]) {
             pickedAddress = results[0].formatted_address;
@@ -7565,6 +7573,97 @@ ${dataContext}
         alert('Error al cargar logs: ' + e.message);
       }
     };
+
+    // ── API USAGE LOGIC (V.8.6.0) ──────────────────────────────────────
+    window.abrirModalApiUsage = () => {
+      cerrarModalLogsAdmin();
+      document.getElementById('overlay-api-usage').classList.add('open');
+      cargarApiUsage();
+    };
+    window.cerrarModalApiUsage = () => {
+      document.getElementById('overlay-api-usage').classList.remove('open');
+    };
+
+    window.incrementApiUsage = async (type, amount = 1) => {
+      const now = new Date();
+      const monthId = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const dayId = `${monthId}-${String(now.getDate()).padStart(2, '0')}`;
+
+      try {
+        // Guardamos por mes (para Maps) y por día (Gemini/Firestore)
+        const monthRef = doc(db, 'api_usage', monthId);
+        const dayRef = doc(db, 'api_usage', dayId);
+
+        const updates = {};
+        updates[type] = increment(amount);
+
+        // Actualizar ambos (si falla alguno no importa demasiado, es para estadística)
+        await Promise.all([
+          setDoc(monthRef, updates, { merge: true }),
+          setDoc(dayRef, updates, { merge: true })
+        ]);
+      } catch (e) {
+        console.warn("Error incrementando uso API:", e);
+      }
+    };
+
+    window.cargarApiUsage = async () => {
+      const now = new Date();
+      const monthId = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const dayId = `${monthId}-${String(now.getDate()).padStart(2, '0')}`;
+
+      try {
+        const [monthSnap, daySnap] = await Promise.all([
+          getDoc(doc(db, 'api_usage', monthId)),
+          getDoc(doc(db, 'api_usage', dayId))
+        ]);
+
+        const mData = monthSnap.exists() ? monthSnap.data() : {};
+        const dData = daySnap.exists() ? daySnap.data() : {};
+
+        // MAPS (Basado en $200 mensuales)
+        // Precios estimados: Load ($0.007), Route ($0.005), Autocomplete ($0.017), Geocode ($0.005)
+        const mapsCost =
+          (mData.maps_load || 0) * 0.007 +
+          (mData.maps_route || 0) * 0.005 +
+          (mData.maps_places || 0) * 0.017 +
+          (mData.maps_geocode || 0) * 0.005;
+
+        const totalMapsReqs = (mData.maps_load || 0) + (mData.maps_route || 0) + (mData.maps_places || 0) + (mData.maps_geocode || 0);
+
+        updateUsageUI('maps', mapsCost, 200, `$${mapsCost.toFixed(2)}`, `${totalMapsReqs} peticiones`);
+
+        // GEMINI (Basado en 1500 diarios)
+        updateUsageUI('gemini', dData.ia_report || 0, 1500);
+
+        // FIRESTORE READS (Basado en 50,000 diarios)
+        updateUsageUI('fs-reads', dData.fs_read || 0, 50000);
+
+        // FIRESTORE WRITES (Basado en 20,000 diarios)
+        updateUsageUI('fs-writes', dData.fs_write || 0, 20000);
+
+      } catch (e) {
+        console.error("Error cargando consumo API:", e);
+      }
+    };
+
+    function updateUsageUI(id, current, limit, labelText = null, metaText = null) {
+      const perc = Math.min((current / limit) * 100, 100);
+      const pb = document.getElementById(`pb-${id}`);
+      const val = document.getElementById(`val-${id}-consumed`);
+
+      if (pb) {
+        pb.style.width = `${perc}%`;
+        pb.classList.toggle('warning', perc >= 70 && perc < 90);
+        pb.classList.toggle('danger', perc >= 90);
+      }
+      if (val) val.textContent = labelText || current.toLocaleString();
+      if (metaText) {
+        const est = document.getElementById(`est-${id}-units`);
+        if (est) est.textContent = metaText;
+      }
+    }
+
   </script>
 
   <!-- Google Maps se carga dinámicamente desde el script superior -->
@@ -11317,6 +11416,112 @@ ${dataContext}
       align-items: center;
       gap: 6px;
     }
+
+    /* ═══════ API USAGE UI (V.8.6.0) ═══════ */
+    .usage-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      gap: 16px;
+      padding: 16px;
+    }
+
+    .usage-card {
+      background: var(--bg-1);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: all 0.2s;
+    }
+
+    .usage-card:hover {
+      border-color: var(--border-dark);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+    }
+
+    .usage-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .usage-title {
+      font-weight: 700;
+      color: var(--text-1);
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .usage-meta {
+      font-size: 11px;
+      color: var(--text-3);
+      font-weight: 600;
+    }
+
+    .progress-container {
+      height: 10px;
+      background: var(--bg-3);
+      border-radius: 5px;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: #27ae60;
+      width: 0%;
+      border-radius: 5px;
+      transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .progress-bar.warning {
+      background: #e67e22;
+    }
+
+    .progress-bar.danger {
+      background: #c0392b;
+      animation: pulseDanger 2s infinite;
+    }
+
+    @keyframes pulseDanger {
+      0% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.7;
+      }
+
+      100% {
+        opacity: 1;
+      }
+    }
+
+    .usage-stats {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .usage-current {
+      color: var(--text-2);
+    }
+
+    .usage-limit {
+      color: var(--text-4);
+    }
+
+    .usage-estimated {
+      font-size: 10px;
+      color: var(--text-3);
+      text-align: right;
+      font-family: monospace;
+    }
   </style>
 </head>
 
@@ -11595,7 +11800,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.6.0
+          Versión V.8.6.1
         </div>
       </div>
 
@@ -11898,7 +12103,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.6.0
+          Versión V.8.6.1
         </div>
       </div>
 
@@ -12745,7 +12950,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.6.0
+            Versión V.8.6.1
           </div>
         </div>
         <div class="field" id="j-prov-row">
@@ -13038,10 +13243,10 @@ ${dataContext}
             <div class="logs-choice-title">Oysta</div>
             <div class="logs-choice-desc">Logins realizados en el puente Oysta</div>
           </div>
-          <div class="logs-choice-card" style="opacity:0.6; cursor:not-allowed;">
-            <div class="logs-choice-icon">🔑</div>
-            <div class="logs-choice-title">Api Key</div>
-            <div class="logs-choice-desc">Próximamente...</div>
+          <div class="logs-choice-card" onclick="abrirModalApiUsage()">
+            <div class="logs-choice-icon">📊</div>
+            <div class="logs-choice-title">Consumo API</div>
+            <div class="logs-choice-desc">Monitorización de límites y costes</div>
           </div>
         </div>
       </div>
@@ -13079,6 +13284,93 @@ ${dataContext}
       </div>
       <div class="modal-foot">
         <button class="btn-cancel-m" onclick="cerrarModalOystaLogs()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL CONSUMO API (V.8.6.0) -->
+  <div class="overlay" id="overlay-api-usage">
+    <div class="modal" style="width:700px; max-width:95vw;">
+      <div class="modal-head">
+        <div class="modal-title">Monitorización de Consumo (Tier Gratuito)</div>
+        <button class="btn-close-dp" onclick="cerrarModalApiUsage()">✕</button>
+      </div>
+      <div class="modal-body" style="background: var(--bg-2);">
+        <div style="padding: 16px; border-bottom: 1px solid var(--border); background: var(--bg-1);">
+          <div
+            style="font-size: 11px; color: var(--text-3); display: flex; align-items: center; gap: 6px; font-weight: 600;">
+            <span>ℹ️</span> Los datos se actualizan en tiempo real al realizar peticiones.
+          </div>
+        </div>
+
+        <div class="usage-grid">
+          <!-- Maps $200 Credit -->
+          <div class="usage-card">
+            <div class="usage-header">
+              <div class="usage-title">🗺️ Google Maps Platform</div>
+              <div class="usage-meta">Mensual (Crédito $200)</div>
+            </div>
+            <div class="progress-container">
+              <div id="pb-maps" class="progress-bar"></div>
+            </div>
+            <div class="usage-stats">
+              <span class="usage-current" id="val-maps-consumed">$0.00</span>
+              <span class="usage-limit">$200.00</span>
+            </div>
+            <div class="usage-estimated" id="est-maps-units">0 peticiones realizadas</div>
+          </div>
+
+          <!-- Gemini Free Tier -->
+          <div class="usage-card">
+            <div class="usage-header">
+              <div class="usage-title">✨ Google Gemini Flash</div>
+              <div class="usage-meta">Diario (1,500 RPD)</div>
+            </div>
+            <div class="progress-container">
+              <div id="pb-gemini" class="progress-bar"></div>
+            </div>
+            <div class="usage-stats">
+              <span class="usage-current" id="val-gemini-consumed">0</span>
+              <span class="usage-limit">1,500</span>
+            </div>
+            <div class="usage-estimated">Peticiones de informes IA</div>
+          </div>
+
+          <!-- Firestore Reads -->
+          <div class="usage-card">
+            <div class="usage-header">
+              <div class="usage-title">📂 Firestore Lecturas</div>
+              <div class="usage-meta">Diario (50,000)</div>
+            </div>
+            <div class="progress-container">
+              <div id="pb-fs-reads" class="progress-bar"></div>
+            </div>
+            <div class="usage-stats">
+              <span class="usage-current" id="val-fs-reads-consumed">0</span>
+              <span class="usage-limit">50,000</span>
+            </div>
+            <div class="usage-estimated">Cargas de datos y escuchas</div>
+          </div>
+
+          <!-- Firestore Writes -->
+          <div class="usage-card">
+            <div class="usage-header">
+              <div class="usage-title">✏️ Firestore Escrituras</div>
+              <div class="usage-meta">Diario (20,000)</div>
+            </div>
+            <div class="progress-container">
+              <div id="pb-fs-writes" class="progress-bar"></div>
+            </div>
+            <div class="usage-stats">
+              <span class="usage-current" id="val-fs-writes-consumed">0</span>
+              <span class="usage-limit">20,000</span>
+            </div>
+            <div class="usage-estimated">Creación y edición de datos</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn-cancel-m" onclick="cerrarModalApiUsage()">Cerrar</button>
       </div>
     </div>
   </div>

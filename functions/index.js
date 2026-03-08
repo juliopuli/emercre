@@ -17,11 +17,26 @@ exports.getOystaVehicles = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError("internal", "Oysta bridge URL no configurada en el servidor.");
     }
 
+    const userEmail = context.auth.token.email || context.auth.uid;
+
     try {
-        const resp = await fetch(bridgeUrl);
+        // Pasamos el email del usuario que solicita para trazabilidad si el puente hace login
+        const urlWithUser = `${bridgeUrl}${bridgeUrl.includes('?') ? '&' : '?'}u=${encodeURIComponent(userEmail)}`;
+        const resp = await fetch(urlWithUser);
         if (!resp.ok) throw new Error("Oysta GAS responded with status " + resp.status);
-        const data = await resp.json();
-        return data;
+        const result = await resp.json();
+
+        // Si el puente indica que ha realizado un login real (inserción de credenciales)
+        if (result.loginPerformed) {
+            await admin.firestore().collection("oysta_logs").add({
+                fecha: admin.firestore.FieldValue.serverTimestamp(),
+                usuario: userEmail,
+                tipo: "Oysta",
+                info: result.loginInfo || "Login automático por expiración de sesión"
+            });
+        }
+
+        return result;
     } catch (error) {
         console.error("Oysta Function Error:", error);
         throw new functions.https.HttpsError("internal", error.message);
@@ -64,7 +79,18 @@ exports.generateGeminiContent = functions.https.onCall(async (data, context) => 
             throw new Error(`Gemini API Error: ${response.status} - ${errorText}`);
         }
 
-        return await response.json();
+        const result = await response.json();
+
+        // V.8.6.0: Log usage
+        try {
+            const now = new Date();
+            const dayId = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+            await admin.firestore().collection("api_usage").doc(dayId).set({
+                ia_report: admin.firestore.FieldValue.increment(1)
+            }, { merge: true });
+        } catch (e) { console.warn("Error logging Gemini usage:", e); }
+
+        return result;
     } catch (error) {
         console.error("Gemini Function Error:", error);
         throw new functions.https.HttpsError("internal", error.message);
