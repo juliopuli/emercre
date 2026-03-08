@@ -193,7 +193,12 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError("permission-denied", "Solo el super_admin puede ver costos reales.");
     }
 
-    const projectId = "emercre-488009"; // ID del JSON proporcionado
+    const key = require("./usage-key.json");
+    const projectId = key.project_id || "emercre";
+    if (!client.options.credentials) {
+        client.options.credentials = key;
+    }
+
     const now = Math.floor(Date.now() / 1000);
     const startOfMonth = Math.floor(new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime() / 1000);
     const startOfDay = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
