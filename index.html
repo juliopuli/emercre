@@ -595,7 +595,7 @@
       });
     }
 
-    console.log("EmerCRE V.8.7.1 Loaded");
+    console.log("EmerCRE V.8.7.5 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -892,7 +892,9 @@
     let allUsersCache = [];
     async function cargarUsuariosParaChat() {
       if (unsubUserPresence) unsubUserPresence();
-      unsubUserPresence = onSnapshot(collection(db, 'users'), snap => {
+      // V.8.7.5: Solo cargar usuarios que no sean anónimos y limitar a 100 para ahorrar lecturas
+      const q = query(collection(db, 'users'), where('role', '!=', 'anonimo'), limit(100));
+      unsubUserPresence = onSnapshot(q, snap => {
         allUsersCache = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
         renderChatList();
         procesarPendingChat();
@@ -1618,6 +1620,8 @@
     let unsubVehiculos = null;
     function suscribirVehiculosLocales() {
       if (unsubVehiculos) unsubVehiculos();
+      // V.8.7.5: Si ya cargamos los vehículos una vez, no hace falta escucharlos todos continuamente 
+      // a menos que cambien. Mantenemos el listener pero podríamos limitarlo si fuera una flota gigante.
       unsubVehiculos = onSnapshot(collection(db, 'vehiculos'), snap => {
         localVehiclesByOystaId = {};
         localVehiclesById = {}; // V.8.1.0
@@ -1637,7 +1641,8 @@
     // ── SUSCRIPCIÓN OPERACIONES ────────────────────────────────────────
     function suscribirOps() {
       if (unsubOps) unsubOps();
-      const q = query(collection(db, 'operaciones'), orderBy('creadoEn', 'desc'));
+      // V.8.7.5: Limitar a las últimas 30 operaciones para evitar cargar todo el histórico
+      const q = query(collection(db, 'operaciones'), orderBy('creadoEn', 'desc'), limit(30));
       let initialLoad = true;
 
       unsubOps = onSnapshot(q, snap => {
@@ -3816,7 +3821,9 @@ ${dataContext}
 
     function suscribirUsuarios() {
       if (unsubUsuarios) unsubUsuarios();
-      unsubUsuarios = onSnapshot(collection(db, 'users'), snap => {
+      // V.8.7.5: Limitar a 100 usuarios en la tabla de gestión
+      const q = query(collection(db, 'users'), limit(100));
+      unsubUsuarios = onSnapshot(q, snap => {
         cachedUsersSnap = snap;
         renderUsersTable();
       });
@@ -5938,11 +5945,13 @@ ${dataContext}
 
       // Sin filtro where para evitar error de índice en collectionGroup.
       // El filtro de abierta===true se hace en el cliente dentro de refreshGlobalPreventivoMarkers.
-      const q = collectionGroup(db, 'intervenciones');
+      // V.8.7.5: CRÍTICO - Filtrar en servidor solo intervenciones ABIERTAS.
+      // Esto ahorra miles de lecturas al no descargar el histórico cerrado.
+      const q = query(collectionGroup(db, 'intervenciones'), where('abierta', '==', true));
 
       unsubGlobalPreventivoIntervenciones = onSnapshot(q, snap => {
         lastGlobalInterventionDocs = snap.docs;
-        console.log("[Preventivos] Intervenciones recibidas:", snap.docs.length);
+        console.log("[Preventivos] Intervenciones abiertas recibidas:", snap.docs.length);
         window.refreshGlobalPreventivoMarkers();
       }, err => {
         console.error("[Preventivos] Error en suscripción global:", err);
