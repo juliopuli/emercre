@@ -595,7 +595,7 @@
       });
     }
 
-    console.log("EmerCRE V.8.6.6 Loaded");
+    console.log("EmerCRE V.8.6.7 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7617,18 +7617,42 @@ ${dataContext}
         const res = await getReal();
         const n = (v) => Number(v || 0);
 
-        const mapsCost =
+        const realCost =
           n(real.maps.load) * 0.007 +
           n(real.maps.route) * 0.005 +
           n(real.maps.places) * 0.017 +
           n(real.maps.geocode) * 0.005;
 
-        const totalMapsReqs = n(real.maps.load) + n(real.maps.route) + n(real.maps.places) + n(real.maps.geocode);
+        const realReqs = n(real.maps.load) + n(real.maps.route) + n(real.maps.places) + n(real.maps.geocode);
 
-        updateUsageUI('maps', mapsCost, 200, `$${mapsCost.toFixed(2)}`, `${totalMapsReqs} peticiones (Real)`);
-        updateUsageUI('gemini', n(real.gemini), 1500, null, "Peticiones (Real)");
-        updateUsageUI('fs-reads', n(real.firestore.reads), 50000, null, "Lecturas (Real)");
-        updateUsageUI('fs-writes', n(real.firestore.writes), 20000, null, "Escrituras (Real)");
+        // Fetch estimated for comparison
+        const nowComp = new Date();
+        const monthId = `${nowComp.getFullYear()}-${String(nowComp.getMonth() + 1).padStart(2, '0')}`;
+        const dayId = `${monthId}-${String(nowComp.getDate()).padStart(2, '0')}`;
+
+        let estCost = 0;
+        let estReqs = 0;
+        try {
+          const [monthSnap, daySnap] = await Promise.all([
+            getDoc(doc(db, 'api_usage', monthId)),
+            getDoc(doc(db, 'api_usage', dayId))
+          ]);
+          const mData = monthSnap.exists() ? monthSnap.data() : {};
+          const dData = daySnap.exists() ? daySnap.data() : {};
+
+          estCost = n(mData.maps_load) * 0.007 + n(mData.maps_route) * 0.005 + n(mData.maps_places) * 0.017 + n(mData.maps_geocode) * 0.005;
+          estReqs = n(mData.maps_load) + n(mData.maps_route) + n(mData.maps_places) + n(mData.maps_geocode);
+
+          // Actualizamos otros campos con real si están disponibles
+          updateUsageUI('gemini', n(real.gemini), 1500, null, `Peticiones (Real: ${n(real.gemini)} / Est: ${n(dData.ia_report)})`);
+          updateUsageUI('fs-reads', n(real.firestore.reads), 50000, null, `Lecturas (Real: ${n(real.firestore.reads)} / Est: ${n(dData.fs_read)})`);
+          updateUsageUI('fs-writes', n(real.firestore.writes), 20000, null, `Escrituras (Real: ${n(real.firestore.writes)} / Est: ${n(dData.fs_write)})`);
+        } catch (e) { }
+
+        const combinedLabel = `$${estCost.toFixed(2)} (Est) / $${realCost.toFixed(2)} (Real)`;
+        const combinedMeta = `${estReqs} (Est) / ${realReqs} (Real) peticiones`;
+
+        updateUsageUI('maps', Math.max(realCost, estCost), 200, combinedLabel, combinedMeta);
 
         if (statusEl) statusEl.textContent = '✅ Sincronizado con Google Cloud';
         return;
@@ -7661,10 +7685,10 @@ ${dataContext}
 
         const totalMapsReqs = n(mData.maps_load) + n(mData.maps_route) + n(mData.maps_places) + n(mData.maps_geocode);
 
-        updateUsageUI('maps', mapsCost, 200, `$${mapsCost.toFixed(2)}`, `${totalMapsReqs} peticiones (Est.)`);
-        updateUsageUI('gemini', n(dData.ia_report), 1500, null, "Peticiones (Est.)");
-        updateUsageUI('fs-reads', n(dData.fs_read), 50000, null, "Lecturas (Est.)");
-        updateUsageUI('fs-writes', n(dData.fs_write), 20000, null, "Escrituras (Est.)");
+        updateUsageUI('maps', mapsCost, 200, `$${mapsCost.toFixed(2)} (Est) / - (Real)`, `${totalMapsReqs} (Est) / - (Real) peticiones`);
+        updateUsageUI('gemini', n(dData.ia_report), 1500, null, `Peticiones (Est: ${n(dData.ia_report)} / Real: -)`);
+        updateUsageUI('fs-reads', n(dData.fs_read), 50000, null, `Lecturas (Est: ${n(dData.fs_read)} / Real: -)`);
+        updateUsageUI('fs-writes', n(dData.fs_write), 20000, null, `Escrituras (Est: ${n(dData.fs_write)} / Real: -)`);
       } catch (e) {
         console.error("Error cargando consumo local:", e);
       }
@@ -11823,7 +11847,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.6.6
+          Versión V.8.6.7
         </div>
       </div>
 
@@ -12126,7 +12150,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.6.6
+          Versión V.8.6.7
         </div>
       </div>
 
@@ -12973,7 +12997,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.6.6
+            Versión V.8.6.7
           </div>
         </div>
         <div class="field" id="j-prov-row">
