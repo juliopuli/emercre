@@ -37,7 +37,7 @@
 
     // ── FIREBASE CONFIG ────────────────────────────────────────────────
     const firebaseConfig = {
-      apiKey: "AIzaSyAHtrxaBazArqa8znWsUIVYxTsS7zoOOmc",
+      apiKey: "__FIREBASE_API_KEY__",
       authDomain: "emercre.firebaseapp.com",
       projectId: "emercre",
       storageBucket: "emercre.firebasestorage.app",
@@ -160,7 +160,19 @@
       return true;
     }
 
-    // V.8.1.0: Unificar visibilidad de vehículos (default true)
+    // V.8.1.0: Ayudantes de seguridad y permisos
+    function escapeHTML(str) {
+      if (!str) return '';
+      const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+      };
+      return str.replace(/[&<>"']/g, function (m) { return map[m]; });
+    }
+
     function isVehicleVisible(id) {
       return visibleVehicles[id] !== false;
     }
@@ -880,9 +892,9 @@
                 <div class="online-dot" style="background:${item.isOnline ? '#2ecc71' : '#bdc3c7'};"></div>
               </div>
               <div class="chat-item-info">
-                <div class="name">${item.nombre}</div>
+                <div class="name">${escapeHTML(item.nombre)}</div>
                 <div class="status">
-                  ${item.isJefeDeGuardia ? `<span style="color: #e74c3c; font-weight: 600;">Jefe de Operaciones (${item.jefeProv})</span>` : item.roleLabel}
+                  ${item.isJefeDeGuardia ? `<span style="color: #e74c3c; font-weight: 600;">Jefe de Operaciones (${escapeHTML(item.jefeProv)})</span>` : escapeHTML(item.roleLabel)}
                 </div>
               </div>
               ${badge}
@@ -1332,7 +1344,7 @@
     // Cargar Google Maps dinámicamente para asegurar que los callbacks estén listos
     function cargarGoogleMaps() {
       const script = document.createElement('script');
-      const apiKey = "AIzaSyAHtrxaBazArqa8znWsUIVYxTsS7zoOOmc";
+      const apiKey = "__GOOGLE_MAPS_API_KEY__"; // [REMEDIACIÓN] No dejar claves reales en el código. Usar restricciones por dominio en Google Cloud Console.
       script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,marker&callback=initGoogleMap&language=es`;
       script.async = true;
       script.defer = true;
@@ -2752,7 +2764,8 @@
         return;
       }
 
-      list.innerHTML = recursos.map(r => {
+      list.innerHTML = '';
+      recursos.forEach(r => {
         const desc = r.descripcion || '';
         let iconUrl = '';
         if (desc.includes('Camión')) iconUrl = 'assets/icons/truck.png';
@@ -2761,17 +2774,37 @@
         else if (desc.includes('Vehículo transporte personal') || desc.includes('Vehículo de transporte mixto') || desc.includes('Furgoneta')) iconUrl = 'assets/icons/van.png';
         else if (desc.includes('🏥 ERBE')) iconUrl = 'assets/icons/erbe.svg';
 
-        const iconHtml = iconUrl ? `<img src="${iconUrl}" style="width:16px; height:16px; margin-right:6px; vertical-align:middle;">` : '';
-        const btnDelete = canModify ? `<button onclick="desasignarRecurso('${r.id}', '${r.descripcion}')" style="background:none;border:none;color:var(--crit-1);cursor:pointer;font-size:14px;line-height:1;" title="Retirar">✕</button>` : '';
-        return `
-        <div style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-2); padding:5px 10px; border:1px solid var(--border-mid); border-radius:2px; font-size:11px;">
-          <div style="display:flex; align-items:center;">
-            ${iconHtml}
-            <span style="font-weight:600;">${desc}</span>
-          </div>
-          ${btnDelete}
-        </div>`;
-      }).join('');
+        const row = document.createElement('div');
+        row.style = "display:flex; justify-content:space-between; align-items:center; background:var(--bg-2); padding:5px 10px; border:1px solid var(--border-mid); border-radius:2px; font-size:11px;";
+
+        const info = document.createElement('div');
+        info.style = "display:flex; align-items:center;";
+
+        if (iconUrl) {
+          const img = document.createElement('img');
+          img.src = iconUrl;
+          img.style = "width:16px; height:16px; margin-right:6px; vertical-align:middle;";
+          info.appendChild(img);
+        }
+
+        const span = document.createElement('span');
+        span.style = "font-weight:600;";
+        span.textContent = desc;
+        info.appendChild(span);
+
+        row.appendChild(info);
+
+        if (canModify) {
+          const btnDelete = document.createElement('button');
+          btnDelete.innerHTML = '✕';
+          btnDelete.style = "background:none;border:none;color:var(--crit-1);cursor:pointer;font-size:14px;line-height:1;";
+          btnDelete.title = "Retirar";
+          btnDelete.onclick = () => window.desasignarRecurso(r.id, r.descripcion);
+          row.appendChild(btnDelete);
+        }
+
+        list.appendChild(row);
+      });
     }
 
     function renderDetalle(op) {
@@ -2785,7 +2818,11 @@
         scopeTitle.textContent = op.provincia === 'Andalucía' ? 'Oficina Autonómica de Andalucía' : `Oficina Provincial de ${op.provincia}`;
       }
       document.getElementById('dp-name').textContent = op.nombre;
-      document.getElementById('dp-loc').innerHTML = op.loc ? `📍 ${op.loc} ` : (op.coords ? `📍 ${op.coords.lat.toFixed(4)}, ${op.coords.lng.toFixed(4)} ` : '');
+      const locEl = document.getElementById('dp-loc');
+      locEl.innerHTML = '📍 ';
+      const locSpan = document.createElement('span');
+      locSpan.textContent = op.loc ? op.loc : (op.coords ? `${op.coords.lat.toFixed(4)}, ${op.coords.lng.toFixed(4)}` : 'Sin ubicación');
+      locEl.appendChild(locSpan);
       document.getElementById('dp-type-tag').innerHTML =
         `<span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${TIPOS[op.tipo] ? t.label : op.tipo}</span>`;
 
@@ -2918,8 +2955,8 @@
           <span class="tl-prio prio-${a.prioridad}">${a.prioridad}</span>
           ${editBtn}
         </div>
-        <div class="tl-text">${a.texto}</div>
-        <div class="tl-author">— ${a.autor || '—'}</div>
+        <div class="tl-text">${escapeHTML(a.texto)}</div>
+        <div class="tl-author">— ${escapeHTML(a.autor || '—')}</div>
       </div>
     </div> `;
       }).join('');
@@ -3882,22 +3919,22 @@ ${dataContext}
             <div style="display:flex; align-items:center; gap:10px;">
               <div class="user-avatar" style="background:${avatarBg};">${initials}</div>
               <div>
-                <div style="font-weight:600;">${u.nombre || '—'}</div>
+                <div style="font-weight:600;">${escapeHTML(u.nombre || '—')}</div>
                 <div style="font-size:11px; color:#6c757d;">${isOnline ? '🟢 En línea' : '🔴 Desconectado'}</div>
               </div>
             </div>
           </td>
-          <td style="font-family:'IBM Plex Mono',monospace;font-size:12px; color:#6c757d;">${u.email}</td>
+          <td style="font-family:'IBM Plex Mono',monospace;font-size:12px; color:#6c757d;">${escapeHTML(u.email)}</td>
           <td>
             <div style="display:flex; flex-direction:column; gap:2px;">
               <span class="rol-badge rol-${u.role}">${ROL_LABELS[u.role] || u.role}</span>
-              <span style="font-size:10px; color:var(--text-3); font-weight:600;">${u.provincia || '—'}</span>
+              <span style="font-size:10px; color:var(--text-3); font-weight:600;">${escapeHTML(u.provincia || '—')}</span>
             </div>
           </td>
           <td><span class="activo-badge ${u.activo !== false ? 'activo' : 'inactivo'}">${u.activo !== false ? 'Activo' : 'Inactivo'}</span></td>
           <td>
             <button class="tbl-btn" onclick="editarUsuario('${d.id}')" title="Editar">${svgEdit}</button>
-            <button class="tbl-btn" onclick="abrirLogUsuario('${d.id}', '${u.nombre || u.email}')" title="Ver log">${svgLog}</button>
+            <button class="tbl-btn" onclick="abrirLogUsuario('${d.id}', '${escapeHTML(u.nombre || u.email)}')" title="Ver log">${svgLog}</button>
             ${d.id !== currentUser.uid
             ? (currentRole === 'super_admin'
               ? `<button class="tbl-btn danger" onclick="borrarUsuario('${d.id}')" title="Eliminar de la DB">${svgTrash}</button>
@@ -11883,7 +11920,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.8.0
+          Versión V.8.8.1
         </div>
       </div>
 
@@ -12186,7 +12223,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.8.0
+          Versión V.8.8.1
         </div>
       </div>
 
@@ -13033,7 +13070,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.8.0
+            Versión V.8.8.1
           </div>
         </div>
         <div class="field" id="j-prov-row">

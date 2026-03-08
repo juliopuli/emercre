@@ -7,5 +7,10 @@ functions/.env
 firestore.rules
 RULES.md
 functions/usage-key.json
+functions/emercre-key.json
+functions/package-lock.json
 firebase.json
+.firebaserc
 functions/node_modules/
+*.ps1
+sync_all.ps1

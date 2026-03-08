@@ -3,12 +3,22 @@ const admin = require("firebase-admin");
 
 admin.initializeApp();
 
-// 0. Oysta Vehicles Proxy (V.6.2.0 - Autenticado, URL oculta en servidor)
+// 0. Oysta Vehicles Proxy (V.8.8.1 - Autenticado, URL oculta en servidor)
 exports.getOystaVehicles = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError(
             "unauthenticated",
             "El usuario debe estar autenticado para consultar vehículos."
+        );
+    }
+
+    const userSnap = await admin.firestore().collection("users").doc(context.auth.uid).get();
+    const userData = userSnap.exists ? userSnap.data() : {};
+
+    if (userData.role !== 'super_admin' && userData.canSeeVehicles !== true) {
+        throw new functions.https.HttpsError(
+            "permission-denied",
+            "No tienes permiso para consultar la posición de los vehículos."
         );
     }
 
