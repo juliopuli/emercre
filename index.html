@@ -7608,6 +7608,36 @@ ${dataContext}
     };
 
     window.cargarApiUsage = async () => {
+      const statusEl = document.getElementById('api-sync-status');
+      if (statusEl) statusEl.textContent = '⏳ Sincronizando con Google...';
+
+      // 1. INTENTAR DATOS REALES DESDE GOOGLE CLOUD (V.8.6.1)
+      try {
+        const getReal = httpsCallable(functions, 'getRealApiUsage');
+        const res = await getReal();
+        const real = res.data;
+
+        const mapsCost =
+          (real.maps.load || 0) * 0.007 +
+          (real.maps.route || 0) * 0.005 +
+          (real.maps.places || 0) * 0.017 +
+          (real.maps.geocode || 0) * 0.005;
+
+        const totalMapsReqs = (real.maps.load || 0) + (real.maps.route || 0) + (real.maps.places || 0) + (real.maps.geocode || 0);
+
+        updateUsageUI('maps', mapsCost, 200, `$${mapsCost.toFixed(2)}`, `${totalMapsReqs} peticiones (Real)`);
+        updateUsageUI('gemini', real.gemini || 0, 1500, null, "Peticiones (Real)");
+        updateUsageUI('fs-reads', real.firestore.reads || 0, 50000, null, "Lecturas (Real)");
+        updateUsageUI('fs-writes', real.firestore.writes || 0, 20000, null, "Escrituras (Real)");
+
+        if (statusEl) statusEl.textContent = '✅ Sincronizado con Google Cloud';
+        return;
+      } catch (e) {
+        console.warn("Uso real no disponible, usando estimación local:", e);
+        if (statusEl) statusEl.textContent = '⚠️ Usando estimación local';
+      }
+
+      // 2. FALLBACK A ESTIMACIÓN LOCAL (FIRESTORE)
       const now = new Date();
       const monthId = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
       const dayId = `${monthId}-${String(now.getDate()).padStart(2, '0')}`;
@@ -7621,8 +7651,6 @@ ${dataContext}
         const mData = monthSnap.exists() ? monthSnap.data() : {};
         const dData = daySnap.exists() ? daySnap.data() : {};
 
-        // MAPS (Basado en $200 mensuales)
-        // Precios estimados: Load ($0.007), Route ($0.005), Autocomplete ($0.017), Geocode ($0.005)
         const mapsCost =
           (mData.maps_load || 0) * 0.007 +
           (mData.maps_route || 0) * 0.005 +
@@ -7631,19 +7659,12 @@ ${dataContext}
 
         const totalMapsReqs = (mData.maps_load || 0) + (mData.maps_route || 0) + (mData.maps_places || 0) + (mData.maps_geocode || 0);
 
-        updateUsageUI('maps', mapsCost, 200, `$${mapsCost.toFixed(2)}`, `${totalMapsReqs} peticiones`);
-
-        // GEMINI (Basado en 1500 diarios)
-        updateUsageUI('gemini', dData.ia_report || 0, 1500);
-
-        // FIRESTORE READS (Basado en 50,000 diarios)
-        updateUsageUI('fs-reads', dData.fs_read || 0, 50000);
-
-        // FIRESTORE WRITES (Basado en 20,000 diarios)
-        updateUsageUI('fs-writes', dData.fs_write || 0, 20000);
-
+        updateUsageUI('maps', mapsCost, 200, `$${mapsCost.toFixed(2)}`, `${totalMapsReqs} peticiones (Est.)`);
+        updateUsageUI('gemini', dData.ia_report || 0, 1500, null, "Peticiones (Est.)");
+        updateUsageUI('fs-reads', dData.fs_read || 0, 50000, null, "Lecturas (Est.)");
+        updateUsageUI('fs-writes', dData.fs_write || 0, 20000, null, "Escrituras (Est.)");
       } catch (e) {
-        console.error("Error cargando consumo API:", e);
+        console.error("Error cargando consumo local:", e);
       }
     };
 
@@ -13296,10 +13317,13 @@ ${dataContext}
         <button class="btn-close-dp" onclick="cerrarModalApiUsage()">✕</button>
       </div>
       <div class="modal-body" style="background: var(--bg-2);">
-        <div style="padding: 16px; border-bottom: 1px solid var(--border); background: var(--bg-1);">
+        <div
+          style="padding: 16px; border-bottom: 1px solid var(--border); background: var(--bg-1); display: flex; justify-content: space-between; align-items: center;">
           <div
             style="font-size: 11px; color: var(--text-3); display: flex; align-items: center; gap: 6px; font-weight: 600;">
-            <span>ℹ️</span> Los datos se actualizan en tiempo real al realizar peticiones.
+            <span>ℹ️</span> Los datos se actualizan según la consola de Google Cloud.
+          </div>
+          <div id="api-sync-status" style="font-size: 10px; font-weight: 700; color: var(--text-2);">Sincronizando...
           </div>
         </div>
 

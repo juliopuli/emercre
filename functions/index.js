@@ -173,3 +173,62 @@ exports.sendPushNotification = functions.https.onCall(async (data, context) => {
     console.log(`Push: ${successCount} OK, ${failureCount} failed out of ${tokens.length}`);
     return { success: true, successCount, failureCount };
 });
+
+// 3. Get Real API Usage (V.8.6.1 - Using Service Account)
+const monitoring = require("@google-cloud/monitoring");
+const client = new monitoring.MetricServiceClient({
+    keyFilename: "./usage-key.json"
+});
+
+exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
+    if (!context.auth || context.auth.token.role !== "super_admin") {
+        throw new functions.https.HttpsError("permission-denied", "Solo el super_admin puede ver costos reales.");
+    }
+
+    const projectId = "emercre-488009"; // ID del JSON proporcionado
+    const now = Math.floor(Date.now() / 1000);
+    const startOfMonth = Math.floor(new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime() / 1000);
+    const startOfDay = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
+
+    const getMetric = async (metricType, filter = "", startTime) => {
+        const request = {
+            name: client.projectPath(projectId),
+            filter: `metric.type = "${metricType}" ${filter}`,
+            interval: {
+                startTime: { seconds: startTime },
+                endTime: { seconds: now }
+            },
+            view: "FULL"
+        };
+        try {
+            const [timeSeries] = await client.listTimeSeries(request);
+            let total = 0;
+            timeSeries.forEach(s => {
+                s.points.forEach(p => {
+                    total += p.value.int64Value || p.value.doubleValue || 0;
+                });
+            });
+            return total;
+        } catch (e) {
+            console.error(`Error fetching metric ${metricType}:`, e);
+            return 0;
+        }
+    };
+
+    // Consultamos datos reales
+    const [mapsLoad, mapsPlaces, mapsRoute, mapsGeocode, iaReport, fsReads, fsWrites] = await Promise.all([
+        getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "maps-backend.googleapis.com"', startOfMonth),
+        getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "places-backend.googleapis.com"', startOfMonth),
+        getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "directions-backend.googleapis.com"', startOfMonth),
+        getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "geocoding-backend.googleapis.com"', startOfMonth),
+        getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "generativelanguage.googleapis.com"', startOfDay),
+        getMetric("firestore.googleapis.com/document/read_ops_count", "", startOfDay),
+        getMetric("firestore.googleapis.com/document/write_ops_count", "", startOfDay)
+    ]);
+
+    return {
+        maps: { load: mapsLoad, places: mapsPlaces, route: mapsRoute, geocode: mapsGeocode },
+        gemini: iaReport,
+        firestore: { reads: fsReads, writes: fsWrites }
+    };
+});

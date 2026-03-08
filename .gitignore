@@ -6,3 +6,4 @@ functions/.env
 .firebase/
 firestore.rules
 RULES.md
+functions/usage-key.json
