@@ -5692,7 +5692,8 @@ ${dataContext}
 
     window.cerrarDetallePreventivo = () => {
       currentPreventivoDiaId = null;
-      activeIntManageId = null; // V.8.1.0: Colapsar intervenciones al cerrar
+      activeIntManageId = null;
+      window.clearAmbulanceRanking(); // V.8.8.1: Limpiar mapa al salir del día
       document.getElementById('preventivos-detail-panel').classList.remove('open');
       // Refrescar acordeón para quitar resaltado
       if (currentPreventivoId) cargarSubpreventivos(currentPreventivoId);
@@ -6648,12 +6649,7 @@ ${dataContext}
       }
     };
 
-    window.cerrarModalPreventivoIntervencion = () => {
-      document.getElementById('overlay-preventivo-intervencion').style.display = 'none';
-      if (prevMarkerInt) prevMarkerInt.setMap(null);
-      prevMarkerInt = null;
-
-      // V.8.5.7: Limpiar ranking al cerrar el modal (para no persistir números en el mapa)
+    window.clearAmbulanceRanking = () => {
       window._ambulanceRanks = {};
       if (oystaMarkersPrev) {
         Object.keys(oystaMarkersPrev).forEach(mid => {
@@ -6661,6 +6657,15 @@ ${dataContext}
           if (v) window.syncOystaMarkerPrev(v);
         });
       }
+    };
+
+    window.cerrarModalPreventivoIntervencion = () => {
+      document.getElementById('overlay-preventivo-intervencion').style.display = 'none';
+      if (prevMarkerInt) prevMarkerInt.setMap(null);
+      prevMarkerInt = null;
+
+      // V.8.5.7: Limpiar ranking al cerrar el modal (reutilizando helper)
+      window.clearAmbulanceRanking();
     };
 
     window.guardarPreventivoIntervencion = async () => {
@@ -7041,7 +7046,10 @@ ${dataContext}
           }],
           actualizadoEn: serverTimestamp()
         });
-        if (newStatus === false) activeIntManageId = null;
+        if (newStatus === false) {
+          activeIntManageId = null;
+          window.clearAmbulanceRanking(); // V.8.8.1: Limpiar mapa al cerrar intervención
+        }
 
         mostrarToast(newStatus ? 'Intervención reabierta' : 'Intervención cerrada y recursos liberados');
       } catch (e) { console.error(e); }
@@ -11920,7 +11928,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.8.1
+          Versión V.8.8.2
         </div>
       </div>
 
@@ -12223,7 +12231,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.8.1
+          Versión V.8.8.2
         </div>
       </div>
 
@@ -13070,7 +13078,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.8.8.1
+            Versión V.8.8.2
           </div>
         </div>
         <div class="field" id="j-prov-row">
