@@ -6442,7 +6442,6 @@ ${dataContext}
         if (iEdit.coords) {
           pickedCoordsPrev = iEdit.coords;
           document.getElementById('prev-int-coords').innerText = `Ubicación: ${pickedCoordsPrev.lat.toFixed(5)}, ${pickedCoordsPrev.lng.toFixed(5)}`;
-          document.getElementById('btn-traffic-rank').style.display = 'block';
         }
       } else {
         document.getElementById('prev-int-desc').value = '';
@@ -6454,7 +6453,6 @@ ${dataContext}
 
         if (prevMarkerInt) prevMarkerInt.setMap(null);
         document.getElementById('prev-int-coords').innerText = 'Sin coordenadas fijadas.';
-        document.getElementById('btn-traffic-rank').style.display = 'none';
         pickedCoordsPrev = null;
       }
 
@@ -6526,8 +6524,8 @@ ${dataContext}
     let lastDistanceMatrixCoords = null;
     let lastDistanceMatrixTime = 0;
 
-    window.calcularAmbulanciasCercanasPrev = function (destCoords, forcePaid = false) {
-      if (!destCoords || !window.google) return;
+    window.calcularAmbulanciasCercanasPrev = function (destCoords) {
+      if (!destCoords || !window.google || !google.maps.DistanceMatrixService) return;
       const d = subpreventivosCache[currentPreventivoDiaId];
       if (!d || !d.recursos) return;
 
@@ -6547,47 +6545,25 @@ ${dataContext}
 
       if (targetResources.length === 0) return;
 
-      // V.8.8.4: Optimización de costes - Solo usar Matrix API si se pide explícitamente o si es una coord distinta
-      const now = Date.now();
-      const isSameCoords = lastDistanceMatrixCoords &&
-        Math.abs(lastDistanceMatrixCoords.lat - destCoords.lat) < 0.0001 &&
-        Math.abs(lastDistanceMatrixCoords.lng - destCoords.lng) < 0.0001;
-
-      const isFresh = (now - lastDistanceMatrixTime) < 180000; // 3 min cache
-
-      if (forcePaid && google.maps.DistanceMatrixService) {
-        ejecutarDistanceMatrix();
-      } else {
-        fallbackRanking();
-      }
-
-      function ejecutarDistanceMatrix() {
-        if (isSameCoords && isFresh) {
-          console.log("[Oysta] Using cached Distance Matrix results.");
-          return;
+      console.log("[Oysta] Calculating clinical proximity via Google Distance Matrix...");
+      const matrix = new google.maps.DistanceMatrixService();
+      matrix.getDistanceMatrix({
+        origins: targetResources.map(a => a.pos),
+        destinations: [destCoords],
+        travelMode: google.maps.TravelMode.DRIVING
+      }, (response, status) => {
+        if (status === 'OK' && response.rows[0]) {
+          const results = response.rows.map((row, i) => ({
+            oystaId: targetResources[i].oystaId,
+            duration: row.elements[0]?.duration
+          })).filter(r => r.duration);
+          results.sort((a, b) => a.duration.value - b.duration.value);
+          applyRanks(results);
+        } else {
+          console.warn("[Oysta] DistanceMatrix failed, using haversine fallback.");
+          fallbackRanking();
         }
-        console.log("[Oysta] Executing PAID Distance Matrix API call...");
-        const matrix = new google.maps.DistanceMatrixService();
-        matrix.getDistanceMatrix({
-          origins: targetResources.map(a => a.pos),
-          destinations: [destCoords],
-          travelMode: google.maps.TravelMode.DRIVING
-        }, (response, status) => {
-          if (status === 'OK' && response.rows[0]) {
-            lastDistanceMatrixCoords = destCoords;
-            lastDistanceMatrixTime = Date.now();
-            const results = response.rows.map((row, i) => ({
-              oystaId: targetResources[i].oystaId,
-              duration: row.elements[0]?.duration
-            })).filter(r => r.duration);
-            results.sort((a, b) => a.duration.value - b.duration.value);
-            applyRanks(results);
-          } else {
-            console.warn("[Oysta] DistanceMatrix failed, using haversine fallback.");
-            fallbackRanking();
-          }
-        });
-      }
+      });
 
       function fallbackRanking() {
         const results = targetResources.map(a => {
@@ -6678,7 +6654,6 @@ ${dataContext}
           map: mapPreventivos,
           title: "Intervención (Pin)"
         });
-        document.getElementById('btn-traffic-rank').style.display = 'block';
 
         // V.8.5.7: Calcular cercanía de ambulancias al situar pin
         if (typeof window.calcularAmbulanciasCercanasPrev === 'function') {
@@ -12294,7 +12269,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.8.8.4
+          Versión V.8.8.5
         </div>
       </div>
 
@@ -12923,15 +12898,8 @@ ${dataContext}
             Ubicación en Mapa
             <button class="btn-nueva" style="padding:4px 8px; font-size:11px;" id="btn-prev-pin">Poner pin</button>
           </div>
-          <div
-            style="font-size:12px; color:var(--text-3); margin-top:4px; display:flex; justify-content:space-between; align-items:center;">
-            <span id="prev-int-coords">Sin coordenadas fijadas.</span>
-            <button id="btn-traffic-rank" class="btn-nueva"
-              style="padding:2px 6px; font-size:10px; background:var(--bg-3); color:var(--text-2); border:1px solid var(--border-mid); display:none;"
-              onclick="window.calcularAmbulanciasCercanasPrev(pickedCoordsPrev, true)">
-              🚦 Tráfico Real
-            </button>
-          </div>
+          <div style="font-size:12px; color:var(--text-3); margin-top:4px;" id="prev-int-coords">Sin coordenadas
+            fijadas.</div>
         </div>
 
         <div class="field" style="margin-top: 12px; border-top: 1px dashed var(--border-mid); padding-top: 12px;">
