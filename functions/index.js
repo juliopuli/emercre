@@ -248,7 +248,7 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     }
 
     const key = require("./usage-key.json");
-    const targetProjectId = key.project_id || "emercre";
+    const targetProjectIds = ["emercre", "emercre-488009"];
 
     // Si el cliente no tiene las credenciales correctas, las re-instanciamos
     const monitoringClient = new monitoring.MetricServiceClient({ credentials: key });
@@ -258,29 +258,33 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     const startOfDay = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
 
     const getMetric = async (metricType, filter = "", startTime) => {
-        const request = {
-            name: `projects/${targetProjectId}`,
-            filter: `metric.type = "${metricType}" ${filter}`,
-            interval: {
-                startTime: { seconds: startTime },
-                endTime: { seconds: now }
-            },
-            view: "FULL"
-        };
-        try {
-            const [timeSeries] = await monitoringClient.listTimeSeries(request);
-            let total = 0;
-            timeSeries.forEach(s => {
-                s.points.forEach(p => {
-                    const val = p.value.int64Value || p.value.doubleValue || 0;
-                    total += Number(val);
+        let grandTotal = 0;
+        for (const pid of targetProjectIds) {
+            const request = {
+                name: `projects/${pid}`,
+                filter: `metric.type = "${metricType}" ${filter}`,
+                interval: {
+                    startTime: { seconds: startTime },
+                    endTime: { seconds: now }
+                },
+                view: "FULL"
+            };
+            try {
+                const [timeSeries] = await monitoringClient.listTimeSeries(request);
+                let total = 0;
+                timeSeries.forEach(s => {
+                    s.points.forEach(p => {
+                        const val = p.value.int64Value || p.value.doubleValue || 0;
+                        total += Number(val);
+                    });
                 });
-            });
-            return total;
-        } catch (e) {
-            console.error(`Error fetching metric ${metricType}:`, e);
-            return 0;
+                grandTotal += total;
+            } catch (e) {
+                // Es normal que un proyecto no tenga ciertas APIs habilitadas
+                console.log(`Petición de métrica ${metricType} para proyecto ${pid} omitida o fallida.`);
+            }
         }
+        return grandTotal;
     };
 
     // Consultamos datos reales
