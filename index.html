@@ -115,13 +115,13 @@
     let allJefesGuardiaCacheMap = {}; // "Provincia" -> "Nombre del Jefe"
     let trafficLayer = null;
     let railwayLayer = null; // Obs: Mantenido por compatibilidad legacy si hace falta, pero ahora usamos railLayers
-    let railLayers = { infra: null, pk: null, tram: null, pasos: null, renfe: null, renfeAVE: null }; // V.9.2.0
-    let renfeVehiclesCache = []; // V.9.2.0
-    let renfeMarkers = {}; // V.9.2.0
-    let renfeRefreshInterval = null; // V.9.2.0
-    let renfeAVEVehiclesCache = []; // V.9.2.0
-    let renfeAVEMarkers = {}; // V.9.2.0
-    let renfeAVERefreshInterval = null; // V.9.2.0
+    let railLayers = { infra: null, pk: null, tram: null, pasos: null, renfe: null, renfeAVE: null }; // V.9.2.1
+    let renfeVehiclesCache = []; // V.9.2.1
+    let renfeMarkers = {}; // V.9.2.1
+    let renfeRefreshInterval = null; // V.9.2.1
+    let renfeAVEVehiclesCache = []; // V.9.2.1
+    let renfeAVEMarkers = {}; // V.9.2.1
+    let renfeAVERefreshInterval = null; // V.9.2.1
     let directionsService = null;
     let directionsRenderer = null;
     let autocompleteOrigin = null;
@@ -591,6 +591,8 @@
       const isOn = chk.checked;
 
       if (isOn) {
+        const infraChk = document.getElementById('chk-rail-infra');
+        if (infraChk && !infraChk.checked) window.toggleRailLayer('infra');
         await cargarVehiculosRenfe(true);
         if (!renfeRefreshInterval) {
           renfeRefreshInterval = setInterval(() => cargarVehiculosRenfe(), 45000);
@@ -701,6 +703,8 @@
       const isOn = chk.checked;
 
       if (isOn) {
+        const infraChk = document.getElementById('chk-rail-infra');
+        if (infraChk && !infraChk.checked) window.toggleRailLayer('infra');
         await cargarVehiculosRenfeAVE(true);
         if (!renfeAVERefreshInterval) {
           renfeAVERefreshInterval = setInterval(() => cargarVehiculosRenfeAVE(), 45000);
