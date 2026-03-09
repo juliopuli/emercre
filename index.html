@@ -115,10 +115,13 @@
     let allJefesGuardiaCacheMap = {}; // "Provincia" -> "Nombre del Jefe"
     let trafficLayer = null;
     let railwayLayer = null; // Obs: Mantenido por compatibilidad legacy si hace falta, pero ahora usamos railLayers
-    let railLayers = { infra: null, pk: null, tram: null, pasos: null, renfe: null }; // V.9.1.0
-    let renfeVehiclesCache = []; // V.9.1.0
-    let renfeMarkers = {}; // V.9.1.0
-    let renfeRefreshInterval = null; // V.9.1.0
+    let railLayers = { infra: null, pk: null, tram: null, pasos: null, renfe: null, renfeAVE: null }; // V.9.2.0
+    let renfeVehiclesCache = []; // V.9.2.0
+    let renfeMarkers = {}; // V.9.2.0
+    let renfeRefreshInterval = null; // V.9.2.0
+    let renfeAVEVehiclesCache = []; // V.9.2.0
+    let renfeAVEMarkers = {}; // V.9.2.0
+    let renfeAVERefreshInterval = null; // V.9.2.0
     let directionsService = null;
     let directionsRenderer = null;
     let autocompleteOrigin = null;
@@ -680,8 +683,117 @@
       const label = v.vehicle ? v.vehicle.label : "Tren";
       const lineMatch = label.match(/^(C\d+|R\d+)/);
       const line = lineMatch ? lineMatch[1] : (label.includes('PLATF') ? 'P' : 'T');
-      el.style.cssText = 'background:#fff; border:2px solid #6c2d82; border-radius:4px; padding:2px 4px; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(0,0,0,0.3); font-family:\"IBM Plex Mono\", monospace; font-size:10px; font-weight:700; color:#6c2d82; white-space:nowrap; cursor:pointer;';
+
+      // Colores por línea Cercanías (opcional, básico)
+      let color = '#6c2d82'; // Renfe Morado
+      if (line === 'C1') color = '#00afad';
+      if (line === 'C5') color = '#ffcc00';
+
+      el.style.cssText = `background:#fff; border:2px solid ${color}; border-radius:4px; padding:2px 4px; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(0,0,0,0.3); font-family:"IBM Plex Mono", monospace; font-size:10px; font-weight:700; color:${color}; white-space:nowrap; cursor:pointer;`;
       el.innerHTML = `<span>🚄</span><span>${line}</span>`;
+      return el;
+    }
+
+    window.toggleRenfeAVERealTime = async () => {
+      const chk = document.getElementById('chk-rail-renfe-ave');
+      if (!chk) return;
+      chk.checked = !chk.checked;
+      const isOn = chk.checked;
+
+      if (isOn) {
+        await cargarVehiculosRenfeAVE(true);
+        if (!renfeAVERefreshInterval) {
+          renfeAVERefreshInterval = setInterval(() => cargarVehiculosRenfeAVE(), 45000);
+        }
+        mostrarToast('Seguimiento AVE activado');
+      } else {
+        if (renfeAVERefreshInterval) {
+          clearInterval(renfeAVERefreshInterval);
+          renfeAVERefreshInterval = null;
+        }
+        Object.values(renfeAVEMarkers).forEach(m => m.setMap(null));
+        renfeAVEMarkers = {};
+        mostrarToast('Seguimiento AVE desactivado');
+      }
+    };
+
+    async function cargarVehiculosRenfeAVE(force = false) {
+      if (!gmap || !mapReady) return;
+      const chk = document.getElementById('chk-rail-renfe-ave');
+      if (!chk || (!chk.checked && !force)) return;
+
+      console.log("[Renfe AVE] Cargando posiciones...");
+      try {
+        const getRenfeAVEFn = httpsCallable(functions, 'getRenfeLargoRecorrido');
+        const result = await getRenfeAVEFn();
+        const data = result.data; // Formato: { trenes: [...] }
+
+        if (!data || !data.trenes) {
+          console.warn("Renfe AVE data missing trenes array:", data);
+          return;
+        }
+
+        const trainIds = data.trenes.map(t => t.codComercial);
+        Object.keys(renfeAVEMarkers).forEach(id => {
+          if (!trainIds.includes(id)) {
+            renfeAVEMarkers[id].setMap(null);
+            delete renfeAVEMarkers[id];
+          }
+        });
+
+        data.trenes.forEach(t => {
+          const pos = { lat: parseFloat(t.latitud), lng: parseFloat(t.longitud) };
+          const id = t.codComercial;
+          const label = `${t.codComercial} ${t.desCorridor}`;
+
+          const content = createRenfeAVEMarkerContent(t);
+
+          if (renfeAVEMarkers[id]) {
+            renfeAVEMarkers[id].position = pos;
+            renfeAVEMarkers[id].content = content;
+          } else {
+            renfeAVEMarkers[id] = new google.maps.marker.AdvancedMarkerElement({
+              position: pos,
+              map: gmap,
+              content: content,
+              title: label
+            });
+
+            renfeAVEMarkers[id].addListener('gmp-click', () => {
+              const info = `
+                <div style="padding:10px; min-width:180px;">
+                  <div style="font-weight:700; color:#1976d2; border-bottom:1px solid #eee; padding-bottom:5px; margin-bottom:5px;">
+                    🚅 ${t.codComercial} - ${t.desCorridor}
+                  </div>
+                  <div style="font-size:12px; color:#555;">
+                    <b>Retraso:</b> <span style="color:${t.ultRetraso > 0 ? 'red' : 'green'}">${t.ultRetraso} min</span><br>
+                    <b>Material:</b> ${t.mat || 'N/A'}<br>
+                    <b>Accesible:</b> ${t.accesible ? 'Sí' : 'No'}
+                  </div>
+                </div>
+              `;
+              oystaInfoWindow.setContent(info);
+              oystaInfoWindow.open(gmap, renfeAVEMarkers[id]);
+            });
+          }
+        });
+
+        renfeAVEVehiclesCache = data.trenes;
+
+      } catch (e) {
+        console.error("Error cargando Renfe AVE:", e);
+      }
+    }
+
+    function createRenfeAVEMarkerContent(t) {
+      const el = document.createElement('div');
+      el.className = 'renfe-ave-marker';
+
+      // Color distintivo para Alta Velocidad (Turquesa/Azul Renfe)
+      const color = '#00afad';
+
+      el.style.cssText = `background:#fff; border:2px solid ${color}; border-radius:4px; padding:2px 4px; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(0,0,0,0.3); font-family:"IBM Plex Mono", monospace; font-size:10px; font-weight:700; color:${color}; white-space:nowrap; cursor:pointer;`;
+      el.innerHTML = `<span>🚅</span><span>${t.codComercial}</span>`;
       return el;
     }
 
@@ -8000,7 +8112,7 @@ ${dataContext}
         pb.classList.toggle('warning', perc >= 70 && perc < 90);
         pb.classList.toggle('danger', perc >= 90);
       }
-      if (val) val.textContent = labelText || current.toLocaleString();
+      if (val) val.textContent = labelText || current.toLocalering();
       if (metaText) {
         const est = document.getElementById(`est-${id}-units`);
         if (est) est.textContent = metaText;
@@ -12265,21 +12377,39 @@ ${dataContext}
               style="padding: 2px 0; display: flex; flex-direction: column; gap: 6px; max-height: 450px; overflow-y: auto;">
 
 
-              <!-- Renfe: Tiempo Real (GTFS-RT) -->
+              <!-- Renfe: Cercanías Tiempo Real -->
               <div class="drawer-notif-toggle"
                 style="padding: 10px; cursor: pointer; border-radius: 8px; background: rgba(183, 28, 28, 0.05); margin-bottom: 4px;"
                 onclick="toggleRenfeRealTime()">
                 <div class="drawer-notif-info">
                   <div class="drawer-notif-icon" style="font-size: 18px; width: 32px; height: 32px;">🚄</div>
                   <div>
-                    <div class="drawer-notif-title" style="font-size: 12px; font-weight: 700;">Renfe Tiempo Real</div>
-                    <div class="drawer-notif-desc" style="font-size: 10px;">Posición actual trenes (Cercanías/Rodalies)
+                    <div class="drawer-notif-title" style="font-size: 11px; font-weight: 700;">Cercanías Tiempo Real
                     </div>
+                    <div class="drawer-notif-desc" style="font-size: 9px;">Posiciones Cercanías/Rodalies</div>
                   </div>
                 </div>
-                <label class="switch" style="pointer-events:none; transform: scale(0.9);">
+                <label class="switch" style="pointer-events:none; transform: scale(0.85);">
                   <input type="checkbox" id="chk-rail-renfe">
-                  <span class="slider"></span>
+                  <span class="slider round"></span>
+                </label>
+              </div>
+
+              <!-- Renfe: Alta Velocidad Tiempo Real -->
+              <div class="drawer-notif-toggle"
+                style="padding: 10px; cursor: pointer; border-radius: 8px; background: rgba(183, 28, 28, 0.05); margin-bottom: 4px;"
+                onclick="toggleRenfeAVERealTime()">
+                <div class="drawer-notif-info">
+                  <div class="drawer-notif-icon" style="font-size: 18px; width: 32px; height: 32px;">🚅</div>
+                  <div>
+                    <div class="drawer-notif-title" style="font-size: 11px; font-weight: 700;">Alta Velocidad Tiempo
+                      Real</div>
+                    <div class="drawer-notif-desc" style="font-size: 9px;">AVE, LD y Media Distancia</div>
+                  </div>
+                </div>
+                <label class="switch" style="pointer-events:none; transform: scale(0.85);">
+                  <input type="checkbox" id="chk-rail-renfe-ave">
+                  <span class="slider round"></span>
                 </label>
               </div>
 
@@ -13757,7 +13887,7 @@ ${dataContext}
         const weekday = now.toLocaleDateString('es-ES', { weekday: 'long' });
         const capitalizedWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
         const day = String(now.getDate()).padStart(2, '0');
-        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const month = String(now.gMon1).padStart(2, '0');
         const year = now.getFullYear();
         elDate.textContent = `${capitalizedWeekday}, ${day}/${month}/${year}`;
       }

@@ -75,6 +75,28 @@ exports.getRenfeVehicles = functions.https.onCall(async (data, context) => {
     }
 });
 
+// 0.6. Renfe AVE/LD Real-Time Vehicles Proxy (V.9.2.0)
+exports.getRenfeLargoRecorrido = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "El usuario debe estar autenticado.");
+    }
+
+    try {
+        const resp = await fetch("https://tiempo-real.largorecorrido.renfe.com/renfe-visor/flotaLD.json", {
+            headers: {
+                "Accept": "application/json",
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            }
+        });
+        if (!resp.ok) throw new Error("Renfe LD responded with status " + resp.status);
+        const result = await resp.json();
+        return result;
+    } catch (error) {
+        console.error("Renfe LD Function Error:", error);
+        throw new functions.https.HttpsError("internal", error.message);
+    }
+});
+
 // 1. Gemini Content Generator Function (V.6.2.0)
 exports.generateGeminiContent = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
