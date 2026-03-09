@@ -53,6 +53,28 @@ exports.getOystaVehicles = functions.https.onCall(async (data, context) => {
     }
 });
 
+// 0.5. Renfe Real-Time Vehicles Proxy (V.9.1.0)
+exports.getRenfeVehicles = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError(
+            "unauthenticated",
+            "El usuario debe estar autenticado para consultar trenes."
+        );
+    }
+
+    try {
+        const resp = await fetch("https://gtfsrt.renfe.com/vehicle_positions.json", {
+            headers: { "Accept": "application/json" }
+        });
+        if (!resp.ok) throw new Error("Renfe GTFS-RT responded with status " + resp.status);
+        const result = await resp.json();
+        return result;
+    } catch (error) {
+        console.error("Renfe Function Error:", error);
+        throw new functions.https.HttpsError("internal", error.message);
+    }
+});
+
 // 1. Gemini Content Generator Function (V.6.2.0)
 exports.generateGeminiContent = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
