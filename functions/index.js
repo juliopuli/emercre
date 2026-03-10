@@ -259,6 +259,7 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
 
     const getMetric = async (metricType, filter = "", startTime) => {
         let grandTotal = 0;
+        let errors = [];
         for (const pid of targetProjectIds) {
             const request = {
                 name: `projects/${pid}`,
@@ -280,15 +281,21 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
                 });
                 grandTotal += total;
             } catch (e) {
-                // Es normal que un proyecto no tenga ciertas APIs habilitadas
-                console.log(`Petición de métrica ${metricType} para proyecto ${pid} omitida o fallida.`);
+                // Es normal que un proyecto no tenga ciertas APIs habilitadas, pero lo logueamos mejor
+                const errMsg = `Error métrica ${metricType} en ${pid}: ${e.message}`;
+                console.warn(errMsg);
+                errors.push(errMsg);
             }
         }
-        return grandTotal;
+        return { total: grandTotal, errors };
     };
 
     // Consultamos datos reales
-    const [mapsLoad, mapsPlaces, mapsRoute, mapsGeocode, geminiDay, geminiMonth, fsReads, fsWrites, fsDeletes] = await Promise.all([
+    const [
+        mapsLoadRes, mapsPlacesRes, mapsRouteRes, mapsGeocodeRes,
+        geminiDayRes, geminiMonthRes,
+        fsReadsRes, fsWritesRes, fsDeletesRes
+    ] = await Promise.all([
         getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "maps-backend.googleapis.com"', startOfMonth),
         getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "places-backend.googleapis.com"', startOfMonth),
         getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "directions-backend.googleapis.com"', startOfMonth),
@@ -301,8 +308,25 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     ]);
 
     return {
-        maps: { load: mapsLoad, places: mapsPlaces, route: mapsRoute, geocode: mapsGeocode },
-        gemini: { day: geminiDay, month: geminiMonth, limit: 1500 },
-        firestore: { reads: fsReads, writes: fsWrites, deletes: fsDeletes }
+        maps: {
+            load: mapsLoadRes.total,
+            places: mapsPlacesRes.total,
+            route: mapsRouteRes.total,
+            geocode: mapsGeocodeRes.total
+        },
+        gemini: {
+            day: geminiDayRes.total,
+            month: geminiMonthRes.total,
+            limit: 1500
+        },
+        firestore: {
+            reads: fsReadsRes.total,
+            writes: fsWritesRes.total,
+            deletes: fsDeletesRes.total
+        },
+        syncErrors: [
+            ...mapsLoadRes.errors, ...mapsPlacesRes.errors, ...mapsRouteRes.errors, ...mapsGeocodeRes.errors,
+            ...geminiDayRes.errors, ...fsReadsRes.errors
+        ]
     };
 });
