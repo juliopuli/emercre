@@ -1,11 +1,11 @@
-// Firebase Messaging Service Worker (V.6.2.0)
+// Firebase Messaging Service Worker (V.9.6.2)
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
 // ── CACHE VERSIONING ──────────────────────────────────────────────────────────
 // Cambia este valor cada vez que hagas una nueva versión para limpiar el caché
 // antiguo y forzar que los clientes descarguen los archivos actualizados.
-const CACHE_VERSION = 'emercre-v6.2.0';
+const CACHE_VERSION = 'emercre-v9.6.2';
 
 firebase.initializeApp({
     // Inyectado por GitHub Actions durante el despliegue
