@@ -245,11 +245,9 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     }
 
     const key = require("./usage-key.json");
-    // Solo consultamos el proyecto 'emercre' porque la cuenta de servicio no tiene
-    // permisos de Monitoring Viewer en 'emercre-488009'.
-    // Para añadir ese proyecto: grant 'emercre@appspot.gserviceaccount.com' el rol
-    // Monitoring Viewer en la consola GCP del proyecto emercre-488009.
-    const targetProjectIds = ["emercre"];
+    // Ambos proyectos monitorizados. emercre-488009 requiere que
+    // emercre@appspot.gserviceaccount.com tenga rol "Monitoring Viewer" en ese proyecto.
+    const targetProjectIds = ["emercre", "emercre-488009"];
 
     const monitoringClient = new monitoring.MetricServiceClient({ credentials: key });
 
