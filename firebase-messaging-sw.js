@@ -8,7 +8,8 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-com
 const CACHE_VERSION = 'emercre-v6.2.0';
 
 firebase.initializeApp({
-    apiKey: "AIzaSyAHtrxaBazArqa8znWsUIVYxTsS7zoOOmc",
+    // Inyectado por GitHub Actions durante el despliegue
+    apiKey: "__FIREBASE_API_KEY__",
     authDomain: "emercre.firebaseapp.com",
     projectId: "emercre",
     storageBucket: "emercre.firebasestorage.app",

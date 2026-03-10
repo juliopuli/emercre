@@ -30,6 +30,7 @@ jobs:
         run: |
           sed -i "s|__FIREBASE_API_KEY__|${{ secrets.FIREBASE_API_KEY }}|g" index.html
           sed -i "s|__GOOGLE_MAPS_API_KEY__|${{ secrets.GOOGLE_MAPS_API_KEY }}|g" index.html
+          sed -i "s|__FIREBASE_API_KEY__|${{ secrets.FIREBASE_API_KEY }}|g" firebase-messaging-sw.js
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

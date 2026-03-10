@@ -380,3 +380,54 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
         debug: allDebugInfo
     };
 });
+
+// 4. Purge Oysta Logs (V.9.6.1 - Security Remediation)
+exports.purgeOystaLogs = functions.https.onCall(async (data, context) => {
+    // 1. Verify Authentication
+    if (!context.auth) {
+        throw new functions.https.HttpsError(
+            "unauthenticated",
+            "El usuario debe estar autenticado para purgar logs."
+        );
+    }
+
+    // 2. Verify Authorization (Role must be super_admin)
+    const userSnap = await admin.firestore().collection("users").doc(context.auth.uid).get();
+    const userData = userSnap.exists ? userSnap.data() : {};
+
+    if (userData.role !== "super_admin") {
+        throw new functions.https.HttpsError(
+            "permission-denied",
+            "Solo el super_admin purgar los logs de Oysta."
+        );
+    }
+
+    try {
+        const db = admin.firestore();
+        const logsRef = db.collection("oysta_logs");
+        const querySnapshot = await logsRef.get();
+
+        if (querySnapshot.empty) {
+            return { success: true, count: 0, message: "No hay logs para borrar" };
+        }
+
+        const batchSize = 500;
+        let count = 0;
+
+        // Firestore limits batches to 500 operations
+        for (let i = 0; i < querySnapshot.docs.length; i += batchSize) {
+            const batch = db.batch();
+            const chunk = querySnapshot.docs.slice(i, i + batchSize);
+            chunk.forEach(docSnap => batch.delete(docSnap.ref));
+            await batch.commit();
+            count += chunk.length;
+        }
+
+        console.log(`[purgeOystaLogs] Éxito: ${count} logs eliminados por ${context.auth.token.email}`);
+        return { success: true, count: count, message: `Éxito: ${count} logs eliminados` };
+
+    } catch (error) {
+        console.error("[purgeOystaLogs] Error:", error);
+        throw new functions.https.HttpsError("internal", error.message);
+    }
+});

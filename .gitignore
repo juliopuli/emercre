@@ -14,3 +14,4 @@ firebase.json
 functions/node_modules/
 *.ps1
 sync_all.ps1
+functions/test_*.js
