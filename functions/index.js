@@ -405,29 +405,36 @@ exports.purgeOystaLogs = functions.https.onCall(async (data, context) => {
     try {
         const db = admin.firestore();
         const logsRef = db.collection("oysta_logs");
-        const querySnapshot = await logsRef.get();
 
-        if (querySnapshot.empty) {
-            return { success: true, count: 0, message: "No hay logs para borrar" };
-        }
+        let deletedCount = 0;
+        let hasMore = true;
 
-        const batchSize = 500;
-        let count = 0;
+        while (hasMore) {
+            // Leemos solo los IDs para ahorrar memoria
+            const snapshot = await logsRef.limit(500).get();
 
-        // Firestore limits batches to 500 operations
-        for (let i = 0; i < querySnapshot.docs.length; i += batchSize) {
+            if (snapshot.empty) {
+                hasMore = false;
+                break;
+            }
+
             const batch = db.batch();
-            const chunk = querySnapshot.docs.slice(i, i + batchSize);
-            chunk.forEach(docSnap => batch.delete(docSnap.ref));
+            snapshot.docs.forEach((doc) => {
+                batch.delete(doc.ref);
+            });
+
             await batch.commit();
-            count += chunk.length;
+            deletedCount += snapshot.size;
+
+            // Pausa mínima para no saturar Firestore
+            await new Promise(resolve => setTimeout(resolve, 100));
         }
 
-        console.log(`[purgeOystaLogs] Éxito: ${count} logs eliminados por ${context.auth.token.email}`);
-        return { success: true, count: count, message: `Éxito: ${count} logs eliminados` };
+        console.log(`[purgeOystaLogs] Éxito: ${deletedCount} logs eliminados por ${context.auth.token.email}`);
+        return { success: true, count: deletedCount, message: `Éxito: ${deletedCount} logs eliminados` };
 
     } catch (error) {
         console.error("[purgeOystaLogs] Error:", error);
-        throw new functions.https.HttpsError("internal", error.message);
+        throw new functions.https.HttpsError("internal", "Error al purgar logs: " + error.message);
     }
 });
