@@ -381,8 +381,8 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     };
 });
 
-// 4. Purge Oysta Logs (V.9.6.1 - Security Remediation)
-exports.purgeOystaLogs = functions.https.onCall(async (data, context) => {
+// 4. Purge Oysta Logs (V.9.6.4 - Robustecida con más memoria y timeout)
+exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' }).https.onCall(async (data, context) => {
     // 1. Verify Authentication
     if (!context.auth) {
         throw new functions.https.HttpsError(
