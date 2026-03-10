@@ -228,12 +228,9 @@ exports.sendPushNotification = functions.https.onCall(async (data, context) => {
     return { success: true, successCount, failureCount };
 });
 
-// 3. Get Real API Usage (V.8.6.1 - Using Service Account)
+// 3. Get Real API Usage (V.9.5.4 - Corrected metric query)
 const monitoring = require("@google-cloud/monitoring");
 const path = require("path");
-const client = new monitoring.MetricServiceClient({
-    keyFilename: path.join(__dirname, "usage-key.json")
-});
 
 exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
@@ -250,20 +247,60 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     const key = require("./usage-key.json");
     const targetProjectIds = ["emercre", "emercre-488009"];
 
-    // Si el cliente no tiene las credenciales correctas, las re-instanciamos
     const monitoringClient = new monitoring.MetricServiceClient({ credentials: key });
 
     const now = Math.floor(Date.now() / 1000);
     const startOfMonth = Math.floor(new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime() / 1000);
     const startOfDay = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
 
-    const getMetric = async (metricType, filter = "", startTime) => {
+    // Correctly queries Cloud Monitoring with resource.type = "consumed_api"
+    // serviceruntime metrics require this resource type in the filter
+    const getMetric = async (serviceLabel, startTime) => {
+        let grandTotal = 0;
+        let errors = [];
+        let debugInfo = [];
+
+        for (const pid of targetProjectIds) {
+            const request = {
+                name: `projects/${pid}`,
+                // CRITICAL FIX: must include resource.type = "consumed_api"
+                filter: `metric.type = "serviceruntime.googleapis.com/api/request_count" AND resource.type = "consumed_api" AND resource.labels.service = "${serviceLabel}"`,
+                interval: {
+                    startTime: { seconds: startTime },
+                    endTime: { seconds: now }
+                },
+                view: "FULL"
+            };
+            try {
+                const [timeSeries] = await monitoringClient.listTimeSeries(request);
+                let projectTotal = 0;
+                timeSeries.forEach(ts => {
+                    ts.points.forEach(p => {
+                        // int64Value is returned as a string by the gRPC library
+                        const val = Number(p.value.int64Value) || Number(p.value.doubleValue) || 0;
+                        projectTotal += val;
+                    });
+                });
+                grandTotal += projectTotal;
+                debugInfo.push(`${pid}/${serviceLabel}: ${projectTotal} (${timeSeries.length} series)`);
+            } catch (e) {
+                const errMsg = `Error ${serviceLabel} en ${pid}: ${e.message}`;
+                console.warn(errMsg);
+                errors.push(errMsg);
+                debugInfo.push(`${pid}/${serviceLabel}: ERROR - ${e.message}`);
+            }
+        }
+        return { total: grandTotal, errors, debugInfo };
+    };
+
+    // Firestore metrics use a different resource type
+    const getFirestoreMetric = async (metricType, startTime) => {
         let grandTotal = 0;
         let errors = [];
         for (const pid of targetProjectIds) {
             const request = {
                 name: `projects/${pid}`,
-                filter: `metric.type = "${metricType}" ${filter}`,
+                filter: `metric.type = "${metricType}"`,
                 interval: {
                     startTime: { seconds: startTime },
                     endTime: { seconds: now }
@@ -273,18 +310,15 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
             try {
                 const [timeSeries] = await monitoringClient.listTimeSeries(request);
                 let total = 0;
-                timeSeries.forEach(s => {
-                    s.points.forEach(p => {
-                        const val = p.value.int64Value || p.value.doubleValue || 0;
-                        total += Number(val);
+                timeSeries.forEach(ts => {
+                    ts.points.forEach(p => {
+                        const val = Number(p.value.int64Value) || Number(p.value.doubleValue) || 0;
+                        total += val;
                     });
                 });
                 grandTotal += total;
             } catch (e) {
-                // Es normal que un proyecto no tenga ciertas APIs habilitadas, pero lo logueamos mejor
-                const errMsg = `Error métrica ${metricType} en ${pid}: ${e.message}`;
-                console.warn(errMsg);
-                errors.push(errMsg);
+                errors.push(`${pid}/${metricType}: ${e.message}`);
             }
         }
         return { total: grandTotal, errors };
@@ -296,16 +330,32 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
         geminiDayRes, geminiMonthRes,
         fsReadsRes, fsWritesRes, fsDeletesRes
     ] = await Promise.all([
-        getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "maps-backend.googleapis.com"', startOfMonth),
-        getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "places-backend.googleapis.com"', startOfMonth),
-        getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "directions-backend.googleapis.com"', startOfMonth),
-        getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "geocoding-backend.googleapis.com"', startOfMonth),
-        getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "generativelanguage.googleapis.com"', startOfDay),
-        getMetric("serviceruntime.googleapis.com/api/request_count", 'AND resource.labels.service = "generativelanguage.googleapis.com"', startOfMonth),
-        getMetric("firestore.googleapis.com/document/read_ops_count", "", startOfDay),
-        getMetric("firestore.googleapis.com/document/write_ops_count", "", startOfDay),
-        getMetric("firestore.googleapis.com/document/delete_ops_count", "", startOfDay)
+        getMetric("maps-backend.googleapis.com", startOfMonth),
+        getMetric("places-backend.googleapis.com", startOfMonth),
+        getMetric("directions-backend.googleapis.com", startOfMonth),
+        getMetric("geocoding-backend.googleapis.com", startOfMonth),
+        getMetric("generativelanguage.googleapis.com", startOfDay),
+        getMetric("generativelanguage.googleapis.com", startOfMonth),
+        getFirestoreMetric("firestore.googleapis.com/document/read_ops_count", startOfDay),
+        getFirestoreMetric("firestore.googleapis.com/document/write_ops_count", startOfDay),
+        getFirestoreMetric("firestore.googleapis.com/document/delete_ops_count", startOfDay)
     ]);
+
+    const allErrors = [
+        ...mapsLoadRes.errors, ...mapsPlacesRes.errors, ...mapsRouteRes.errors, ...mapsGeocodeRes.errors,
+        ...geminiDayRes.errors, ...fsReadsRes.errors, ...fsWritesRes.errors, ...fsDeletesRes.errors
+    ];
+
+    const allDebugInfo = [
+        ...(mapsLoadRes.debugInfo || []),
+        ...(mapsPlacesRes.debugInfo || []),
+        ...(mapsRouteRes.debugInfo || []),
+        ...(mapsGeocodeRes.debugInfo || []),
+        ...(geminiDayRes.debugInfo || [])
+    ];
+
+    console.log("[getRealApiUsage] Debug:", JSON.stringify(allDebugInfo));
+    if (allErrors.length > 0) console.warn("[getRealApiUsage] Errors:", JSON.stringify(allErrors));
 
     return {
         maps: {
@@ -324,9 +374,7 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
             writes: fsWritesRes.total,
             deletes: fsDeletesRes.total
         },
-        syncErrors: [
-            ...mapsLoadRes.errors, ...mapsPlacesRes.errors, ...mapsRouteRes.errors, ...mapsGeocodeRes.errors,
-            ...geminiDayRes.errors, ...fsReadsRes.errors
-        ]
+        syncErrors: allErrors,
+        debug: allDebugInfo
     };
 });
