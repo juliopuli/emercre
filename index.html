@@ -8105,8 +8105,9 @@ ${dataContext}
           estCost = n(mData.maps_load) * 0.007 + n(mData.maps_route) * 0.005 + n(mData.maps_places) * 0.017 + n(mData.maps_geocode) * 0.005;
           estReqs = n(mData.maps_load) + n(mData.maps_route) + n(mData.maps_places) + n(mData.maps_geocode);
 
-          const geminiReal = n(real.gemini.day);
-          const geminiEst = n(dData.ia_report);
+          // Gemini: Cloud Monitoring siempre devuelve 0 para llamadas por API Key directa.
+          // Firestore ia_report es el contador fiable (se incrementa en generateGeminiContent).
+          const geminiFirestore = n(dData.ia_report);
           const geminiLimit = n(real.gemini.limit) || 1500;
 
           const fsR_Real = n(real.firestore.reads);
@@ -8114,8 +8115,8 @@ ${dataContext}
           const fsW_Real = n(real.firestore.writes);
           const fsW_Est = n(dData.fs_write);
 
-          // Actualizamos otros campos con real si están disponibles
-          updateUsageUI('gemini', geminiReal, geminiLimit, `${geminiEst} (Est) / ${geminiReal} (Real)`, `Peticiones hoy (Límite: ${geminiLimit})`);
+          // Usamos Firestore como fuente de verdad para Gemini
+          updateUsageUI('gemini', geminiFirestore, geminiLimit, `${geminiFirestore} peticiones hoy`, `Peticiones hoy · Fuente: Firestore (Límite: ${geminiLimit})`);
           updateUsageUI('fs-reads', fsR_Real, 50000, `${fsR_Est} (Est) / ${fsR_Real} (Real)`, `Lecturas hoy (Límite: 50,000)`);
           updateUsageUI('fs-writes', fsW_Real, 20000, `${fsW_Est} (Est) / ${fsW_Real} (Real)`, `Escrituras hoy (Límite: 20,000)`);
         } catch (e) { }
