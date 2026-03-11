@@ -896,7 +896,7 @@
       });
     }
 
-    console.log("EmerCRE V.9.8.0 Loaded");
+    console.log("EmerCRE V.9.9.0 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2527,6 +2527,16 @@
       });
     };
 
+    // V.9.9.0: Global click listener to close expanded vehicles
+    document.addEventListener('click', (e) => {
+      // If click is not inside a marker, close all expanded
+      if (!e.target.closest('.oysta-linked-marker')) {
+        document.querySelectorAll('.oysta-linked-marker.expanded').forEach(el => {
+          el.classList.remove('expanded');
+        });
+      }
+    });
+
     // V.9.7.0: Función global compartida para generar el HTML del marcador Oysta (Emergencias y Preventivos)
     window.createOystaMarkerContent = (v, localVeh, statusClass) => {
       const content = document.createElement('div');
@@ -2544,10 +2554,29 @@
         };
         const iconPath = iconMap[localVeh.tipo] || 'assets/icons/icon_transp_personal.png';
         content.innerHTML = `
-          <div class="marker-main" style="width:32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
-            <img src="${iconPath}" style="width:28px; height:28px; object-fit:contain;">
+          <div class="marker-main" style="width:32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative; overflow: hidden;">
+            <img class="marker-icon" src="${iconPath}" style="width:28px; height:28px; object-fit:contain; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); flex-shrink: 0;">
+            <div class="marker-details">
+                <div class="md-ind">${localVeh.indicativo || 'Sin ind.'}</div>
+                <div class="md-mat">${localVeh.matricula || '---'}</div>
+            </div>
           </div>
         `;
+
+        // V.9.9.0: Interaction for expanding the marker circle
+        content.addEventListener('click', (e) => {
+          const isExpanded = content.classList.contains('expanded');
+
+          // Cerrar los demas
+          document.querySelectorAll('.oysta-linked-marker.expanded').forEach(el => {
+            el.classList.remove('expanded');
+          });
+
+          if (!isExpanded) {
+            content.classList.add('expanded');
+          }
+        });
+
         // V.9.7.0: Añadir badge de ranking si existe
         const oystaId = String(v.id);
         if (window._ambulanceRanks && window._ambulanceRanks[oystaId]) {
@@ -11934,6 +11963,63 @@ ${dataContext}
       border-color: #e67e22;
     }
 
+    /* V.9.9.0: Expanded marker style */
+    .oysta-linked-marker.expanded {
+      z-index: 9999 !important;
+    }
+
+    .oysta-linked-marker.expanded .marker-main {
+      width: 140px !important;
+      height: 140px !important;
+      border-radius: 20px !important;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
+      flex-direction: column !important;
+      justify-content: center !important;
+      padding-top: 10px !important;
+      cursor: default;
+    }
+
+    .oysta-linked-marker.expanded .marker-icon {
+      width: 65px !important;
+      height: 65px !important;
+    }
+
+    .oysta-linked-marker .marker-details {
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 5px;
+      color: #1a3a6e;
+      font-family: 'IBM Plex Sans', sans-serif;
+      text-align: center;
+      width: 100%;
+    }
+
+    .oysta-linked-marker.expanded .marker-details {
+      opacity: 1;
+      pointer-events: auto;
+      transition-delay: 0.15s;
+    }
+
+    .marker-details .md-ind {
+      font-weight: 800;
+      font-size: 17px;
+      margin-bottom: 2px;
+    }
+
+    .marker-details .md-mat {
+      font-size: 13px;
+      color: #fff;
+      background: #1a3a6e;
+      padding: 3px 8px;
+      border-radius: 6px;
+      letter-spacing: 1px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    }
+
     /* LEYENDA FERROCARRIL (V.9.7.0) */
     .railway-legend {
       position: absolute;
@@ -12443,7 +12529,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.9.8.0
+          Versión V.9.9.0
         </div>
       </div>
 
@@ -12819,7 +12905,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.9.8.0
+          Versión V.9.9.0
         </div>
       </div>
 
@@ -13669,7 +13755,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.9.8.0
+            Versión V.9.9.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
