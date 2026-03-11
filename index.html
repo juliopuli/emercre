@@ -896,7 +896,7 @@
       });
     }
 
-    console.log("EmerCRE V.9.9.1 Loaded");
+    console.log("EmerCRE V.9.9.2 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2381,14 +2381,18 @@
               position: pos,
               map: (isVisible && currentUserDoc?.canSeeVehicles) ? gmap : null,
               content: content,
-              title: v.name
+              title: v.name,
+              gmpClickable: true
             });
 
             // Guardar datos iniciales
             marker.vehicleData = v;
             marker.localVehicleData = localVeh;
 
-            // V.9.9.1: Gmp-click removed since interaction is handled inside createOystaMarkerContent
+            // V.9.9.2: Delegate click to custom content
+            marker.addListener('gmp-click', () => {
+              if (content && typeof content.click === 'function') content.click();
+            });
 
             oystaMarkers[mid] = marker;
           }
@@ -2503,7 +2507,7 @@
       });
     };
 
-    // V.9.9.1: Global click listener to close expanded vehicles
+    // V.9.9.2: Global click listener to close expanded vehicles
     document.addEventListener('click', (e) => {
       // If click is not inside a marker, close all expanded
       if (!e.target.closest('.oysta-linked-marker')) {
@@ -2542,7 +2546,7 @@
           </div>
         `;
 
-        // V.9.9.1: Interaction for expanding the marker circle
+        // V.9.9.2: Interaction for expanding the marker circle
         content.addEventListener('click', (e) => {
           const isExpanded = content.classList.contains('expanded');
 
@@ -5575,8 +5579,15 @@ ${dataContext}
           map: ((isVisible || movingFilter) && currentUserDoc?.canSeeVehicles) ? mapPreventivos : null,
           content: content,
           title: v.name,
-          zIndex: 1000 // V.9.7.0: Asegurar visibilidad
+          zIndex: 1000, // V.9.7.0: Asegurar visibilidad
+          gmpClickable: true
         });
+
+        // V.9.9.2: Delegate click to custom content
+        marker.addListener('gmp-click', () => {
+          if (content && typeof content.click === 'function') content.click();
+        });
+
         oystaMarkersPrev[mid] = marker;
       }
     };
@@ -6568,8 +6579,15 @@ ${dataContext}
           map: mapPreventivos,
           content: content,
           title: `${localVeh.indicativo || oystaVeh.name} — asignado a intervención`,
-          zIndex: 900
+          zIndex: 900,
+          gmpClickable: true
         });
+
+        // V.9.9.2: Delegate click to custom content
+        marker.addListener('gmp-click', () => {
+          if (content && typeof content.click === 'function') content.click();
+        });
+
         window._prevIntVehicleMarkers[vehicleId] = marker;
 
         // V.9.7.0: Monitorización de Estados (Salida y Llegada Automática)
@@ -11942,7 +11960,7 @@ ${dataContext}
       border-color: #e67e22;
     }
 
-    /* V.9.9.1: Expanded marker style */
+    /* V.9.9.2: Expanded marker style */
     .oysta-linked-marker.expanded {
       z-index: 9999 !important;
     }
@@ -12508,7 +12526,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.9.9.1
+          Versión V.9.9.2
         </div>
       </div>
 
@@ -12884,7 +12902,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.9.9.1
+          Versión V.9.9.2
         </div>
       </div>
 
@@ -13734,7 +13752,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.9.9.1
+            Versión V.9.9.2
           </div>
         </div>
         <div class="field" id="j-prov-row">
