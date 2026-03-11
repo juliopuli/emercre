@@ -896,7 +896,7 @@
       });
     }
 
-    console.log("EmerCRE V.9.9.2 Loaded");
+    console.log("EmerCRE V.9.9.3 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2389,7 +2389,7 @@
             marker.vehicleData = v;
             marker.localVehicleData = localVeh;
 
-            // V.9.9.2: Delegate click to custom content
+            // V.9.9.3: Delegate click to custom content
             marker.addListener('gmp-click', () => {
               if (content && typeof content.click === 'function') content.click();
             });
@@ -2507,7 +2507,7 @@
       });
     };
 
-    // V.9.9.2: Global click listener to close expanded vehicles
+    // V.9.9.3: Global click listener to close expanded vehicles
     document.addEventListener('click', (e) => {
       // If click is not inside a marker, close all expanded
       if (!e.target.closest('.oysta-linked-marker')) {
@@ -2534,29 +2534,32 @@
         };
         const iconPath = iconMap[localVeh.tipo] || 'assets/icons/icon_transp_personal.png';
         content.innerHTML = `
-          <div class="marker-main" style="width:32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative; overflow: hidden;">
+          <div class="marker-main" style="width:32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative;">
             <img class="marker-icon" src="${iconPath}" style="width:28px; height:28px; object-fit:contain; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); flex-shrink: 0;">
             <div class="marker-details">
                 <div class="md-ind">${localVeh.indicativo || 'Sin ind.'}</div>
                 <div class="md-mat">${localVeh.matricula || '---'}</div>
                 <div class="md-status" style="margin-top:4px; font-size:11px;">Est: <b>${v.status}</b></div>
                 <div class="md-speed" style="font-size:11px;">Vel: <b>${v.speed} km/h</b></div>
-                <div class="md-pos" style="font-size:9px; color:#666; margin-top:2px; max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${v.last_pos}</div>
+                <div class="md-pos" style="font-size:10px; color:#666; margin-top:4px; max-width: 140px; line-height: 1.2;">${v.last_pos}</div>
             </div>
           </div>
         `;
 
-        // V.9.9.2: Interaction for expanding the marker circle
+        // V.9.9.3: Interaction for expanding the marker circle
         content.addEventListener('click', (e) => {
+          e.stopPropagation(); // Avoid double toggling with the gmp-click proxy
           const isExpanded = content.classList.contains('expanded');
 
           // Cerrar los demas
           document.querySelectorAll('.oysta-linked-marker.expanded').forEach(el => {
-            el.classList.remove('expanded');
+            if (el !== content) el.classList.remove('expanded');
           });
 
           if (!isExpanded) {
             content.classList.add('expanded');
+          } else {
+            content.classList.remove('expanded');
           }
         });
 
@@ -5583,7 +5586,7 @@ ${dataContext}
           gmpClickable: true
         });
 
-        // V.9.9.2: Delegate click to custom content
+        // V.9.9.3: Delegate click to custom content
         marker.addListener('gmp-click', () => {
           if (content && typeof content.click === 'function') content.click();
         });
@@ -6583,7 +6586,7 @@ ${dataContext}
           gmpClickable: true
         });
 
-        // V.9.9.2: Delegate click to custom content
+        // V.9.9.3: Delegate click to custom content
         marker.addListener('gmp-click', () => {
           if (content && typeof content.click === 'function') content.click();
         });
@@ -11960,25 +11963,25 @@ ${dataContext}
       border-color: #e67e22;
     }
 
-    /* V.9.9.2: Expanded marker style */
+    /* V.9.9.3: Expanded marker style */
     .oysta-linked-marker.expanded {
       z-index: 9999 !important;
     }
 
     .oysta-linked-marker.expanded .marker-main {
-      width: 140px !important;
-      height: 140px !important;
+      width: 160px !important;
+      height: 175px !important;
       border-radius: 20px !important;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4) !important;
       flex-direction: column !important;
       justify-content: center !important;
-      padding-top: 10px !important;
-      cursor: default;
+      padding-top: 15px !important;
+      cursor: pointer;
     }
 
     .oysta-linked-marker.expanded .marker-icon {
-      width: 65px !important;
-      height: 65px !important;
+      width: 70px !important;
+      height: 60px !important;
     }
 
     .oysta-linked-marker .marker-details {
@@ -12526,7 +12529,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.9.9.2
+          Versión V.9.9.3
         </div>
       </div>
 
@@ -12902,7 +12905,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.9.9.2
+          Versión V.9.9.3
         </div>
       </div>
 
@@ -13752,7 +13755,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.9.9.2
+            Versión V.9.9.3
           </div>
         </div>
         <div class="field" id="j-prov-row">
