@@ -2564,13 +2564,62 @@
     };
 
     // V.9.7.0: Función modular para renderizar la lista de vehículos
+    window.toggleAllOystaVehicles = (checked) => {
+      console.log(`[Oysta] toggleAllOystaVehicles: ${checked}`);
+      oystaVehiclesCache.forEach(v => {
+        visibleVehicles[String(v.id)] = checked;
+      });
+      // Actualizar checkboxes UI
+      const container1 = document.getElementById('oysta-vehicle-list');
+      if (container1) {
+        container1.querySelectorAll('input[type="checkbox"]').forEach(chk => chk.checked = checked);
+      }
+      const container2 = document.getElementById('prev-oysta-vehicle-list');
+      if (container2) {
+        container2.querySelectorAll('input[type="checkbox"]').forEach(chk => chk.checked = checked);
+      }
+      // Sincronizar marcadores
+      oystaVehiclesCache.forEach(v => syncOystaMarkerGlobal(v));
+      // Sincronizar los dos switches maestros
+      const sw1 = document.getElementById('chk-toggle-all-oysta');
+      const sw2 = document.getElementById('chk-toggle-all-oysta-prev');
+      if (sw1) sw1.checked = checked;
+      if (sw2) sw2.checked = checked;
+    };
+
+    window.toggleAllOystaVehicles = (checked) => {
+      console.log(`[Oysta] toggleAllOystaVehicles: ${checked}`);
+      oystaVehiclesCache.forEach(v => {
+        visibleVehicles[String(v.id)] = checked;
+      });
+      // Actualizar checkboxes UI
+      const container1 = document.getElementById('oysta-vehicle-list');
+      if (container1) {
+        container1.querySelectorAll('input[type="checkbox"]').forEach(chk => chk.checked = checked);
+      }
+      const container2 = document.getElementById('prev-oysta-vehicle-list');
+      if (container2) {
+        container2.querySelectorAll('input[type="checkbox"]').forEach(chk => chk.checked = checked);
+      }
+      // Sincronizar marcadores
+      oystaVehiclesCache.forEach(v => syncOystaMarkerGlobal(v));
+      // Sincronizar los dos switches maestros
+      const sw1 = document.getElementById('chk-toggle-all-oysta');
+      const sw2 = document.getElementById('chk-toggle-all-oysta-prev');
+      if (sw1) sw1.checked = checked;
+      if (sw2) sw2.checked = checked;
+    };
+
+    window.toggleAllOystaVehiclesPrev = (checked) => {
+      window.toggleAllOystaVehicles(checked);
+    };
+
     function renderOystaVehicleList(vehicles) {
       console.log(`[Oysta] renderOystaVehicleList called with ${vehicles?.length} vehicles.`);
       if (!vehicles) return;
       const listContainer = document.getElementById('oysta-vehicle-list');
       if (!listContainer) return;
 
-      // V.9.7.0: Re-renderizar siempre o al menos actualizar los checkboxes para asegurar sync
       listContainer.innerHTML = '';
       vehicles.forEach(v => {
         const mid = String(v.id);
@@ -2585,7 +2634,12 @@
         `;
         listContainer.appendChild(div);
       });
-      listContainer.dataset.lastIds = vehicles.map(v => v.id).sort().join(',');
+
+      // V.9.7.0: Si todos están marcados, marcar el switch maestro
+      const total = vehicles.length;
+      const marcados = vehicles.filter(v => visibleVehicles[String(v.id)]).length;
+      const sw = document.getElementById('chk-toggle-all-oysta');
+      if (sw) sw.checked = total > 0 && total === marcados;
     }
 
     // V.9.7.0: Carga la lista inicial desde cache local
@@ -4642,42 +4696,6 @@ ${dataContext}
         tbody.appendChild(tr);
       });
     }
-
-    window.importarVehiculosOystaFaltantes = async () => {
-      if (!oystaVehiclesCache || oystaVehiclesCache.length === 0) {
-        mostrarToast("No hay datos de Oysta cargados. Sincroniza primero.");
-        return;
-      }
-
-      if (!confirm(`Se van a importar los vehículos de Oysta que aún no estén en el sistema. ¿Continuar?`)) return;
-
-      let count = 0;
-      for (const v of oystaVehiclesCache) {
-        const mid = String(v.id);
-        if (!localVehiclesByOystaId[mid]) {
-          // No existe, lo creamos
-          try {
-            await addDoc(collection(db, 'vehiculos'), {
-              indicativo: v.name,
-              matricula: '-',
-              tipo: 'Vehículo de transporte mixto',
-              oystaId: mid,
-              provincia: currentUserDoc?.provincia || 'Andalucía',
-              creadoEn: serverTimestamp()
-            });
-            count++;
-          } catch (e) {
-            console.error("Error importando vehículo:", e);
-          }
-        }
-      }
-
-      if (count > 0) {
-        mostrarToast(`Éxito: ${count} vehículos importados de Oysta.`);
-      } else {
-        mostrarToast("Todos los vehículos de Oysta ya están en el sistema.");
-      }
-    };
 
     window.abrirModalVehiculo = () => {
       editingVehiculoId = null;
@@ -12959,9 +12977,7 @@ ${dataContext}
 
       <!-- Contenedor Vehículos -->
       <div id="tabla-vehiculos-container" style="display:flex; flex-direction:column; flex:1; gap:16px;">
-        <div style="display:flex; justify-content:flex-end; gap:10px;">
-          <button class="btn-nueva" style="background: var(--bg-3); color: var(--text-1);"
-            onclick="importarVehiculosOystaFaltantes()">⚡ Importar de Oysta</button>
+        <div style="display:flex; justify-content:flex-end;">
           <button class="btn-nueva" onclick="abrirModalVehiculo()">+ Nuevo vehículo</button>
         </div>
         <div class="users-table-wrap">
