@@ -2627,10 +2627,14 @@
 
         const div = document.createElement('div');
         div.className = 'vehicle-selector-item';
+        // V.9.7.0 Fix: Mostrar indicativo local si existe asociación
+        const localVeh = localVehiclesByOystaId[mid];
+        const displayName = localVeh ? `${localVeh.indicativo} (${v.name})` : v.name;
+
         div.innerHTML = `
           <input type="checkbox" id="chk-veh-${mid}" ${visibleVehicles[mid] ? 'checked' : ''} 
                  onchange="toggleVehicleVisibility('${mid}', this.checked)">
-          <label for="chk-veh-${mid}">${v.name}</label>
+          <label for="chk-veh-${mid}">${displayName}</label>
         `;
         listContainer.appendChild(div);
       });
@@ -5497,10 +5501,14 @@ ${dataContext}
         const isVisible = visibleVehiclesPrev[mid];
         const div = document.createElement('div');
         div.className = 'vehicle-selector-item';
+        // V.9.7.0 Fix: Mostrar indicativo local si existe asociación
+        const localVeh = localVehiclesByOystaId[mid];
+        const displayName = localVeh ? `${localVeh.indicativo} (${v.name})` : v.name;
+
         div.innerHTML = `
           <input type="checkbox" id="chk-prev-veh-${mid}" ${isVisible ? 'checked' : ''} 
                  onchange="window.toggleVehicleVisibilityPrev('${mid}', this.checked)">
-          <label for="chk-prev-veh-${mid}">${v.name}</label>
+          <label for="chk-prev-veh-${mid}">${displayName}</label>
         `;
         list.appendChild(div);
         window.syncOystaMarkerPrev(v);
