@@ -896,7 +896,7 @@
       });
     }
 
-    console.log("EmerCRE V.9.7.0 Loaded");
+    console.log("EmerCRE V.9.8.0 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2057,10 +2057,11 @@
       if (op.recursosSummary && op.recursosSummary['eries'] > 0) totalBadges++;
 
       const types = [
-        { key: 'camiones', icon: 'assets/icons/truck.png' },
-        { key: 'ambulancias', icon: 'assets/icons/ambulance.png' },
-        { key: 'offroad', icon: 'assets/icons/offroad.png' },
-        { key: 'van', icon: 'assets/icons/van.png' }
+        { key: 'camiones', icon: 'assets/icons/icon_camion.png' },
+        { key: 'ambulancias', icon: 'assets/icons/icon_ambulancia.png' },
+        { key: 'offroad', icon: 'assets/icons/icon_todoterreno.png' },
+        { key: 'van', icon: 'assets/icons/icon_transp_personal.png' },
+        { key: 'turismos', icon: 'assets/icons/icon_turismo.png' }
       ];
 
       const presentVehicleTypes = types.filter(t => op.recursosSummary && (op.recursosSummary[t.key] || 0) > 0);
@@ -2534,13 +2535,14 @@
         content.style.setProperty('--nivel-color', statusClass === 'moving' ? '#27ae60' : '#e67e22');
         content.style.position = 'relative'; // Para el badge global
         const iconMap = {
-          'Camión': 'assets/icons/truck.png',
-          'Vehículo transporte personal': 'assets/icons/van.png',
-          'Vehículo de transporte mixto': 'assets/icons/offroad.png',
-          'Ambulancia': 'assets/icons/ambulance.png',
-          'Vehículo Todo terreno': 'assets/icons/offroad.png'
+          'Camión': 'assets/icons/icon_camion.png',
+          'Vehículo transporte personal': 'assets/icons/icon_transp_personal.png',
+          'Vehículo de transporte mixto': 'assets/icons/icon_transp_mixto.png',
+          'Ambulancia': 'assets/icons/icon_ambulancia.png',
+          'Vehículo Todo terreno': 'assets/icons/icon_todoterreno.png',
+          'Turismo': 'assets/icons/icon_turismo.png'
         };
-        const iconPath = iconMap[localVeh.tipo] || 'assets/icons/van.png';
+        const iconPath = iconMap[localVeh.tipo] || 'assets/icons/icon_transp_personal.png';
         content.innerHTML = `
           <div class="marker-main" style="width:32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;">
             <img src="${iconPath}" style="width:20px; height:20px; object-fit:contain;">
@@ -3069,7 +3071,8 @@
                 'Todo Terreno': 'offroad',
                 'Vehículo transporte personal': 'van',
                 'Vehículo de transporte mixto': 'van',
-                'Furgoneta': 'van'
+                'Furgoneta': 'van',
+                'Turismo': 'turismos'
               };
               const v = opcionesRecursosCache.vehiculos.find(x => x.id === itemId);
               key = keyMap[v.tipo] || 'otros';
@@ -3156,10 +3159,12 @@
       recursos.forEach(r => {
         const desc = r.descripcion || '';
         let iconUrl = '';
-        if (desc.includes('Camión')) iconUrl = 'assets/icons/truck.png';
-        else if (desc.includes('Ambulancia')) iconUrl = 'assets/icons/ambulance.png';
-        else if (desc.includes('Todo terreno') || desc.includes('Todo Terreno')) iconUrl = 'assets/icons/offroad.png';
-        else if (desc.includes('Vehículo transporte personal') || desc.includes('Vehículo de transporte mixto') || desc.includes('Furgoneta')) iconUrl = 'assets/icons/van.png';
+        if (desc.includes('Camión')) iconUrl = 'assets/icons/icon_camion.png';
+        else if (desc.includes('Ambulancia')) iconUrl = 'assets/icons/icon_ambulancia.png';
+        else if (desc.includes('Todo terreno') || desc.includes('Todo Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
+        else if (desc.includes('Vehículo de transporte mixto')) iconUrl = 'assets/icons/icon_transp_mixto.png';
+        else if (desc.includes('Turismo')) iconUrl = 'assets/icons/icon_turismo.png';
+        else if (desc.includes('Vehículo transporte personal') || desc.includes('Furgoneta')) iconUrl = 'assets/icons/icon_transp_personal.png';
         else if (desc.includes('🏥 ERBE')) iconUrl = 'assets/icons/erbe.svg';
 
         const row = document.createElement('div');
@@ -5732,11 +5737,13 @@ ${dataContext}
       } else {
         resList.innerHTML = snap.docs.map(dv => {
           const v = dv.data();
-          let iconUrl = 'assets/icons/van.png';
-          if (v.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
-          else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
-          else if (v.tipo?.includes('Terreno')) iconUrl = 'assets/icons/offroad.png';
-          else if (v.tipo?.includes('transporte') || v.tipo?.includes('mixto')) iconUrl = 'assets/icons/van.png';
+          let iconUrl = 'assets/icons/icon_transp_personal.png';
+          if (v.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
+          else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
+          else if (v.tipo?.includes('Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
+          else if (v.tipo?.includes('Turismo')) iconUrl = 'assets/icons/icon_turismo.png';
+          else if (v.tipo?.includes('mixto')) iconUrl = 'assets/icons/icon_transp_mixto.png';
+          else if (v.tipo?.includes('transporte')) iconUrl = 'assets/icons/icon_transp_personal.png';
 
           const isChecked = preselected.includes(dv.id);
           return `
@@ -6059,11 +6066,13 @@ ${dataContext}
           window.globalVehiculos = window.globalVehiculos || {};
           window.globalVehiculos[dv.id] = v; // save to cache
 
-          let iconUrl = 'assets/icons/van.png'; // default
-          if (v.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
-          else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
-          else if (v.tipo === 'Vehículo Todo terreno' || v.tipo === 'Todo Terreno') iconUrl = 'assets/icons/offroad.png';
-          else if (v.tipo === 'Vehículo transporte personal' || v.tipo === 'Vehículo de transporte mixto') iconUrl = 'assets/icons/van.png';
+          let iconUrl = 'assets/icons/icon_transp_personal.png'; // default
+          if (v.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
+          else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
+          else if (v.tipo === 'Vehículo Todo terreno' || v.tipo === 'Todo Terreno') iconUrl = 'assets/icons/icon_todoterreno.png';
+          else if (v.tipo === 'Vehículo de transporte mixto') iconUrl = 'assets/icons/icon_transp_mixto.png';
+          else if (v.tipo === 'Turismo') iconUrl = 'assets/icons/icon_turismo.png';
+          else if (v.tipo === 'Vehículo transporte personal') iconUrl = 'assets/icons/icon_transp_personal.png';
 
           const isSelected = editId && (subpreventivosCache[editId].recursos || []).includes(dv.id);
           return `
@@ -6146,10 +6155,12 @@ ${dataContext}
         const statusColor = isOccupied ? '#ff4d4d' : '#2ecc71';
 
         if (v) {
-          let iconUrl = 'assets/icons/van.png';
-          if (v.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
-          else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
-          else if (v.tipo?.includes('Terreno')) iconUrl = 'assets/icons/offroad.png';
+          let iconUrl = 'assets/icons/icon_transp_personal.png';
+          if (v.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
+          else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
+          else if (v.tipo?.includes('Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
+          else if (v.tipo?.includes('Turismo')) iconUrl = 'assets/icons/icon_turismo.png';
+          else if (v.tipo?.includes('mixto')) iconUrl = 'assets/icons/icon_transp_mixto.png';
 
           return `<span class="badge-tipo" style="background:var(--bg-3); color:var(--text-1); font-size:11px; display:inline-flex; align-items:center; gap:4px; margin-right:4px; padding:2px 6px; border-radius:4px; border:1px solid var(--border-mid); position:relative;">
             <span style="width:6px; height:6px; background:${statusColor}; border-radius:50%; box-shadow:0 0 4px ${statusColor}a0;" title="${isOccupied ? 'Ocupado' : 'Disponible'}"></span>
@@ -6321,13 +6332,15 @@ ${dataContext}
                   <div style="margin-top:8px; display:flex; gap:4px; flex-wrap:wrap;">
                     ${(i.recursosAsignados || []).map(r => {
           const v = window.globalVehiculos && window.globalVehiculos[r];
-          let iconUrl = 'assets/icons/van.png';
+          let iconUrl = 'assets/icons/icon_transp_personal.png';
           let label = r;
           if (v) {
-            if (v.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
-            else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
-            else if (v.tipo === 'Vehículo Todo terreno' || v.tipo === 'Todo Terreno') iconUrl = 'assets/icons/offroad.png';
-            else if (v.tipo === 'Vehículo transporte personal' || v.tipo === 'Vehículo de transporte mixto') iconUrl = 'assets/icons/van.png';
+            if (v.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
+            else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
+            else if (v.tipo === 'Vehículo Todo terreno' || v.tipo === 'Todo Terreno') iconUrl = 'assets/icons/icon_todoterreno.png';
+            else if (v.tipo === 'Vehículo de transporte mixto') iconUrl = 'assets/icons/icon_transp_mixto.png';
+            else if (v.tipo === 'Turismo') iconUrl = 'assets/icons/icon_turismo.png';
+            else if (v.tipo === 'Vehículo transporte personal') iconUrl = 'assets/icons/icon_transp_personal.png';
             label = v.indicativo || 'SIN IND';
           } else {
             return `<span style="font-size:9px; background:var(--bg-2); padding:2px 6px; border:1px solid var(--border-mid); border-radius:3px; color:var(--text-2);">🚗 ${r}</span>`;
@@ -6863,10 +6876,12 @@ ${dataContext}
               const v = window.globalVehiculos && window.globalVehiculos[rvId];
               const isSelected = (iEdit?.recursosAsignados || []).includes(rvId);
 
-              let iconUrl = 'assets/icons/van.png';
-              if (v?.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
-              else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
-              else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/offroad.png';
+              let iconUrl = 'assets/icons/icon_transp_personal.png';
+              if (v?.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
+              else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
+              else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
+              else if (v?.tipo?.includes('Turismo')) iconUrl = 'assets/icons/icon_turismo.png';
+              else if (v?.tipo?.includes('mixto')) iconUrl = 'assets/icons/icon_transp_mixto.png';
 
               // V.9.7.0: Obtener ranking si existe
               const oystaId = v?.oystaId;
@@ -7748,10 +7763,12 @@ ${dataContext}
             })
             .map(rvId => {
               const v = window.globalVehiculos && window.globalVehiculos[rvId];
-              let iconUrl = 'assets/icons/van.png';
-              if (v?.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
-              else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
-              else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/offroad.png';
+              let iconUrl = 'assets/icons/icon_transp_personal.png';
+              if (v?.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
+              else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
+              else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
+              else if (v?.tipo?.includes('Turismo')) iconUrl = 'assets/icons/icon_turismo.png';
+              else if (v?.tipo?.includes('mixto')) iconUrl = 'assets/icons/icon_transp_mixto.png';
 
               return `
         <div class="res-item-row" style="display:flex; align-items:center; gap:8px; padding:4px 6px; background:var(--bg-1); border:1px solid var(--border-mid); border-radius:4px; ${canEdit ? 'cursor:pointer;' : 'opacity:0.6; cursor:not-allowed;'} transition:all 0.2s;"
@@ -7767,10 +7784,12 @@ ${dataContext}
         // V.9.7.0: Renderizar recursos YA ASIGNADOS con opción de retirar
         const assignedRecsHtml = (i.recursosAsignados || []).map(rvId => {
           const v = window.globalVehiculos && window.globalVehiculos[rvId];
-          let iconUrl = 'assets/icons/van.png';
-          if (v?.tipo === 'Camión') iconUrl = 'assets/icons/truck.png';
-          else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/ambulance.png';
-          else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/offroad.png';
+          let iconUrl = 'assets/icons/icon_transp_personal.png';
+          if (v?.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
+          else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
+          else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
+          else if (v?.tipo?.includes('Turismo')) iconUrl = 'assets/icons/icon_turismo.png';
+          else if (v?.tipo?.includes('mixto')) iconUrl = 'assets/icons/icon_transp_mixto.png';
 
           return `
             <div class="res-item-row" style="display:flex; align-items:center; gap:8px; padding:4px 6px; background:var(--accent-light); border:1px solid var(--accent); border-radius:4px; opacity:0.9;">
@@ -12424,7 +12443,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.9.7.0
+          Versión V.9.8.0
         </div>
       </div>
 
@@ -12800,7 +12819,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.9.7.0
+          Versión V.9.8.0
         </div>
       </div>
 
@@ -13650,7 +13669,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.9.7.0
+            Versión V.9.8.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
@@ -13696,6 +13715,7 @@ ${dataContext}
             <option value="Camión">Camión</option>
             <option value="Vehículo transporte personal">Vehículo transporte personal</option>
             <option value="Vehículo de transporte mixto">Vehículo de transporte mixto</option>
+            <option value="Turismo">Turismo</option>
             <option value="Ambulancia">Ambulancia</option>
             <option value="Vehículo Todo terreno">Vehículo Todo terreno</option>
           </select>
