@@ -3895,7 +3895,7 @@ ${dataContext}
           nombreOp = op.descripcion || 'Intervención';
           numeroIntervencion = op.numeroIntervencion || 'S/N';
           provincia = op.provincia || 'Andalucía';
-          creadoEn = op.timestamp; // V.11.0.7: Usar timestamp de la intervención
+          creadoEn = op.timestamp; // V.11.1.0: Usar timestamp de la intervención
           actualizadoEn = op.actualizadoEn;
 
           const pSnap = await getDoc(doc(db, 'preventivos', pId));
@@ -3903,7 +3903,7 @@ ${dataContext}
             const pData = pSnap.data();
             org = pData.organizacion || "";
             dir = pData.contacto || "";
-            loc = op.direccion || pData.localizacion || ""; // V.11.0.7: Priorizar dirección de la intervención
+            loc = op.direccion || pData.localizacion || ""; // V.11.1.0: Priorizar dirección de la intervención
           }
 
           const recIndicativos = (op.recursosAsignados || []).map(rid => (window.globalVehiculos && window.globalVehiculos[rid]?.indicativo) || rid).join(', ');
@@ -3915,7 +3915,7 @@ ${dataContext}
           const logData = [];
           if (op.comentarios) {
             op.comentarios.slice().reverse().forEach(c => {
-              // V.11.0.7: Robust date parsing
+              // V.11.1.0: Robust date parsing
               let ts = null;
               if (c.timestamp) {
                 ts = { toDate: () => new Date(c.timestamp) };
@@ -3945,7 +3945,7 @@ ${dataContext}
           const qInt = query(collection(db, 'preventivos', pId, 'subpreventivos', id, 'intervenciones'));
           const snapInt = await getDocs(qInt);
 
-          // V.11.0.7: Capturar recursos del día
+          // V.11.1.0: Capturar recursos del día
           const recIndicativos = (op.recursos || []).map(rid => (window.globalVehiculos && window.globalVehiculos[rid]?.indicativo) || rid).join(', ');
 
           dataContext = `DÍA: ${op.nombre}\nRecursos Desplegados: ${recIndicativos}\nINTERVENCIONES REGISTRADAS (${snapInt.size}):\n`;
@@ -3974,7 +3974,7 @@ ${dataContext}
           const qSub = query(collection(db, 'preventivos', id, 'subpreventivos'));
           const snapSub = await getDocs(qSub);
 
-          // V.11.0.7: Deduplicar recursos de todos los días
+          // V.11.1.0: Deduplicar recursos de todos los días
           const allRecSet = new Set();
 
           dataContext = `PREVENTIVO GLOBAL: ${op.nombre}\n`;
@@ -6145,7 +6145,7 @@ ${dataContext}
       // if (typeof clearPreventivoMarkers === 'function') clearPreventivoMarkers(); // Removido V.11.0.2
 
       const p = preventivosCache[id];
-      // V.11.0.7: Permitir navegación aunque esté cerrado para quienes puedan verlo
+      // V.11.1.0: Permitir navegación aunque esté cerrado para quienes puedan verlo
       // if (p && p.abierta === false) { ... }
 
       if (isCurrentlyOpen) {
@@ -6446,7 +6446,7 @@ ${dataContext}
         return;
       }
 
-      // V.11.0.7: Permitir navegación aunque el día esté cerrado
+      // V.11.1.0: Permitir navegación aunque el día esté cerrado
       // if (d && d.abierta === false) { ... }
 
       currentPreventivoId = d?.preventivoId || currentPreventivoId;
@@ -8574,7 +8574,7 @@ ${dataContext}
           // Gemini: Cloud Monitoring siempre devuelve 0 para llamadas por API Key directa.
           // Firestore ia_report es el contador fiable (se incrementa en generateGeminiContent).
           const geminiFirestore = n(dData.ia_report);
-          const geminiLimit = n(real.gemini.limit) || 50;
+          const geminiLimit = n(real.gemini.limit) || 1500;
 
           const fsR_Real = n(real.firestore.reads);
           const fsR_Est = n(dData.fs_read);
@@ -8632,8 +8632,8 @@ ${dataContext}
         const totalMapsReqs = n(mData.maps_load) + n(mData.maps_route) + n(mData.maps_places) + n(mData.maps_geocode);
 
         updateUsageUI('maps', mapsCost, 200, `$${mapsCost.toFixed(2)} (Est) / - (Real)`, `${totalMapsReqs} (Est) / - (Real) peticiones`);
-        // V.11.0.7: Actualizado a 50 peticiones/día (Límite real Gemini Pro Free)
-        updateUsageUI('gemini', n(dData.ia_report), 50, `${n(dData.ia_report)} (Est) / - (Real)`, `Peticiones hoy (Límite: 50 | Reset: 09:00 PT)`);
+        // V.11.1.0: Restaurado a 1500 peticiones/día (Límite Gemini Flash Lite Free)
+        updateUsageUI('gemini', n(dData.ia_report), 1500, `${n(dData.ia_report)} (Est) / - (Real)`, `Peticiones hoy (Límite: 1500 | Reset: 09:00 PT)`);
         updateUsageUI('fs-reads', n(dData.fs_read), 50000, `${n(dData.fs_read)} (Est) / - (Real)`, `Lecturas hoy (Límite: 50,000)`);
         updateUsageUI('fs-writes', n(dData.fs_write), 20000, `${n(dData.fs_write)} (Est) / - (Real)`, `Escrituras hoy (Límite: 20,000)`);
       } catch (e) {
@@ -14242,7 +14242,7 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL ERROR CUOTA IA (V.11.0.7) -->
+  <!-- MODAL ERROR CUOTA IA (V.11.1.0) -->
   <div class="overlay" id="overlay-ai-quota-error" style="z-index:10002;">
     <div class="modal"
       style="width:400px; text-align:center; padding:30px; border-radius:15px; background:white; position:relative; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
@@ -14250,14 +14250,15 @@ ${dataContext}
       <h2 style="color:var(--text-1); margin-bottom:10px; font-weight:800; letter-spacing:-0.5px;">Límite alcanzado</h2>
       <p style="color:var(--text-3); font-size:14px; line-height:1.6; margin-bottom:25px;">
         La cuota diaria de informes de la IA se ha agotado. <br>
-        Según la política de <b>Google Cloud</b>, el límite gratuito es de aproximadamente 50 peticiones diarias.
+        Según la política de <b>Google Cloud</b>, el límite gratuito para este modelo es de 1500 peticiones diarias.
       </p>
       <div
         style="background:#f8f9fa; padding:15px; border-radius:10px; margin-bottom:25px; text-align:left; border-left:4px solid var(--accent);">
         <div style="font-size:11px; font-weight:700; color:var(--accent); text-transform:uppercase;">Información del
           Reset</div>
         <div style="font-size:13px; color:var(--text-2); margin-top:4px;">La cuota se reinicia automáticamente a las
-          <b>09:00 AM</b> aprox. (Hora española).</div>
+          <b>09:00 AM</b> aprox. (Hora española).
+        </div>
       </div>
       <button class="btn-reg" style="width:100%; height:45px; border-radius:10px;"
         onclick="cerrarModalQuotaIA()">Entendido</button>
