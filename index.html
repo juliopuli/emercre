@@ -3895,7 +3895,7 @@ ${dataContext}
           nombreOp = op.descripcion || 'Intervención';
           numeroIntervencion = op.numeroIntervencion || 'S/N';
           provincia = op.provincia || 'Andalucía';
-          creadoEn = op.timestamp; // V.11.0.5: Usar timestamp de la intervención
+          creadoEn = op.timestamp; // V.11.0.6: Usar timestamp de la intervención
           actualizadoEn = op.actualizadoEn;
 
           const pSnap = await getDoc(doc(db, 'preventivos', pId));
@@ -3903,7 +3903,7 @@ ${dataContext}
             const pData = pSnap.data();
             org = pData.organizacion || "";
             dir = pData.contacto || "";
-            loc = op.direccion || pData.localizacion || ""; // V.11.0.5: Priorizar dirección de la intervención
+            loc = op.direccion || pData.localizacion || ""; // V.11.0.6: Priorizar dirección de la intervención
           }
 
           const recIndicativos = (op.recursosAsignados || []).map(rid => (window.globalVehiculos && window.globalVehiculos[rid]?.indicativo) || rid).join(', ');
@@ -3915,7 +3915,7 @@ ${dataContext}
           const logData = [];
           if (op.comentarios) {
             op.comentarios.slice().reverse().forEach(c => {
-              // V.11.0.5: Robust date parsing
+              // V.11.0.6: Robust date parsing
               let ts = null;
               if (c.timestamp) {
                 ts = { toDate: () => new Date(c.timestamp) };
@@ -3945,7 +3945,7 @@ ${dataContext}
           const qInt = query(collection(db, 'preventivos', pId, 'subpreventivos', id, 'intervenciones'));
           const snapInt = await getDocs(qInt);
 
-          // V.11.0.5: Capturar recursos del día
+          // V.11.0.6: Capturar recursos del día
           const recIndicativos = (op.recursos || []).map(rid => (window.globalVehiculos && window.globalVehiculos[rid]?.indicativo) || rid).join(', ');
 
           dataContext = `DÍA: ${op.nombre}\nRecursos Desplegados: ${recIndicativos}\nINTERVENCIONES REGISTRADAS (${snapInt.size}):\n`;
@@ -3974,7 +3974,7 @@ ${dataContext}
           const qSub = query(collection(db, 'preventivos', id, 'subpreventivos'));
           const snapSub = await getDocs(qSub);
 
-          // V.11.0.5: Deduplicar recursos de todos los días
+          // V.11.0.6: Deduplicar recursos de todos los días
           const allRecSet = new Set();
 
           dataContext = `PREVENTIVO GLOBAL: ${op.nombre}\n`;
@@ -6130,7 +6130,7 @@ ${dataContext}
       // if (typeof clearPreventivoMarkers === 'function') clearPreventivoMarkers(); // Removido V.11.0.2
 
       const p = preventivosCache[id];
-      // V.11.0.5: Permitir navegación aunque esté cerrado para quienes puedan verlo
+      // V.11.0.6: Permitir navegación aunque esté cerrado para quienes puedan verlo
       // if (p && p.abierta === false) { ... }
 
       if (isCurrentlyOpen) {
@@ -6423,7 +6423,15 @@ ${dataContext}
 
     window.selectSubpreventivo = (id) => {
       const d = subpreventivosCache[id];
-      // V.11.0.5: Permitir navegación aunque el día esté cerrado
+      const side = document.getElementById('preventivos-detail-panel');
+
+      if (side && side.classList.contains('open') && currentPreventivoDiaId === id) {
+        // V.11.0.2: Si ya estaba abierto este día y clicamos sobre él, lo cerramos
+        cerrarDetallePreventivo();
+        return;
+      }
+
+      // V.11.0.6: Permitir navegación aunque el día esté cerrado
       // if (d && d.abierta === false) { ... }
 
       currentPreventivoId = d?.preventivoId || currentPreventivoId;
