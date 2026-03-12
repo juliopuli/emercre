@@ -15,12 +15,15 @@ exports.getOystaVehicles = functions.https.onCall(async (data, context) => {
     const userSnap = await admin.firestore().collection("users").doc(context.auth.uid).get();
     const userData = userSnap.exists ? userSnap.data() : {};
 
-    if (userData.role !== 'super_admin' && userData.canSeeVehicles !== true) {
-        throw new functions.https.HttpsError(
-            "permission-denied",
-            "No tienes permiso para consultar la posición de los vehículos."
-        );
-    }
+    // V.11.3.1: Permitir a todos los usuarios autenticados descargar los datos.
+    // La visibilidad selectiva se gestionará en el front-end para permitir ver 
+    // vehículos asignados a intervenciones sin ver necesariamente toda la flota.
+    // if (userData.role !== 'super_admin' && userData.canSeeVehicles !== true) {
+    //     throw new functions.https.HttpsError(
+    //         "permission-denied",
+    //         "No tienes permiso para consultar la posición de los vehículos."
+    //     );
+    // }
 
     const bridgeUrl = process.env.OYSTA_BRIDGE_URL;
     if (!bridgeUrl) {
