@@ -1023,7 +1023,7 @@
       });
     }
 
-    console.log('EmerCRE V.11.5.1 Loaded');
+    console.log('EmerCRE V.11.5.2 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2651,7 +2651,7 @@
                   });
               }
 
-              // 2. Llegada (Dist < 0.1km)
+              // 2. Llegada (Distancia en línea recta < 100m - V.11.5.2)
               if (opCoords) {
                 const dist = calculateHaversineDist(pos, opCoords);
                 const arrKey = `arr_${opId}_${mid}`;
@@ -4584,7 +4584,8 @@ ${dataContext}
         if (editPickedCoords && gmMarkers[selOpId]) {
           const tipo = TIPOS[updates.tipo] || TIPOS.otro;
           gmMarkers[selOpId].position = editPickedCoords;
-          gmMarkers[selOpId].content = nivelIcon(ops[selOpId].nivel, tipo.emoji, false, false, ops[selOpId].recursosSummary);
+          // V.11.5.2: Corregir argumentos (op completa, tipo objeto)
+          gmMarkers[selOpId].content = nivelIcon(ops[selOpId], tipo);
         }
 
         mostrarToast('Operación actualizada.');
@@ -7737,6 +7738,7 @@ ${dataContext}
         .map(c => c.dataset.id);
 
       const isEdit = !!editIntervencionId;
+      const iEdit = editIntervencionId ? (intervencionesCache[editIntervencionId] || {}) : {};
 
       try {
         const posIniciales = (isEdit && iEdit.recursosPosicionesIniciales) ? { ...iEdit.recursosPosicionesIniciales } : {};
