@@ -66,9 +66,9 @@
     }
     initMessaging();
 
-    // ── FIREBASE APP CHECK (V.11.3.1) ──────────────────────────────────-
+    // ── FIREBASE APP CHECK (V.11.3.3) ──────────────────────────────────-
     try {
-      // self.FIREBASE_APPCHECK_DEBUG_TOKEN = true; // Desactivado para producción (V.11.3.1)
+      // self.FIREBASE_APPCHECK_DEBUG_TOKEN = true; // Desactivado para producción (V.11.3.3)
       initializeAppCheck(fbApp, {
         provider: new ReCaptchaV3Provider('6LemNXUsAAAAACVSGSPQ2ow0qbaV0a7QvZo5tV0h'),
         isTokenAutoRefreshEnabled: true
@@ -157,8 +157,8 @@
     let ops = {};
     let editingUserId = null;
 
-    // ── CONFIGURACIÓN PUENTE NOTIFICACIONES (V.11.3.1) ─────────────────
-    // OYSTA_BRIDGE_URL eliminada del frontend (V.11.3.1): ahora se usa Cloud Function autenticada.
+    // ── CONFIGURACIÓN PUENTE NOTIFICACIONES (V.11.3.3) ─────────────────
+    // OYSTA_BRIDGE_URL eliminada del frontend (V.11.3.3): ahora se usa Cloud Function autenticada.
 
 
     // V.11.3.1: Ayudante para visibilidad de operaciones
@@ -1046,7 +1046,7 @@
         renderChatList();
       };
 
-      // Escuchar mensajes PRIVADOS (Limitado a los últ. 100 para ahorrar lecturas) (V.11.3.1)
+      // Escuchar mensajes PRIVADOS (Limitado a los últ. 100 para ahorrar lecturas) (V.11.3.3)
       const qPriv = query(
         collection(db, 'chat_mensajes'),
         or(where('destinatarioId', '==', currentUser.uid), where('remitenteId', '==', currentUser.uid)),
@@ -1466,7 +1466,7 @@
       const chatToggle = document.getElementById('toggle-notif-chat');
       if (opsToggle) opsToggle.checked = currentUserDoc.notifOperaciones !== false;
       if (chatToggle) chatToggle.checked = currentUserDoc.notifChat !== false;
-    };    // Función para disparar la notificación push real (V.11.3.1)
+    };    // Función para disparar la notificación push real (V.11.3.3)
     window.broadcastNuevaOperacion = async (op) => {
       console.log("Broadcasting nueva operación:", op.nombre);
 
@@ -1515,7 +1515,7 @@
       }
     }
 
-    // Listener para mensajes FCM en primer plano (V.11.3.1)
+    // Listener para mensajes FCM en primer plano (V.11.3.3)
     // Solo log, sin toast adicional (el toast ya lo pone el onSnapshot)
     if (messaging) {
       onMessage(messaging, (payload) => {
@@ -1853,7 +1853,7 @@
       }
       if (gmap && mapReady) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
 
-      // ── MOBILE DRAWER POPULATION (V.11.3.1) ──────────────────────────
+      // ── MOBILE DRAWER POPULATION (V.11.3.3) ──────────────────────────
       const dn = document.getElementById('drawer-user-name');
       const dr = document.getElementById('drawer-user-role');
       if (dn) dn.textContent = currentUserDoc.nombre || currentUser.email;
@@ -1897,8 +1897,8 @@
         mobileNuevaBtn.style.display = isAdmin ? 'flex' : 'none';
       }
 
-      // Oysta Integration (V.11.3.1)
-      // Oysta Integration (V.11.3.1)
+      // Oysta Integration (V.11.3.3)
+      // Oysta Integration (V.11.3.3)
       const vehicleBtn = document.getElementById('btn-toggle-vehicles');
       const vehicleBtnPrev = document.getElementById('btn-prev-toggle-vehicles');
       const hasPermission = !!currentUserDoc.canSeeVehicles;
@@ -1951,7 +1951,7 @@
       if (unsubGuardia) { unsubGuardia(); unsubGuardia = null; }
       if (unsubGlobalJefes) { unsubGlobalJefes(); unsubGlobalJefes = null; }
       if (unsubVehiculos) { unsubVehiculos(); unsubVehiculos = null; } // V.11.3.1
-      // Clean chat listeners (V.11.3.1)
+      // Clean chat listeners (V.11.3.3)
       if (unsubChatPrivateGlobal) { unsubChatPrivateGlobal(); unsubChatPrivateGlobal = null; }
       if (unsubUserPresence) { unsubUserPresence(); unsubUserPresence = null; }
       if (unsubChatDetail) { unsubChatDetail(); unsubChatDetail = null; }
@@ -2017,7 +2017,7 @@
               // Si es la carga inicial, asumimos que no es nueva "en tiempo real"
               // a no ser que tú mismo la hayas creado muy recientemente
               if (!initialLoad && d.creadoPor !== currentUser.uid) {
-                // Solo pitar si es de mi ámbito o soy autonómico (V.11.3.1)
+                // Solo pitar si es de mi ámbito o soy autonómico (V.11.3.3)
                 const myProv = currentUserDoc.provincia;
                 const opProv = d.provincia;
                 if (myProv === 'Andalucía' || myProv === opProv) {
@@ -2163,7 +2163,7 @@
     function renderMapa(forceZoom = false) {
       if (!gmap || !mapReady) return;
 
-      // Build search filter helper (V.11.3.1)
+      // Build search filter helper (V.11.3.3)
       const q = searchQuery.trim().toLowerCase();
       function isOpSearchVisible(op) {
         if (!isOpVisible(op)) return false;
@@ -2267,7 +2267,7 @@
       }
     }
 
-    // ── OYSTA INTEGRATION (V.11.3.1) ──────────────────────────────────
+    // ── OYSTA INTEGRATION (V.11.3.3) ──────────────────────────────────
     async function cargarVehiculosOysta(force = false) {
       console.log(`[Oysta] cargarVehiculosOysta called (force=${force})`);
       // V.11.3.1: Implementar pausa automática si no hay vehículos visibles, excepto en Preventivos (para rutas dinámicas)
@@ -2787,14 +2787,14 @@
         visible = visible.filter(o => o.provincia === selectedProvincia);
       }
 
-      // Lógica de filtrado de intervenciones ocultas (V.11.3.1)
+      // Lógica de filtrado de intervenciones ocultas (V.11.3.3)
       visible = visible.filter(op => {
         const isOculta = op.oculta === true;
         if (isOculta) return mostrarCerradas && canShowHidden();
         return true;
       });
 
-      // Búsqueda de texto (V.11.3.1)
+      // Búsqueda de texto (V.11.3.3)
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
         visible = visible.filter(op => {
@@ -3145,7 +3145,7 @@
           const opSnap = await getDoc(opRef);
           const rSum = opSnap.data().recursosSummary || {};
 
-          // Inferir tipo de la descripción de forma más robusta (V.11.3.1)
+          // Inferir tipo de la descripción de forma más robusta (V.11.3.3)
           let key = 'otros';
           const dLower = desc.toLowerCase();
           if (desc.includes('🚗')) {
@@ -3303,7 +3303,7 @@
         b.disabled = isFinalizada;
       });
 
-      // Lógica de Ocultar (V.11.3.1)
+      // Lógica de Ocultar (V.11.3.3)
       const hideWrapper = document.getElementById('dp-hide-wrapper');
       if (hideWrapper) {
         if (isFinalizada && (currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'manager')) {
@@ -3875,7 +3875,7 @@ ${dataContext}
       document.getElementById('overlay-ai-report').style.display = 'none';
     };
 
-    // ── INFORME IA PREVENTIVOS (V.11.3.1) ──────────────────────────────
+    // ── INFORME IA PREVENTIVOS (V.11.3.3) ──────────────────────────────
     window.generarInformeIA_Preventivo = async (type, id, parentId = null, parentId2 = null) => {
       let dataContext = "";
       let titleReport = "";
@@ -4139,7 +4139,7 @@ ${dataContext}
             break;
           case 'Jefe de Operaciones':
             subSelect.style.display = 'block';
-            // Auto-seleccionar el jefe que ya está puesto en el campo de dirección (V.11.3.1)
+            // Auto-seleccionar el jefe que ya está puesto en el campo de dirección (V.11.3.3)
             const jefeActual = document.getElementById(`${prefix}-dir`).value;
             if (jefeActual) subSelect.value = jefeActual;
             break;
@@ -4467,15 +4467,15 @@ ${dataContext}
         document.getElementById('section-chat-view').style.display = 'flex';
         document.getElementById('section-chat').style.display = 'flex';
         cargarUsuariosParaChat();
-        // Al entrar, no auto-seleccionamos si no hay nada (V.11.3.1)
+        // Al entrar, no auto-seleccionamos si no hay nada (V.11.3.3)
         if (currentChatId) selectChat(currentChatId);
         else selectChat(null);
       } else {
         document.getElementById('section-chat-view').style.display = 'none';
         document.getElementById('section-chat').style.display = 'none';
-        // Detener listener de detalle al salir del chat para permitir notificaciones (V.11.3.1)
+        // Detener listener de detalle al salir del chat para permitir notificaciones (V.11.3.3)
         if (unsubChatDetail) { unsubChatDetail(); unsubChatDetail = null; }
-        // Deseleccionar chat al salir para que al volver no se marque como leído auto (V.11.3.1)
+        // Deseleccionar chat al salir para que al volver no se marque como leído auto (V.11.3.3)
         currentChatId = null;
       }
 
@@ -4485,7 +4485,7 @@ ${dataContext}
       }
       if (sec === 'operaciones' && gmap) setTimeout(() => google.maps.event.trigger(gmap, 'resize'), 100);
 
-      // Toggle mobile FAB: only show on operaciones (V.11.3.1)
+      // Toggle mobile FAB: only show on operaciones (V.11.3.3)
       const fab = document.getElementById('btn-mobile-nueva-op');
       if (fab) {
         const isAdmin = currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'autonomica' || currentRole === 'provincial' || currentRole === 'manager';
@@ -4909,7 +4909,7 @@ ${dataContext}
       if (typeof cargarErbes === 'function') cargarErbes();
       if (typeof cargarEries === 'function') cargarEries();
 
-      // Sync drawer selectors (V.11.3.1)
+      // Sync drawer selectors (V.11.3.3)
       const dProvSel = document.getElementById('drawer-prov-selector');
       if (dProvSel) dProvSel.value = val;
       const hProvSel = document.getElementById('hdr-prov-selector');
@@ -5526,7 +5526,7 @@ ${dataContext}
             document.getElementById(`${prefix}-dir`).value = jefeNombre;
             const orgSelect = document.getElementById(`${prefix}-org`);
             if (orgSelect) {
-              // Si ya está seleccionado 'Jefe de Operaciones', sincronizamos el sub-selector (V.11.3.1)
+              // Si ya está seleccionado 'Jefe de Operaciones', sincronizamos el sub-selector (V.11.3.3)
               if (orgSelect.value === 'Jefe de Operaciones') {
                 const subSelect = document.getElementById(`${prefix}-org-sub-select`);
                 if (subSelect) subSelect.value = jefeNombre;
@@ -5548,7 +5548,7 @@ ${dataContext}
           if (valEl) valEl.textContent = jefeGuardiaActual || 'Sin asignar';
           const sel = document.getElementById('hdr-jefe-guardia-sel');
           if (sel) sel.value = jefeGuardiaActual || '';
-          // Drawer sync (V.11.3.1)
+          // Drawer sync (V.11.3.3)
           const dVal = document.getElementById('drawer-jefe-guardia-val');
           if (dVal) dVal.textContent = jefeGuardiaActual || 'Sin asignar';
           const dSel = document.getElementById('drawer-jefe-guardia-sel');
@@ -5559,7 +5559,7 @@ ${dataContext}
           if (valEl) valEl.textContent = 'Sin asignar';
           const sel = document.getElementById('hdr-jefe-guardia-sel');
           if (sel) sel.value = '';
-          // Drawer sync (V.11.3.1)
+          // Drawer sync (V.11.3.3)
           const dVal = document.getElementById('drawer-jefe-guardia-val');
           if (dVal) dVal.textContent = 'Sin asignar';
           const dSel = document.getElementById('drawer-jefe-guardia-sel');
@@ -5674,7 +5674,7 @@ ${dataContext}
     };
 
     // ==========================================
-    // MÓDULO DE PREVENTIVOS - LÓGICA (V.11.3.1)
+    // MÓDULO DE PREVENTIVOS - LÓGICA (V.11.3.3)
     // ==========================================
 
     window.initMapPreventivos = () => {
@@ -5713,7 +5713,7 @@ ${dataContext}
       }
     };
 
-    // Control de capas y vehículos (V.11.3.1)
+    // Control de capas y vehículos (V.11.3.3)
     window.refreshPreventivosMap = () => {
       if (mapPreventivos) {
         google.maps.event.trigger(mapPreventivos, 'resize');
@@ -5798,38 +5798,37 @@ ${dataContext}
       const pos = { lat: parseFloat(v.lat), lng: parseFloat(v.lng) };
       if (isNaN(pos.lat) || isNaN(pos.lng)) return;
 
+      const movingFilter = showMovingOysta && v.status.toLowerCase() !== 'parado';
+      const localVeh = typeof localVehiclesByOystaId !== 'undefined' ? localVehiclesByOystaId[mid] : null;
+      const isLocalAssigned = !!(localVeh && typeof _assignedVehiclesInOpenPreventivos !== 'undefined' && _assignedVehiclesInOpenPreventivos.has(localVeh.id));
+
       if (oystaMarkersPrev[mid]) {
         oystaMarkersPrev[mid].position = pos;
         if (typeof window.createOystaMarkerContent === 'function') {
           const statusClass = (v.status.toLowerCase() !== 'parado') ? 'moving' : 'stopped';
-          const localVeh = typeof localVehiclesByOystaId !== 'undefined' ? localVehiclesByOystaId[mid] : null;
           oystaMarkersPrev[mid].content = window.createOystaMarkerContent(v, localVeh, statusClass);
         }
-        const movingFilter = showMovingOysta && v.status.toLowerCase() !== 'parado';
-        const isLocalAssigned = !!(typeof _assignedVehiclesInOpenPreventivos !== 'undefined' && _assignedVehiclesInOpenPreventivos.has(mid));
         oystaMarkersPrev[mid].setMap(((isVisible && currentUserDoc?.canSeeVehicles) || movingFilter || isLocalAssigned) ? mapPreventivos : null);
-      } else if (isVisible || (showMovingOysta && v.status.toLowerCase() !== 'parado')) {
+      } else if (isVisible || movingFilter || isLocalAssigned) {
         let content;
         if (typeof window.createOystaMarkerContent === 'function') {
           const statusClass = (parseFloat(v.speed) > 5) ? 'moving' : 'stopped';
-          const localVeh = typeof localVehiclesByOystaId !== 'undefined' ? localVehiclesByOystaId[mid] : null;
           content = window.createOystaMarkerContent(v, localVeh, statusClass);
         } else {
           content = document.createElement('div');
           content.className = `oysta-marker`;
           content.innerHTML = v.name;
         }
-        const movingFilter = showMovingOysta && v.status.toLowerCase() !== 'parado';
         const marker = new google.maps.marker.AdvancedMarkerElement({
           position: pos,
           map: ((isVisible && currentUserDoc?.canSeeVehicles) || movingFilter || isLocalAssigned) ? mapPreventivos : null,
           content: content,
           title: v.name,
-          zIndex: 1000, // V.11.3.1: Asegurar visibilidad
+          zIndex: 1000, // V.11.3.3
           gmpClickable: true
         });
 
-        // V.11.3.1: Delegate click to custom content
+        // V.11.3.3: Delegate click to custom content
         marker.addListener('gmp-click', () => {
           if (content && typeof content.click === 'function') content.click();
         });
@@ -6935,7 +6934,7 @@ ${dataContext}
             console.log("[Oysta] Logged arrival PREV:", text);
           }
 
-          // 3. Hospital Carlos Haya (V.11.3.1)
+          // 3. Hospital Carlos Haya (V.11.3.3)
           const chCoords = { lat: 36.723012376884185, lng: -4.450232328090476 };
           const distCH = haversineDistance(pos, chCoords);
           if (renderData.isUrgente) {
@@ -8279,10 +8278,10 @@ ${dataContext}
       if (!i || !i.comentarios || !i.comentarios[index]) return;
       const c = i.comentarios[index];
 
-      // Permiso base (V.11.3.1)
+      // Permiso base (V.11.3.3)
       if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para editar comentarios'); return; }
 
-      // Restricción Oysta (V.11.3.1)
+      // Restricción Oysta (V.11.3.3)
       const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
       if (isOysta && currentRole !== 'super_admin') {
         mostrarToast('Solo los Super Administradores pueden editar avisos de Oysta');
@@ -8298,7 +8297,7 @@ ${dataContext}
       let d = new Date();
       if (c.timestamp) d = new Date(c.timestamp);
       else if (c.fecha) {
-        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.11.3.1)
+        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.11.3.3)
         const parts = c.fecha.split(/[ ,]+/);
         if (parts.length >= 2) {
           const fParts = parts[0].split("/");
@@ -8475,7 +8474,7 @@ ${dataContext}
       }
     };
 
-    // ── LOGS ADMIN JS (V.11.3.1) ────────────────────────────────────────
+    // ── LOGS ADMIN JS (V.11.3.3) ────────────────────────────────────────
     window.abrirModalLogsAdmin = () => {
       document.getElementById('overlay-logs-admin').classList.add('open');
     };
@@ -8552,7 +8551,7 @@ ${dataContext}
       }
     };
 
-    // ── API USAGE LOGIC (V.11.3.1) ──────────────────────────────────────
+    // ── API USAGE LOGIC (V.11.3.3) ──────────────────────────────────────
     window.abrirModalApiUsage = () => {
       cerrarModalLogsAdmin();
       document.getElementById('overlay-api-usage').classList.add('open');
@@ -8589,7 +8588,7 @@ ${dataContext}
       const statusEl = document.getElementById('api-sync-status');
       if (statusEl) statusEl.textContent = '⏳ Sincronizando con Google...';
 
-      // 1. INTENTAR DATOS REALES DESDE GOOGLE CLOUD (V.11.3.1)
+      // 1. INTENTAR DATOS REALES DESDE GOOGLE CLOUD (V.11.3.3)
       try {
         const getReal = httpsCallable(functions, 'getRealApiUsage');
         const res = await getReal();
@@ -9323,7 +9322,7 @@ ${dataContext}
       width: 100%;
     }
 
-    /* Modales Preventivos pegados a la izquierda (V.11.3.1) */
+    /* Modales Preventivos pegados a la izquierda (V.11.3.3) */
     #overlay-preventivo-main,
     #overlay-preventivo-dia,
     #overlay-preventivo-intervencion {
@@ -9528,7 +9527,7 @@ ${dataContext}
       font-weight: 500;
     }
 
-    /* ═══════ CHAT UI — WhatsApp-Style (V.11.3.1) ═══════ */
+    /* ═══════ CHAT UI — WhatsApp-Style (V.11.3.3) ═══════ */
     #section-chat {
       display: none;
       height: calc(100vh - 120px);
@@ -11954,7 +11953,7 @@ ${dataContext}
         min-height: 0 !important;
       }
 
-      /* ═══════ Chat Section — Stacked Mobile Layout (V.11.3.1) ═══════ */
+      /* ═══════ Chat Section — Stacked Mobile Layout (V.11.3.3) ═══════ */
       #section-chat {
         flex-direction: column !important;
         height: calc(100vh - 60px) !important;
@@ -12400,7 +12399,7 @@ ${dataContext}
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     }
 
-    /* LEYENDA FERROCARRIL (V.11.3.1) */
+    /* LEYENDA FERROCARRIL (V.11.3.3) */
     .railway-legend {
       position: absolute;
       bottom: 80px;
@@ -12429,7 +12428,7 @@ ${dataContext}
       border-radius: 2px;
     }
 
-    /* ═══════ LOGS ADMIN (V.11.3.1) ═══════ */
+    /* ═══════ LOGS ADMIN (V.11.3.3) ═══════ */
     .logs-choice-container {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -12523,7 +12522,7 @@ ${dataContext}
       gap: 6px;
     }
 
-    /* ═══════ API USAGE UI (V.11.3.1) ═══════ */
+    /* ═══════ API USAGE UI (V.11.3.3) ═══════ */
     .usage-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -12910,7 +12909,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.11.3.1
+          Versión V.11.3.3
         </div>
       </div>
 
@@ -13286,7 +13285,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.11.3.1
+          Versión V.11.3.3
         </div>
       </div>
 
@@ -13919,7 +13918,7 @@ ${dataContext}
           </select>
         </div>
 
-        <!-- Ubicación en Mapa (Pin eliminado por petición del usuario V.11.3.1) -->
+        <!-- Ubicación en Mapa (Pin eliminado por petición del usuario V.11.3.3) -->
         <div id="prev-int-coords" style="display:none;"></div>
 
         <div class="field" style="margin-top: 12px; border-top: 1px dashed var(--border-mid); padding-top: 12px;">
@@ -13938,8 +13937,8 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL COMENTARIOS INTERVENCION (V.11.3.1) -->
-  <!-- MODAL GESTION INTERVENCION (V.11.3.1) -->
+  <!-- MODAL COMENTARIOS INTERVENCION (V.11.3.3) -->
+  <!-- MODAL GESTION INTERVENCION (V.11.3.3) -->
   <div class="overlay" id="overlay-prev-gestion-int" style="display:none;"
     onclick="if(event.target===this) cerrarModalGestionInt()">
     <div class="modal" style="width:380px;">
@@ -13981,7 +13980,7 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL EDITAR COMENTARIO (V.11.3.1) -->
+  <!-- MODAL EDITAR COMENTARIO (V.11.3.3) -->
   <div class="overlay" id="overlay-edit-comentario" style="display:none;"
     onclick="if(event.target===this) window.cerrarModalEditComentario()">
     <div class="modal" style="width:380px;">
@@ -14136,7 +14135,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.11.3.1
+            Versión V.11.3.3
           </div>
         </div>
         <div class="field" id="j-prov-row">
@@ -14294,7 +14293,7 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL ERROR CUOTA IA (V.11.3.1) -->
+  <!-- MODAL ERROR CUOTA IA (V.11.3.3) -->
   <div class="overlay" id="overlay-ai-quota-error" style="z-index:10002;">
     <div class="modal"
       style="width:400px; text-align:center; padding:30px; border-radius:15px; background:white; position:relative; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
@@ -14441,7 +14440,7 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL SELECCIÓN LOGS ADMIN (V.11.3.1) -->
+  <!-- MODAL SELECCIÓN LOGS ADMIN (V.11.3.3) -->
   <div class="overlay" id="overlay-logs-admin">
     <div class="modal" style="width:450px;">
       <div class="modal-head">
@@ -14465,7 +14464,7 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL LISTADO LOGS OYSTA (V.11.3.1) -->
+  <!-- MODAL LISTADO LOGS OYSTA (V.11.3.3) -->
   <div class="overlay" id="overlay-oysta-logs">
     <div class="modal" style="width:700px; max-width:95vw;">
       <div class="modal-head">
