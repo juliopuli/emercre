@@ -141,10 +141,12 @@
     let editingDayId = null; // V.11.3.1: ID del día que se está editando
     let editingPreventivoId = null; // V.11.3.1: ID del preventivo que se está editando
     let unsubGlobalPreventivoIntervenciones = null; // V.11.3.1: Restaurado
+    let unsubGlobalSubpreventivos = null; // V.11.3.3: Para seguimiento de recursos asignados a días
     let mapPreventivos = null;
     let oystaMarkersPrev = {};
     let markersPreventivos = {};
     let lastGlobalInterventionDocs = []; // V.11.3.1: Cache de snapshot global para re-sincronía
+    let lastGlobalSubpreventivoDocs = []; // V.11.3.3
     let prevMarkerInt = null; // Marcador temporal para nueva intervención en preventivos
     let lastIntervencionesSnap = null; // V.11.3.1: Cache de snapshot para re-render reactivo
     let lastPreventivosSnap = null; // V.11.3.1
@@ -896,7 +898,7 @@
       });
     }
 
-    console.log("EmerCRE V.11.3.2 Loaded");
+    console.log("EmerCRE V.11.3.3 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -5804,7 +5806,7 @@ ${dataContext}
           oystaMarkersPrev[mid].content = window.createOystaMarkerContent(v, localVeh, statusClass);
         }
         const movingFilter = showMovingOysta && v.status.toLowerCase() !== 'parado';
-        const isLocalAssigned = !!(typeof vehiclesToRender !== 'undefined' && vehiclesToRender?.has(mid));
+        const isLocalAssigned = !!(typeof _assignedVehiclesInOpenPreventivos !== 'undefined' && _assignedVehiclesInOpenPreventivos.has(mid));
         oystaMarkersPrev[mid].setMap(((isVisible && currentUserDoc?.canSeeVehicles) || movingFilter || isLocalAssigned) ? mapPreventivos : null);
       } else if (isVisible || (showMovingOysta && v.status.toLowerCase() !== 'parado')) {
         let content;
@@ -6679,7 +6681,18 @@ ${dataContext}
         console.log("[Preventivos] Intervenciones abiertas recibidas:", snap.docs.length);
         window.refreshGlobalPreventivoMarkers();
       }, err => {
-        console.error("[Preventivos] Error en suscripción global:", err);
+        console.error("[Preventivos] Error en suscripción global intervenciones:", err);
+      });
+
+      // V.11.3.3: Suscribir a subpreventivos abiertos para seguimiento de recursos asignados al día completo
+      if (unsubGlobalSubpreventivos) unsubGlobalSubpreventivos();
+      const qSub = query(collectionGroup(db, 'subpreventivos'), where('abierta', '==', true));
+      unsubGlobalSubpreventivos = onSnapshot(qSub, snap => {
+        lastGlobalSubpreventivoDocs = snap.docs;
+        console.log("[Preventivos] Subpreventivos abiertos recibidos:", snap.docs.length);
+        window.refreshGlobalPreventivoMarkers();
+      }, err => {
+        console.error("[Preventivos] Error en suscripción global subpreventivos:", err);
       });
     };
 
@@ -6687,12 +6700,26 @@ ${dataContext}
       if (!mapPreventivos || !lastGlobalInterventionDocs) return;
 
       // Solo docs de preventivos (path: preventivos/X/subpreventivos/Y/intervenciones/Z)
-      // y solo las que están abiertas (filtro cliente)
-      const prevDocs = lastGlobalInterventionDocs.filter(doc =>
+      const intDocs = lastGlobalInterventionDocs.filter(doc =>
         doc.ref.path.startsWith('preventivos/') && doc.data().abierta === true
       );
 
-      const filteredDocs = prevDocs.filter(doc => {
+      // V.11.3.3: Recopilar todos los recursos asignados en intervenciones Y subpreventivos abiertos
+      const assignedResourceIds = new Set();
+
+      // De intervenciones
+      intDocs.forEach(doc => {
+        (doc.data().recursosAsignados || []).forEach(rid => assignedResourceIds.add(rid));
+      });
+
+      // De subpreventivos (días)
+      lastGlobalSubpreventivoDocs.forEach(doc => {
+        (doc.data().recursos || []).forEach(rid => assignedResourceIds.add(rid));
+      });
+
+      window._assignedVehiclesInOpenPreventivos = assignedResourceIds;
+
+      const filteredDocs = intDocs.filter(doc => {
         // Si vista Autonómica, mostramos todo
         if (selectedProvincia === 'Andalucía') return true;
 
@@ -6720,8 +6747,15 @@ ${dataContext}
         }
       });
 
-      // V.11.3.1: Mostrar vehículos Oysta asignados a intervenciones abiertas en este mapa
-      renderPreventivoAssignedVehicles(filteredDocs);
+      // V.11.3.3: Mostrar vehículos Oysta vinculados a CUALQUIER preventivo abierto
+      renderPreventivoAssignedVehicles(filteredDocs, assignedResourceIds);
+
+      // V.11.3.3: Forzar refresco de visibilidad de todos los marcadores Oysta en este mapa
+      if (oystaVehiclesCache && oystaVehiclesCache.length) {
+        oystaVehiclesCache.forEach(v => {
+          if (typeof syncOystaMarkerPrev === 'function') syncOystaMarkerPrev(v);
+        });
+      }
 
       // V.11.3.1: Auto-zoom al entrar a Preventivos o abrir/cambiar
       if (window._preventivosNeedsZoom && mapPreventivos) {
@@ -6755,7 +6789,7 @@ ${dataContext}
 
 
     // V.11.3.1: Renderiar en el mapa los vehículos Oysta, e incluir RUTA DINÁMICA hacia su intervención asignada
-    function renderPreventivoAssignedVehicles(interventionDocs) {
+    function renderPreventivoAssignedVehicles(interventionDocs, allAssignedIds) {
       if (!mapPreventivos) return;
 
       // Limpiar marcadores de vehículos de intervenciones previos (se regeneran pero sin salto visual por el HTML)
