@@ -181,7 +181,7 @@
     }
 
     function isVehicleVisible(id) {
-      return visibleVehicles[id] !== false;
+      return !!visibleVehicles[id];
     }
 
     // V.11.3.1: Ayudantes de permisos
@@ -509,7 +509,7 @@
 
     // V.11.3.1: Lógica independiente para mostrar/ocultar coches en Preventivos
     function isVehicleVisiblePrev(id) {
-      return visibleVehiclesPrev[id] !== false;
+      return !!visibleVehiclesPrev[id];
     }
 
     // Helper para cálculo de distancia (Haversine) - V.11.3.1
@@ -896,7 +896,7 @@
       });
     }
 
-    console.log("EmerCRE V.11.3.1 Loaded");
+    console.log("EmerCRE V.11.3.2 Loaded");
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2381,14 +2381,16 @@
           if (oystaMarkers[mid]) {
             oystaMarkers[mid].position = pos;
             oystaMarkers[mid].content = content;
-            oystaMarkers[mid].setMap((isVisible && (currentUserDoc?.canSeeVehicles || assignedOp)) ? gmap : null);
+            const movingFilter = showMovingOysta && v.status.toLowerCase() !== 'parado';
+            oystaMarkers[mid].setMap(((isVisible && currentUserDoc?.canSeeVehicles) || movingFilter || assignedOp) ? gmap : null);
             // Actualizar datos para el InfoWindow
             oystaMarkers[mid].vehicleData = v;
             oystaMarkers[mid].localVehicleData = localVeh;
           } else {
+            const movingFilter = showMovingOysta && v.status.toLowerCase() !== 'parado';
             const marker = new google.maps.marker.AdvancedMarkerElement({
               position: pos,
-              map: (isVisible && (currentUserDoc?.canSeeVehicles || assignedOp)) ? gmap : null,
+              map: ((isVisible && currentUserDoc?.canSeeVehicles) || movingFilter || assignedOp) ? gmap : null,
               content: content,
               title: v.name,
               gmpClickable: true
@@ -2884,7 +2886,10 @@
 
       // Refrescar visibilidad de todos los marcadores en caché
       if (oystaVehiclesCache && oystaVehiclesCache.length) {
-        oystaVehiclesCache.forEach(v => syncOystaMarkerGlobal(v));
+        oystaVehiclesCache.forEach(v => {
+          syncOystaMarkerGlobal(v);
+          if (typeof syncOystaMarkerPrev === 'function') syncOystaMarkerPrev(v);
+        });
       }
     };
 
@@ -5799,8 +5804,8 @@ ${dataContext}
           oystaMarkersPrev[mid].content = window.createOystaMarkerContent(v, localVeh, statusClass);
         }
         const movingFilter = showMovingOysta && v.status.toLowerCase() !== 'parado';
-        const isLocalAssigned = !!vehiclesToRender?.has(mid); // V.11.3.1: Check if assigned locally in Preventivos
-        oystaMarkersPrev[mid].setMap(((isVisible || movingFilter) && (currentUserDoc?.canSeeVehicles || isLocalAssigned)) ? mapPreventivos : null);
+        const isLocalAssigned = !!(typeof vehiclesToRender !== 'undefined' && vehiclesToRender?.has(mid));
+        oystaMarkersPrev[mid].setMap(((isVisible && currentUserDoc?.canSeeVehicles) || movingFilter || isLocalAssigned) ? mapPreventivos : null);
       } else if (isVisible || (showMovingOysta && v.status.toLowerCase() !== 'parado')) {
         let content;
         if (typeof window.createOystaMarkerContent === 'function') {
@@ -5815,7 +5820,7 @@ ${dataContext}
         const movingFilter = showMovingOysta && v.status.toLowerCase() !== 'parado';
         const marker = new google.maps.marker.AdvancedMarkerElement({
           position: pos,
-          map: ((isVisible || movingFilter) && (currentUserDoc?.canSeeVehicles || isLocalAssigned)) ? mapPreventivos : null,
+          map: ((isVisible && currentUserDoc?.canSeeVehicles) || movingFilter || isLocalAssigned) ? mapPreventivos : null,
           content: content,
           title: v.name,
           zIndex: 1000, // V.11.3.1: Asegurar visibilidad
