@@ -222,7 +222,15 @@
     // Helper: Cálculo de Rutas con Caché (V.11.5.0)
     function calculateRouteWithCache(origin, destination, travelMode, callback) {
       const mode = travelMode || google.maps.TravelMode.DRIVING;
-      const key = `${origin}|${destination}|${mode}`;
+      const getPKey = (p) => {
+        if (!p) return 'null';
+        if (typeof p === 'string') return p;
+        const lat = typeof p.lat === 'function' ? p.lat() : p.lat;
+        const lng = typeof p.lng === 'function' ? p.lng() : p.lng;
+        return `${lat.toFixed(6)},${lng.toFixed(6)}`;
+      };
+      const key = `${getPKey(origin)}|${getPKey(destination)}|${mode}`;
+
       if (routeCache[key]) {
         console.log(`[API Optimize] Route Cache Hit: ${key}`);
         callback(routeCache[key], 'OK');
@@ -1015,7 +1023,7 @@
       });
     }
 
-    console.log("EmerCRE V.11.5.0 Loaded");
+    console.log('EmerCRE V.11.5.1 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2479,7 +2487,8 @@
 
         console.log(`Cargando ${data.vehicles.length} vehículos de Oysta...`);
 
-        // Limpiar marcadores de vehículos que ya no están en la lista (o error)
+        // V.11.5.1: Tracking de rutas activas en Emergencias para limpiar las obsoletas
+        if (!window._prevIntRoutes) window._prevIntRoutes = {};
         const vehicleIds = data.vehicles.map(v => String(v.id));
         Object.keys(oystaMarkers).forEach(id => {
           if (!vehicleIds.includes(String(id))) {
@@ -2668,6 +2677,28 @@
                       window._oystaLogCache.add(arrKey);
                     });
                 }
+              }
+            }
+          }
+        });
+
+        // V.11.5.1: Limpiar rutas de Emergencias que ya no son necesarias (vehículo desasignado u op cerrada)
+        Object.keys(window._prevIntRoutes).forEach(k => {
+          if (k.includes('_')) {
+            const parts = k.split('_');
+            if (parts.length === 2) {
+              const opId = parts[0];
+              const mid = parts[1];
+              const assignedOp = ops[opId];
+              const localVeh = localVehiclesByOystaId[mid];
+              const stillAssigned = assignedOp && assignedOp.estado === 'activa' &&
+                localVeh && assignedOp.recursosAsignadosIds?.includes(localVeh.id);
+
+              if (!stillAssigned) {
+                const r = window._prevIntRoutes[k];
+                if (r.setMap) r.setMap(null);
+                if (r.renderer) r.renderer.setMap(null);
+                delete window._prevIntRoutes[k];
               }
             }
           }
