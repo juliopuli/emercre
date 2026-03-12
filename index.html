@@ -5802,6 +5802,10 @@ ${dataContext}
       const localVeh = typeof localVehiclesByOystaId !== 'undefined' ? localVehiclesByOystaId[mid] : null;
       const isLocalAssigned = !!(localVeh && typeof _assignedVehiclesInOpenPreventivos !== 'undefined' && _assignedVehiclesInOpenPreventivos.has(localVeh.id));
 
+      if (isLocalAssigned) {
+        console.log(`[Oysta-Prev] Vehículo asignado detectado: ${v.name} (LocalID: ${localVeh.id})`);
+      }
+
       if (oystaMarkersPrev[mid]) {
         oystaMarkersPrev[mid].position = pos;
         if (typeof window.createOystaMarkerContent === 'function') {
@@ -6673,22 +6677,19 @@ ${dataContext}
       // El filtro de abierta===true se hace en el cliente dentro de refreshGlobalPreventivoMarkers.
       // V.11.3.3: CRÍTICO - Filtrar en servidor solo intervenciones ABIERTAS.
       // Esto ahorra miles de lecturas al no descargar el histórico cerrado.
-      const q = query(collectionGroup(db, 'intervenciones'), where('abierta', '==', true));
-
-      unsubGlobalPreventivoIntervenciones = onSnapshot(q, snap => {
-        lastGlobalInterventionDocs = snap.docs;
-        console.log("[Preventivos] Intervenciones abiertas recibidas:", snap.docs.length);
+      unsubGlobalPreventivoIntervenciones = onSnapshot(query(collectionGroup(db, 'intervenciones')), snap => {
+        lastGlobalInterventionDocs = snap.docs.filter(d => d.data().abierta === true);
+        console.log("[Preventivos] Intervenciones abiertas (filtro cliente):", lastGlobalInterventionDocs.length);
         window.refreshGlobalPreventivoMarkers();
       }, err => {
         console.error("[Preventivos] Error en suscripción global intervenciones:", err);
       });
 
-      // V.11.3.3: Suscribir a subpreventivos abiertos para seguimiento de recursos asignados al día completo
+      // V.11.3.3: Suscribir a subpreventivos sin 'where' para evitar error de índice si no existe
       if (unsubGlobalSubpreventivos) unsubGlobalSubpreventivos();
-      const qSub = query(collectionGroup(db, 'subpreventivos'), where('abierta', '==', true));
-      unsubGlobalSubpreventivos = onSnapshot(qSub, snap => {
-        lastGlobalSubpreventivoDocs = snap.docs;
-        console.log("[Preventivos] Subpreventivos abiertos recibidos:", snap.docs.length);
+      unsubGlobalSubpreventivos = onSnapshot(query(collectionGroup(db, 'subpreventivos')), snap => {
+        lastGlobalSubpreventivoDocs = snap.docs.filter(d => d.data().abierta === true);
+        console.log("[Preventivos] Subpreventivos abiertos (filtro cliente):", lastGlobalSubpreventivoDocs.length);
         window.refreshGlobalPreventivoMarkers();
       }, err => {
         console.error("[Preventivos] Error en suscripción global subpreventivos:", err);
@@ -6712,17 +6713,22 @@ ${dataContext}
       });
 
       // De preventivos (madre) - a veces se asignan aquí para 1 día
-      lastPreventivosSnap?.forEach(doc => {
-        if (doc.data().abierta === true) {
+      if (lastPreventivosSnap) {
+        lastPreventivosSnap.forEach(doc => {
+          if (doc.data().abierta === true) {
+            (doc.data().recursos || []).forEach(rid => assignedResourceIds.add(rid));
+          }
+        });
+      }
+
+      // De subpreventivos (días)
+      lastGlobalSubpreventivoDocs.forEach(doc => {
+        if (doc.ref.path.includes('preventivos/')) {
           (doc.data().recursos || []).forEach(rid => assignedResourceIds.add(rid));
         }
       });
 
-      // De subpreventivos (días)
-      lastGlobalSubpreventivoDocs.forEach(doc => {
-        (doc.data().recursos || []).forEach(rid => assignedResourceIds.add(rid));
-      });
-
+      console.log("[Preventivos] Total recursos detectados como asignados:", Array.from(assignedResourceIds));
       window._assignedVehiclesInOpenPreventivos = assignedResourceIds;
 
       const filteredDocs = intDocs.filter(doc => {
