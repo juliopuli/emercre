@@ -93,6 +93,16 @@
     let mapEmergencias = null;
     let mapPreventivos = null;
     let googleMapsReady = false;
+    let mapReady = false;
+    let gmMarkers = {};
+    let oystaMarkers = {};
+    let oystaInfoWindow = null;
+    let visibleVehicles = {}; // id_vehiculo -> boolean
+    let visibleVehiclesPrev = {}; // V.11.5.0: id_vehiculo -> boolean
+    let showMovingOysta = false; // V.11.5.0: Toggle para ver vehículos en movimiento
+    let oystaVehiclesCache = []; // Última lista de vehículos recibida
+    let localVehiclesByOystaId = {}; // V.11.5.0: Mapeo OystaID -> Datos Vehículo Local
+    let localVehiclesById = {};       // V.11.5.0: Mapeo FirestoreID -> Datos Vehículo Local
     window.OYSTA_LOG_OFFSET_MS = 120000; // V.11.5.0: Decalaje estándar (2 min)
     window._ambulanceRanks = {}; // V.11.5.0: Cache para ranking por cercanía
     let autocomplete = null;
@@ -625,7 +635,7 @@
     };
 
     // V.11.5.0: Helper Haversine (JS Puro) - Robusto para LatLng y Objetos Numéricos
-    function haversineDistance(pos1, pos2) {
+    function calculateHaversineDist(pos1, pos2) {
       if (!pos1 || !pos2) return 0;
       const getVal = (p, key) => (typeof p[key] === 'function' ? p[key]() : p[key]);
       const lat1 = getVal(pos1, 'lat');
@@ -2614,7 +2624,7 @@
                               processDep(durSec * 1000);
                             }
 
-                            const distToScene = haversineDistance(pos, opCoords); // Using pos (vehicle current) and opCoords (operation)
+                            const distToScene = calculateHaversineDist(pos, opCoords); // Using pos (vehicle current) and opCoords (operation)
                             if (distToScene < 0.1 && !window._oystaLogCache.has(`${opId}_${mid}_llegada`)) {
                               const arrivalTime = Date.now() - window.OYSTA_LOG_OFFSET_MS;
                               // Assuming registrarLogOysta is a helper function that needs to be defined or adapted
@@ -2634,7 +2644,7 @@
 
               // 2. Llegada (Dist < 0.1km)
               if (opCoords) {
-                const dist = haversineDistance(pos, opCoords);
+                const dist = calculateHaversineDist(pos, opCoords);
                 const arrKey = `arr_${opId}_${mid}`;
                 if (dist < 0.1 && !window._oystaLogCache.has(arrKey)) {
                   getDocs(query(collection(db, 'operaciones', opId, 'acciones'), where('texto', '>=', `✅ ${indicativo} llega al lugar`)))
@@ -7076,7 +7086,7 @@ ${dataContext}
           }
 
           // 2. Llegada: En un radio de 100m (0.1km)
-          dist = haversineDistance(pos, iData.coords);
+          dist = calculateHaversineDist(pos, iData.coords);
           const arrKey = `arr_prev_${renderData.interventionId}_${vehicleId}`;
           hasArrivedRemote = comments.some(c => {
             const t = c.texto || '';
@@ -7101,7 +7111,7 @@ ${dataContext}
 
           // 3. Hospital Carlos Haya (V.11.5.0)
           const chCoords = { lat: 36.723012376884185, lng: -4.450232328090476 };
-          const distCH = haversineDistance(pos, chCoords);
+          const distCH = calculateHaversineDist(pos, chCoords);
           if (renderData.isUrgente) {
             const hospComms = comments.filter(c => c.texto && c.texto.includes("Hospital Regional Carlos Haya") && c.texto.includes(indicativo));
             const lastHosp = hospComms[hospComms.length - 1];
@@ -7495,7 +7505,7 @@ ${dataContext}
 
       function fallbackRanking() {
         const results = targetResources.map(a => {
-          const distKm = haversineDistance(a.pos, destCoords);
+          const distKm = calculateHaversineDist(a.pos, destCoords);
           const min = Math.round(distKm * 1.2); // ~50km/h
           return {
             oystaId: a.oystaId,
@@ -8891,7 +8901,7 @@ ${dataContext}
       if (val) val.textContent = labelText || current.toLocaleString();
       if (metaText) {
         const est = document.getElementById(`est-${id}-units`);
-        if (est) est.textContent = metaText;
+        if (est) est.textConte = metaText;
       }
     }
 
@@ -12850,7 +12860,7 @@ ${dataContext}
           <input class="login-input" id="l-pass" type="password" placeholder="••••••••" autocomplete="current-password">
         </div>
         <div class="login-err" id="err-login"></div>
-        <button class="btn-login" id="btn-login" onclick="doLogin()">Login</button>
+        <button class="btn-login" id="btn-login" onclick="window.doLogin()">Login</button>
         <div style="text-align: center; margin-top: 15px;">
           <a href="#" onclick="abrirModalForgot()"
             style="font-size: 12px; color: var(--accent); text-decoration: none; font-weight: 500;">¿Has olvidado tu
@@ -14790,9 +14800,9 @@ ${dataContext}
         const weekday = now.toLocaleDateString('es-ES', { weekday: 'long' });
         const capitalizedWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
         const day = String(now.getDate()).padStart(2, '0');
-        const month = String(now.gMon1).padStart(2, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0');
         const year = now.getFullYear();
-        elDate.textContent = `${capitalizedWeekday}, ${day}/${month}/${year}`;
+        elDate.textContent = `${capitalizedWeekday}, ${day}/${nthr}`;
       }
     }, 1000);
   </script>
