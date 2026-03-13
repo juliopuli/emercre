@@ -25,21 +25,38 @@ exports.getOystaVehicles = functions.https.onCall(async (data, context) => {
     //     );
     // }
 
-    const bridgeUrl = process.env.OYSTA_BRIDGE_URL;
+    let bridgeUrl = process.env.OYSTA_BRIDGE_URL;
+
+    // V.11.5.2: Opción de conmutar entre dos cuentas de Bridge (Oysta GAS)
+    // Buscamos la configuración en Firestore para ver qué cuenta usar
+    try {
+        const configSnap = await admin.firestore().collection("config").doc("oysta").get();
+        if (configSnap.exists) {
+            const config = configSnap.data();
+            if (config.activeAccount === "account2" && config.url2) {
+                bridgeUrl = config.url2;
+                console.log("[Oysta] Using Account 2 bridge URL");
+            } else if (config.activeAccount === "account1" && config.url1) {
+                bridgeUrl = config.url1;
+                console.log("[Oysta] Using Account 1 bridge URL");
+            }
+        }
+    } catch (err) {
+        console.warn("[Oysta] Error reading Firestore config, falling back to ENV:", err.message);
+    }
+
     if (!bridgeUrl) {
-        throw new functions.https.HttpsError("internal", "Oysta bridge URL no configurada en el servidor.");
+        throw new functions.https.HttpsError("internal", "Oysta bridge URL no configurada.");
     }
 
     const userEmail = context.auth.token.email || context.auth.uid;
 
     try {
-        // Pasamos el email del usuario que solicita para trazabilidad si el puente hace login
         const urlWithUser = `${bridgeUrl}${bridgeUrl.includes('?') ? '&' : '?'}u=${encodeURIComponent(userEmail)}`;
         const resp = await fetch(urlWithUser);
         if (!resp.ok) throw new Error("Oysta GAS responded with status " + resp.status);
         const result = await resp.json();
 
-        // Si el puente indica que ha realizado un login real (inserción de credenciales)
         if (result.loginPerformed) {
             await admin.firestore().collection("oysta_logs").add({
                 fecha: admin.firestore.FieldValue.serverTimestamp(),
