@@ -4,7 +4,7 @@ functions/node_modules/
 functions/.env
 *.log
 .firebase/
-firestore.rules
+# firestore.rules (ahora se sigue)
 RULES.md
 functions/usage-key.json
 functions/emercre-key.json
@@ -18,6 +18,6 @@ functions/test_*.js
 query_fs.js
 query_all_fs.js
 RULES.md
-firestore.rules
+# firestore.rules (removido)
 
 
