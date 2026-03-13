@@ -66,9 +66,9 @@
     }
     initMessaging();
 
-    // ── FIREBASE APP CHECK (V.11.5.5) ──────────────────────────────────-
+    // ── FIREBASE APP CHECK (V.12.0.0) ──────────────────────────────────-
     try {
-      // self.FIREBASE_APPCHECK_DEBUG_TOKEN = true; // Desactivado para producción (V.11.5.5)
+      // self.FIREBASE_APPCHECK_DEBUG_TOKEN = true; // Desactivado para producción (V.12.0.0)
       initializeAppCheck(fbApp, {
         provider: new ReCaptchaV3Provider('6LemNXUsAAAAACVSGSPQ2ow0qbaV0a7QvZo5tV0h'),
         isTokenAutoRefreshEnabled: true
@@ -98,13 +98,13 @@
     let oystaMarkers = {};
     let oystaInfoWindow = null;
     let visibleVehicles = {}; // id_vehiculo -> boolean
-    let visibleVehiclesPrev = {}; // V.11.5.5: id_vehiculo -> boolean
-    let showMovingOysta = false; // V.11.5.5: Toggle para ver vehículos en movimiento
+    let visibleVehiclesPrev = {}; // V.12.0.0: id_vehiculo -> boolean
+    let showMovingOysta = false; // V.12.0.0: Toggle para ver vehículos en movimiento
     let oystaVehiclesCache = []; // Última lista de vehículos recibida
-    let localVehiclesByOystaId = {}; // V.11.5.5: Mapeo OystaID -> Datos Vehículo Local
-    let localVehiclesById = {};       // V.11.5.5: Mapeo FirestoreID -> Datos Vehículo Local
-    window.OYSTA_LOG_OFFSET_MS = 120000; // V.11.5.5: Decalaje estándar (2 min)
-    window._ambulanceRanks = {}; // V.11.5.5: Cache para ranking por cercanía
+    let localVehiclesByOystaId = {}; // V.12.0.0: Mapeo OystaID -> Datos Vehículo Local
+    let localVehiclesById = {};       // V.12.0.0: Mapeo FirestoreID -> Datos Vehículo Local
+    window.OYSTA_LOG_OFFSET_MS = 120000; // V.12.0.0: Decalaje estándar (2 min)
+    window._ambulanceRanks = {}; // V.12.0.0: Cache para ranking por cercanía
     let autocomplete = null;
     let autocompleteEdit = null;
     let autocompletePrevInt = null;
@@ -119,13 +119,13 @@
     let allJefesGuardiaCacheMap = {}; // "Provincia" -> "Nombre del Jefe"
     let trafficLayer = null;
     let railwayLayer = null; // Obs: Mantenido por compatibilidad legacy si hace falta, pero ahora usamos railLayers
-    let railLayers = { infra: null, pk: null, tram: null, pasos: null, renfe: null, renfeAVE: null }; // V.11.5.5
-    let renfeVehiclesCache = []; // V.11.5.5
-    let renfeMarkers = {}; // V.11.5.5
-    let renfeRefreshInterval = null; // V.11.5.5
-    let renfeAVEVehiclesCache = []; // V.11.5.5
-    let renfeAVEMarkers = {}; // V.11.5.5
-    let renfeAVERefreshInterval = null; // V.11.5.5
+    let railLayers = { infra: null, pk: null, tram: null, pasos: null, renfe: null, renfeAVE: null }; // V.12.0.0
+    let renfeVehiclesCache = []; // V.12.0.0
+    let renfeMarkers = {}; // V.12.0.0
+    let renfeRefreshInterval = null; // V.12.0.0
+    let renfeAVEVehiclesCache = []; // V.12.0.0
+    let renfeAVEMarkers = {}; // V.12.0.0
+    let renfeAVERefreshInterval = null; // V.12.0.0
     let directionsService = null;
     let directionsRenderer = null;
     let autocompleteOrigin = null;
@@ -140,32 +140,32 @@
     let intervencionesCache = {};
     let currentPreventivoId = null;
     let currentPreventivoDiaId = null;
-    let activeIntManageId = null; // V.11.5.5: Seguimiento de panel de gestión abierto
-    let editingDayId = null; // V.11.5.5: ID del día que se está editando
-    let editingPreventivoId = null; // V.11.5.5: ID del preventivo que se está editando
-    let unsubGlobalPreventivoIntervenciones = null; // V.11.5.5: Restaurado
-    let unsubGlobalSubpreventivos = null; // V.11.5.5: Para seguimiento de recursos asignados a días
+    let activeIntManageId = null; // V.12.0.0: Seguimiento de panel de gestión abierto
+    let editingDayId = null; // V.12.0.0: ID del día que se está editando
+    let editingPreventivoId = null; // V.12.0.0: ID del preventivo que se está editando
+    let unsubGlobalPreventivoIntervenciones = null; // V.12.0.0: Restaurado
+    let unsubGlobalSubpreventivos = null; // V.12.0.0: Para seguimiento de recursos asignados a días
     let oystaMarkersPrev = {};
     let markersPreventivos = {};
-    let lastGlobalInterventionDocs = []; // V.11.5.5: Cache de snapshot global para re-sincronía
-    let lastGlobalSubpreventivoDocs = []; // V.11.5.5
+    let lastGlobalInterventionDocs = []; // V.12.0.0: Cache de snapshot global para re-sincronía
+    let lastGlobalSubpreventivoDocs = []; // V.12.0.0
     let prevMarkerInt = null; // Marcador temporal para nueva intervención en preventivos
-    let lastIntervencionesSnap = null; // V.11.5.5: Cache de snapshot para re-render reactivo
-    let lastPreventivosSnap = null; // V.11.5.5
-    let lastSubpreventivosSnap = null; // V.11.5.5
+    let lastIntervencionesSnap = null; // V.12.0.0: Cache de snapshot para re-render reactivo
+    let lastPreventivosSnap = null; // V.12.0.0
+    let lastSubpreventivosSnap = null; // V.12.0.0
     let currentChatId = null; // userId
     let unreadMessages = {}; // id -> count
     let jefeGuardiaActual = null;
     let ops = {};
     let editingUserId = null;
 
-    // ── SISTEMA DE CACHÉ Y OPTIMIZACIÓN DE API (V.11.5.5) ──────────────
+    // ── SISTEMA DE CACHÉ Y OPTIMIZACIÓN DE API (V.12.0.0) ──────────────
     const geocodeCache = {};
     const reverseGeocodeCache = {};
     const routeCache = {};
     let reverseGeocodeThrottle = false;
 
-    // Helper: Debounce (V.11.5.5)
+    // Helper: Debounce (V.12.0.0)
     function debounce(func, wait) {
       let timeout;
       return function (...args) {
@@ -174,7 +174,7 @@
       };
     }
 
-    // Helper: Geocode con Caché (V.11.5.5)
+    // Helper: Geocode con Caché (V.12.0.0)
     function geocodeWithCache(address, callback) {
       const key = address.trim().toLowerCase();
       if (geocodeCache[key]) {
@@ -200,7 +200,7 @@
       });
     }
 
-    // Helper: Reverse Geocode con Caché y Throttle (V.11.5.5)
+    // Helper: Reverse Geocode con Caché y Throttle (V.12.0.0)
     function reverseGeocodeWithCache(latlng, callback) {
       // Redondear para mejorar hits (aprox 11m)
       const key = latlng.lat.toFixed(4) + ',' + latlng.lng.toFixed(4);
@@ -219,7 +219,7 @@
       });
     }
 
-    // Helper: Cálculo de Rutas con Caché (V.11.5.5)
+    // Helper: Cálculo de Rutas con Caché (V.12.0.0)
     function calculateRouteWithCache(origin, destination, travelMode, callback) {
       const mode = travelMode || google.maps.TravelMode.DRIVING;
       const getPKey = (p) => {
@@ -249,11 +249,11 @@
       });
     }
 
-    // ── CONFIGURACIÓN PUENTE NOTIFICACIONES (V.11.5.5) ─────────────────
-    // OYSTA_BRIDGE_URL eliminada del frontend (V.11.5.5): ahora se usa Cloud Function autenticada.
+    // ── CONFIGURACIÓN PUENTE NOTIFICACIONES (V.12.0.0) ─────────────────
+    // OYSTA_BRIDGE_URL eliminada del frontend (V.12.0.0): ahora se usa Cloud Function autenticada.
 
 
-    // V.11.5.5: Ayudante para visibilidad de operaciones
+    // V.12.0.0: Ayudante para visibilidad de operaciones
     function isOpVisible(op) {
       if (!op) return false;
       const isOculta = op.oculta === true;
@@ -261,7 +261,7 @@
       return true;
     }
 
-    // V.11.5.5: Ayudantes de seguridad y permisos
+    // V.12.0.0: Ayudantes de seguridad y permisos
     function escapeHTML(str) {
       if (!str) return '';
       const map = {
@@ -278,7 +278,7 @@
       return !!visibleVehicles[id];
     }
 
-    // V.11.5.5: Ayudantes de permisos
+    // V.12.0.0: Ayudantes de permisos
     function canShowHidden() {
       return currentRole === 'admin' || currentRole === 'manager' || currentRole === 'super_admin';
     }
@@ -301,11 +301,11 @@
     function canEditIntervencion(i) {
       if (currentRole === 'manager' || currentRole === 'super_admin') return true;
       if (currentRole === 'admin') return i ? i.abierta !== false : true;
-      // V.11.5.5: Usuarios pueden gestionar si está abierta
+      // V.12.0.0: Usuarios pueden gestionar si está abierta
       if (currentRole === 'usuario') return i ? i.abierta !== false : false;
       return false;
     }
-    // V.11.5.5: Permisos específicos para comentarios
+    // V.12.0.0: Permisos específicos para comentarios
     function canCommentSubpreventivo(d) {
       if (currentRole === 'manager' || currentRole === 'super_admin' || currentRole === 'admin') return true;
       return d ? d.abierta !== false : true;
@@ -360,14 +360,14 @@
       usuario: 'Usuario'
     };
 
-    // ── GOOGLE MAPS READY CALLBACK (V.11.5.5) ──────────────────────────
+    // ── GOOGLE MAPS READY CALLBACK (V.12.0.0) ──────────────────────────
     window.onGoogleMapsReady = function () {
       console.log('✅ Google Maps API Loaded & Ready');
       googleMapsReady = true;
       // Note: No se inicializan mapas aquí para ahorrar quota (Lazy Load)
     };
 
-    // V.11.5.5: Refactor de inicialización de Emergencias (Lazy)
+    // V.12.0.0: Refactor de inicialización de Emergencias (Lazy)
     window.initMapEmergencias = function () {
       if (mapEmergencias !== null) return;
       if (!googleMapsReady) {
@@ -514,7 +514,7 @@
               map: mapPreventivos,
               title: place.name || "Intervención"
             });
-            // V.11.5.5: Calcular cercanía de ambulancias al cambiar a través de autocomplete
+            // V.12.0.0: Calcular cercanía de ambulancias al cambiar a través de autocomplete
             if (typeof window.calcularAmbulanciasCercanasPrev === 'function') {
               window.calcularAmbulanciasCercanasPrev(pickedCoordsPrev);
             }
@@ -546,7 +546,7 @@
       }
     };
 
-    // V.11.5.5: One definition for Oysta visibility toggle (Consolidated)
+    // V.12.0.0: One definition for Oysta visibility toggle (Consolidated)
     window.toggleAllOystaVehicles = (checked) => {
       console.log(`[Oysta] toggleAllOystaVehicles consolidated: ${checked}`);
       oystaVehiclesCache.forEach(v => {
@@ -584,11 +584,11 @@
 
     window.toggleVehicleVisibility = async (id, visible) => {
       visibleVehicles[id] = visible;
-      // V.11.5.5: Guardar preferencia persistente
+      // V.12.0.0: Guardar preferencia persistente
       if (currentUser) {
         localStorage.setItem(`emercre_vehs_${currentUser.uid}`, JSON.stringify(visibleVehicles));
       }
-      // V.11.5.5: Sincronizar checkbox en Preventivos
+      // V.12.0.0: Sincronizar checkbox en Preventivos
       const chkPrev = document.getElementById(`chk-prev-veh-${id}`);
       if (chkPrev) chkPrev.checked = visible;
 
@@ -600,10 +600,10 @@
         await cargarVehiculosOysta(true);
       }
 
-      if (mapEmergencias) renderMapa(true); // V.11.5.5 / V.11.5.5: Forzar recalcular zoom una vez cargados
+      if (mapEmergencias) renderMapa(true); // V.12.0.0 / V.12.0.0: Forzar recalcular zoom una vez cargados
     };
 
-    // V.11.5.5: Función global para sincronizar marcadores en todos los mapas activos
+    // V.12.0.0: Función global para sincronizar marcadores en todos los mapas activos
     function syncOystaMarkerGlobal(v) {
       const mid = String(v.id);
       const isVisible = isVehicleVisible(mid);
@@ -628,12 +628,12 @@
       }
     }
 
-    // V.11.5.5: Lógica independiente para mostrar/ocultar coches en Preventivos
+    // V.12.0.0: Lógica independiente para mostrar/ocultar coches en Preventivos
     function isVehicleVisiblePrev(id) {
       return !!visibleVehiclesPrev[id];
     }
 
-    // Helper para cálculo de distancia (Haversine) - V.11.5.5
+    // Helper para cálculo de distancia (Haversine) - V.12.0.0
     const getVehiclePriority = (type) => {
       if (type === 'Ambulancia') return 1;
       if (type?.includes('Terreno')) return 2;
@@ -642,7 +642,7 @@
       return 5;
     };
 
-    // V.11.5.5: Helper Haversine (JS Puro) - Robusto para LatLng y Objetos Numéricos
+    // V.12.0.0: Helper Haversine (JS Puro) - Robusto para LatLng y Objetos Numéricos
     function calculateHaversineDist(pos1, pos2) {
       if (!pos1 || !pos2) return 0;
       const getVal = (p, key) => (typeof p[key] === 'function' ? p[key]() : p[key]);
@@ -971,7 +971,7 @@
       const el = document.createElement('div');
       el.className = 'renfe-ave-marker';
 
-      // V.11.5.5: Mapeo de colores por tipo de servicio Renfe
+      // V.12.0.0: Mapeo de colores por tipo de servicio Renfe
       let color = '#90ee90'; // OTROS (Verdecito)
       const corridor = (t.desCorridor || "").toUpperCase();
       const product = parseInt(t.codProduct);
@@ -988,7 +988,7 @@
         color = '#1976d2'; // LD (Azul)
       }
 
-      // V.11.5.5: Borde más grueso (3.5px) para mejor visibilidad
+      // V.12.0.0: Borde más grueso (3.5px) para mejor visibilidad
       el.style.cssText = `background:#fff; border:3.5px solid ${color}; border-radius:4px; padding:2px 4px; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(0,0,0,0.3); font-family:"IBM Plex Mono", monospace; font-size:10px; font-weight:700; color:${color}; white-space:nowrap; cursor:pointer;`;
       el.innerHTML = `<span>🚅</span><span>${t.codComercial}</span>`;
       return el;
@@ -1023,7 +1023,7 @@
       });
     }
 
-    console.log('EmerCRE V.11.5.5 Loaded');
+    console.log('EmerCRE V.12.0.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1169,7 +1169,7 @@
         renderChatList();
       };
 
-      // Escuchar mensajes PRIVADOS (Limitado a los últ. 100 para ahorrar lecturas) (V.11.5.5)
+      // Escuchar mensajes PRIVADOS (Limitado a los últ. 100 para ahorrar lecturas) (V.12.0.0)
       const qPriv = query(
         collection(db, 'chat_mensajes'),
         or(where('destinatarioId', '==', currentUser.uid), where('remitenteId', '==', currentUser.uid)),
@@ -1214,7 +1214,7 @@
       const filteredUsers = allUsersCache.filter(u => {
         if (u.uid === currentUser.uid) return false;
 
-        // V.11.5.5: Si el usuario NO tiene acceso a emergencias, no aparece en el chat de nadie
+        // V.12.0.0: Si el usuario NO tiene acceso a emergencias, no aparece en el chat de nadie
         if (u.accesoEmergencias === false) return false;
 
         // NUEVA REGLA: Los Jefes de Operaciones activos siempre pueden verse entre sí
@@ -1320,7 +1320,7 @@
     let allUsersCache = [];
     async function cargarUsuariosParaChat() {
       if (unsubUserPresence) unsubUserPresence();
-      // V.11.5.5: Solo cargar usuarios que no sean anónimos y limitar a 100 para ahorrar lecturas
+      // V.12.0.0: Solo cargar usuarios que no sean anónimos y limitar a 100 para ahorrar lecturas
       const q = query(collection(db, 'users'), where('role', '!=', 'anonimo'), limit(100));
       unsubUserPresence = onSnapshot(q, snap => {
         allUsersCache = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
@@ -1365,13 +1365,13 @@
     };
 
     function suscribirChatDetalle(chatId) {
-      if (!chatId) return; // V.11.5.5
+      if (!chatId) return; // V.12.0.0
       if (unsubChatDetail) unsubChatDetail();
       const msgsDiv = document.getElementById('chat-messages');
       msgsDiv.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-4);">Cargando mensajes...</div>';
 
       // Chat privado: usamos 'or' para cubrir remitente/destinatario de forma segura con las reglas
-      // V.11.5.5: Limitar a los últimos 50 mensajes y ordenar por servidor
+      // V.12.0.0: Limitar a los últimos 50 mensajes y ordenar por servidor
       const q = query(collection(db, 'chat_mensajes'),
         or(
           and(where('remitenteId', '==', currentUser.uid), where('destinatarioId', '==', chatId)),
@@ -1401,7 +1401,7 @@
 
           const bubble = document.createElement('div');
           bubble.className = `msg-bubble ${isMe ? 'msg-sent' : 'msg-received'}`;
-          // V.11.5.5: Sanitización XSS — textContent en lugar de innerHTML para el texto del usuario
+          // V.12.0.0: Sanitización XSS — textContent en lugar de innerHTML para el texto del usuario
           const msgText = document.createElement('div');
           msgText.textContent = m.texto;
           const msgMeta = document.createElement('div');
@@ -1433,7 +1433,7 @@
       if (!text) return;
 
       input.value = '';
-      input.style.height = ''; // V.11.5.5: Reset height after sending
+      input.style.height = ''; // V.12.0.0: Reset height after sending
       try {
         await addDoc(collection(db, 'chat_mensajes'), {
           remitenteId: currentUser.uid,
@@ -1445,7 +1445,7 @@
           leidoPor: []
         });
 
-        // V.11.5.5: Push notification para mensajes privados (con filtro notifChat)
+        // V.12.0.0: Push notification para mensajes privados (con filtro notifChat)
         if (currentChatId) {
           const destUser = allUsersCache.find(u => u.uid === currentChatId);
           if (destUser && destUser.fcmToken && destUser.notifChat !== false) {
@@ -1480,7 +1480,7 @@
     window.addEventListener('click', actualizarActividad);
     window.addEventListener('keypress', actualizarActividad);
 
-    // V.11.5.5:  Listener para mensajes del SW (app ya abierta o en background)
+    // V.12.0.0:  Listener para mensajes del SW (app ya abierta o en background)
     let pendingChatOpen = null;
 
     function procesarPendingChat() {
@@ -1512,7 +1512,7 @@
       }
     });
 
-    // ── NOTIFICACIONES PUSH (V.11.5.5 Fix Android PWA + iOS) ────────────────────────────
+    // ── NOTIFICACIONES PUSH (V.12.0.0 Fix Android PWA + iOS) ────────────────────────────
     window.setupNotifications = async (isManual = false) => {
       if (!messaging) {
         if (isManual) mostrarToast("⚠️ El navegador no soporta notificaciones o no está en HTTPS.");
@@ -1533,7 +1533,7 @@
           return;
         }
 
-        // V.11.5.5: Timeout de seguridad extendido para evitar bloqueo en Android PWA
+        // V.12.0.0: Timeout de seguridad extendido para evitar bloqueo en Android PWA
         const withTimeout = (promise, ms) => Promise.race([
           promise,
           new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout FCM')), ms))
@@ -1545,7 +1545,7 @@
         );
         console.log("SW registrado:", registration);
 
-        // V.11.5.5: Esperar activamente a que el Service Worker esté listo (crítico en Android)
+        // V.12.0.0: Esperar activamente a que el Service Worker esté listo (crítico en Android)
         await navigator.serviceWorker.ready;
         console.log("SW listo para recibir notificaciones.");
 
@@ -1570,7 +1570,7 @@
       }
     }
 
-    // V.11.5.5: Toggle notification preferences
+    // V.12.0.0: Toggle notification preferences
     window.toggleNotifPreference = async (type, enabled) => {
       if (!currentUser) return;
       const field = type === 'ops' ? 'notifOperaciones' : 'notifChat';
@@ -1589,7 +1589,7 @@
       const chatToggle = document.getElementById('toggle-notif-chat');
       if (opsToggle) opsToggle.checked = currentUserDoc.notifOperaciones !== false;
       if (chatToggle) chatToggle.checked = currentUserDoc.notifChat !== false;
-    };    // Función para disparar la notificación push real (V.11.5.5)
+    };    // Función para disparar la notificación push real (V.12.0.0)
     window.broadcastNuevaOperacion = async (op) => {
       console.log("Broadcasting nueva operación:", op.nombre);
 
@@ -1612,7 +1612,7 @@
           if (u.uid === currentUser.uid) return false; // No notificarme a mí mismo
           if (!u.fcmToken) return false; // Sin token = sin push
           if (!u.activo) return false; // Usuarios inactivos
-          if (u.notifOperaciones === false) return false; // V.11.5.5: Preferencia desactivada
+          if (u.notifOperaciones === false) return false; // V.12.0.0: Preferencia desactivada
           // Filtrar por provincia: notificar a los de esa provincia + autonómicos
           if (u.provincia === op.provincia || u.provincia === 'Andalucía') return true;
           return false;
@@ -1638,7 +1638,7 @@
       }
     }
 
-    // Listener para mensajes FCM en primer plano (V.11.5.5)
+    // Listener para mensajes FCM en primer plano (V.12.0.0)
     // Solo log, sin toast adicional (el toast ya lo pone el onSnapshot)
     if (messaging) {
       onMessage(messaging, (payload) => {
@@ -1714,7 +1714,7 @@
           });
         } catch (e) { console.warn("Presencia no registrada (posible falta de reglas):", e); }
 
-        // V.11.5.5: Se deshabilitada la persistencia de visibilidad al inicio
+        // V.12.0.0: Se deshabilitada la persistencia de visibilidad al inicio
         // para asegurar que todos los vehículos empiecen desmarcados y no lancen peticiones automáticas.
 
         // Update Navigation Menu based on access
@@ -1744,16 +1744,16 @@
         mostrarApp();
         initApp();
 
-        // V.11.5.5: Inicializar mapas según permisos (Lazy Load)
+        // V.12.0.0: Inicializar mapas según permisos (Lazy Load)
         if (accesoEmergencias) {
           initMapEmergencias();
         }
         if (accesoPreventivos) {
           initMapPreventivos(); // Nota: Se llama a la función global de preventivos si existe
         }
-        // V.11.5.5: Delay para evitar bloqueo en Android PWA install
+        // V.12.0.0: Delay para evitar bloqueo en Android PWA install
         setTimeout(() => { setupNotifications(); }, 2000);
-        initNotifToggles(); // V.11.5.5
+        initNotifToggles(); // V.12.0.0
       } else {
         currentUser = null; currentRole = null;
         mostrarLogin();
@@ -1764,7 +1764,7 @@
     });
 
     // Cargar Google Maps dinámicamente para asegurar que los callbacks estén listos
-    // Cargar Google Maps dinámicamente (V.11.5.5)
+    // Cargar Google Maps dinámicamente (V.12.0.0)
     async function cargarGoogleMaps() {
       // Las claves están configuradas internamente para evitar que aparezcan en el panel de decisión
       const MAPS_KEYS = {
@@ -1931,14 +1931,14 @@
       document.getElementById('hdr-user').textContent = currentUserDoc.nombre || currentUser.email;
       document.getElementById('hdr-role').textContent = ROL_LABELS[currentRole] || currentRole;
 
-      // V.11.5.5: Logs Admin visibility (Desktop & Mobile)
+      // V.12.0.0: Logs Admin visibility (Desktop & Mobile)
       const btnLogsAdmin = document.getElementById('btn-logs-admin');
       const mnavLogsAdmin = document.getElementById('mnav-logs-admin');
       const showLogs = (currentRole === 'super_admin');
       if (btnLogsAdmin) btnLogsAdmin.style.display = showLogs ? 'flex' : 'none';
       if (mnavLogsAdmin) mnavLogsAdmin.style.display = showLogs ? 'flex' : 'none';
 
-      // V.11.5.5: Visibilidad del gestor de cuentas de Mapas en el modal de uso
+      // V.12.0.0: Visibilidad del gestor de cuentas de Mapas en el modal de uso
       const mapsMgr = document.getElementById('maps-key-manager');
       if (mapsMgr) mapsMgr.style.display = showLogs ? 'block' : 'none';
 
@@ -1970,7 +1970,7 @@
       const isAdmin = currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'autonomica' || currentRole === 'provincial' || currentRole === 'manager';
       document.getElementById('btn-nueva-op').style.display = (isAdmin && currentUserDoc.accesoEmergencias !== false) ? 'flex' : 'none';
 
-      // V.11.5.5: Sincronizar visibilidad de botones de movimiento Oysta
+      // V.12.0.0: Sincronizar visibilidad de botones de movimiento Oysta
       const btnMoving = document.getElementById('btn-toggle-oysta-moving');
       const btnMovingPrev = document.getElementById('btn-toggle-oysta-moving-prev');
       const isSA = (currentRole === 'super_admin');
@@ -1997,7 +1997,7 @@
       const stPrevI = document.getElementById('prev-sidebar-toggle-cerradas');
       if (stPrevI) stPrevI.style.display = canShowCerradas ? 'flex' : 'none';
 
-      // V.11.5.5: Ocultar botón de nuevo preventivo a los Usuarios
+      // V.12.0.0: Ocultar botón de nuevo preventivo a los Usuarios
       const btnNuevoPrev = document.getElementById('btn-nuevo-prev');
       if (btnNuevoPrev) btnNuevoPrev.style.display = (currentRole === 'usuario') ? 'none' : 'block';
 
@@ -2011,7 +2011,7 @@
       }
       if (mapEmergencias && mapReady) setTimeout(() => google.maps.event.trigger(mapEmergencias, 'resize'), 100);
 
-      // ── MOBILE DRAWER POPULATION (V.11.5.5) ──────────────────────────
+      // ── MOBILE DRAWER POPULATION (V.12.0.0) ──────────────────────────
       const dn = document.getElementById('drawer-user-name');
       const dr = document.getElementById('drawer-user-role');
       if (dn) dn.textContent = currentUserDoc.nombre || currentUser.email;
@@ -2055,7 +2055,7 @@
         mobileNuevaBtn.style.display = isAdmin ? 'flex' : 'none';
       }
 
-      // Oysta Integration (V.11.5.5)
+      // Oysta Integration (V.12.0.0)
       const vehicleBtn = document.getElementById('btn-toggle-vehicles');
       const vehicleBtnPrev = document.getElementById('btn-prev-toggle-vehicles');
       const hasPermission = !!currentUserDoc.canSeeVehicles;
@@ -2073,8 +2073,8 @@
       if (oystaIntervalId) return;
       console.log("[Oysta] Starting monitoring script...");
       const hasCache = populateOystaVehicleListFromCache();
-      populateOystaVehicleListPrevFromCache(); // V.11.5.5
-      // V.11.5.5: Adaptive Oysta Sync (Throttled & Visibility-aware)
+      populateOystaVehicleListPrevFromCache(); // V.12.0.0
+      // V.12.0.0: Adaptive Oysta Sync (Throttled & Visibility-aware)
       let oystaInterval = 60000; // Default 1 min
       cargarVehiculosOysta(!hasCache);
 
@@ -2107,19 +2107,19 @@
       if (unsubJefes) { unsubJefes(); unsubJefes = null; }
       if (unsubGuardia) { unsubGuardia(); unsubGuardia = null; }
       if (unsubGlobalJefes) { unsubGlobalJefes(); unsubGlobalJefes = null; }
-      if (unsubVehiculos) { unsubVehiculos(); unsubVehiculos = null; } // V.11.5.5
-      // Clean chat listeners (V.11.5.5)
+      if (unsubVehiculos) { unsubVehiculos(); unsubVehiculos = null; } // V.12.0.0
+      // Clean chat listeners (V.12.0.0)
       if (unsubChatPrivateGlobal) { unsubChatPrivateGlobal(); unsubChatPrivateGlobal = null; }
       if (unsubUserPresence) { unsubUserPresence(); unsubUserPresence = null; }
       if (unsubChatDetail) { unsubChatDetail(); unsubChatDetail = null; }
       ops = {};
-      localVehiclesByOystaId = {}; // V.11.5.5
+      localVehiclesByOystaId = {}; // V.12.0.0
     }
 
     let unsubVehiculos = null;
     function suscribirVehiculosLocales() {
       if (unsubVehiculos) unsubVehiculos();
-      // V.11.5.5: Optimización - Filtrar por provincia si el usuario tiene una asignada (no autonómico)
+      // V.12.0.0: Optimización - Filtrar por provincia si el usuario tiene una asignada (no autonómico)
       let q = collection(db, 'vehiculos');
       // Eliminado el filtro provincial para asegurar que los metadatos de vehículos asignados 
       // a intervenciones locales sean visibles (incluso si el vehículo es de otra provincia)
@@ -2130,16 +2130,16 @@
 
       unsubVehiculos = onSnapshot(q, snap => {
         localVehiclesByOystaId = {};
-        localVehiclesById = {}; // V.11.5.5
+        localVehiclesById = {}; // V.12.0.0
         snap.forEach(doc => {
           const v = doc.data();
           if (v.oystaId) {
             localVehiclesByOystaId[v.oystaId] = { id: doc.id, ...v };
           }
-          localVehiclesById[doc.id] = { id: doc.id, ...v }; // V.11.5.5
+          localVehiclesById[doc.id] = { id: doc.id, ...v }; // V.12.0.0
         });
         // Si ya tenemos marcadores Oysta, refrescarlos para aplicar posibles cambios de icono
-        // V.11.5.5: Gating robusto
+        // V.12.0.0: Gating robusto
         if (Object.keys(oystaMarkers).length > 0) cargarVehiculosOysta();
       });
     }
@@ -2147,7 +2147,7 @@
     // ── SUSCRIPCIÓN OPERACIONES ────────────────────────────────────────
     function suscribirOps() {
       if (unsubOps) unsubOps();
-      // V.11.5.5: Limitar a las últimas 30 operaciones para evitar cargar todo el histórico
+      // V.12.0.0: Limitar a las últimas 30 operaciones para evitar cargar todo el histórico
       const q = query(collection(db, 'operaciones'), orderBy('creadoEn', 'desc'), limit(30));
       let initialLoad = true;
 
@@ -2174,12 +2174,12 @@
               // Si es la carga inicial, asumimos que no es nueva "en tiempo real"
               // a no ser que tú mismo la hayas creado muy recientemente
               if (!initialLoad && d.creadoPor !== currentUser.uid) {
-                // Solo pitar si es de mi ámbito o soy autonómico (V.11.5.5)
+                // Solo pitar si es de mi ámbito o soy autonómico (V.12.0.0)
                 const myProv = currentUserDoc.provincia;
                 const opProv = d.provincia;
                 if (myProv === 'Andalucía' || myProv === opProv) {
                   hasNewOp = true;
-                  // V.11.5.5: Solo toast visual en primer plano. La notificación del sistema
+                  // V.12.0.0: Solo toast visual en primer plano. La notificación del sistema
                   // la envía el push real de FCM (funciona también con app cerrada/bloqueada).
                   mostrarToast(`📢 Nueva Operación: ${d.nombre}`);
                 }
@@ -2320,7 +2320,7 @@
     function renderMapa(forceZoom = false) {
       if (!mapEmergencias || !mapReady) return;
 
-      // Build search filter helper (V.11.5.5)
+      // Build search filter helper (V.12.0.0)
       const q = searchQuery.trim().toLowerCase();
       function isOpSearchVisible(op) {
         if (!isOpVisible(op)) return false;
@@ -2370,7 +2370,7 @@
             content: iconContent,
             title: op.nombre
           });
-          // V.11.5.5/13: Usar gmp-click para AdvancedMarkerElement
+          // V.12.0.0/13: Usar gmp-click para AdvancedMarkerElement
           marker.addListener('gmp-click', () => {
             if (routingPickField) {
               const markerOp = ops[op.id];
@@ -2391,18 +2391,18 @@
         }
       });
 
-      // V.11.5.5: Incluir vehículos Oysta en el auto-fit del mapa
+      // V.12.0.0: Incluir vehículos Oysta en el auto-fit del mapa
       Object.keys(oystaMarkers).forEach(id => {
         const m = oystaMarkers[id];
-        // V.11.5.5: Solo incluir en zoom si están marcados como visibles
+        // V.12.0.0: Solo incluir en zoom si están marcados como visibles
         if (m.position && visibleVehicles[id] !== false) {
           bounds.extend(m.position);
           hasValidCoords = true;
         }
       });
 
-      // V.11.5.5: Permitir forzar zoom aunque haya una op seleccionada (selOpId)
-      // V.11.5.5: No auto-zoom si el panel de rutas está abierto
+      // V.12.0.0: Permitir forzar zoom aunque haya una op seleccionada (selOpId)
+      // V.12.0.0: No auto-zoom si el panel de rutas está abierto
       if (hasValidCoords && !editPickMode && !picking && !routingPanelOpen && (!selOpId || forceZoom)) {
         if (boundsTimeout) clearTimeout(boundsTimeout);
         boundsTimeout = setTimeout(() => {
@@ -2412,9 +2412,9 @@
         }, 100);
       }
 
-      // V.11.5.5: Asegurar que los vehículos Oysta se ven tras renderizar el mapa
-      // V.11.5.5: Gating robusto
-      // V.11.5.5: Si no hay vehículos en el panel, forzamos una carga para poblar la lista
+      // V.12.0.0: Asegurar que los vehículos Oysta se ven tras renderizar el mapa
+      // V.12.0.0: Gating robusto
+      // V.12.0.0: Si no hay vehículos en el panel, forzamos una carga para poblar la lista
       const listContainer = document.getElementById('oysta-vehicle-list');
       const listEmpty = !listContainer || listContainer.children.length <= 1;
       const isPreventivos = document.getElementById('section-preventivos') && document.getElementById('section-preventivos').style.display === 'flex';
@@ -2424,10 +2424,10 @@
       }
     }
 
-    // ── OYSTA INTEGRATION (V.11.5.5) ──────────────────────────────────
+    // ── OYSTA INTEGRATION (V.12.0.0) ──────────────────────────────────
     async function cargarVehiculosOysta(force = false) {
       console.log(`[Oysta] cargarVehiculosOysta called (force=${force})`);
-      // V.11.5.5: Implementar pausa automática si no hay vehículos visibles, excepto en Preventivos (para rutas dinámicas)
+      // V.12.0.0: Implementar pausa automática si no hay vehículos visibles, excepto en Preventivos (para rutas dinámicas)
       const anyVisibleGlobal = Object.values(visibleVehicles).some(v => v === true) || Object.values(visibleVehiclesPrev).some(v => v === true);
       const isOpsActive = document.getElementById('section-operaciones') && document.getElementById('section-operaciones').style.display === 'flex';
       const isPreventivosActive = document.getElementById('section-preventivos') && document.getElementById('section-preventivos').style.display === 'flex';
@@ -2449,7 +2449,7 @@
         return;
       }
 
-      // V.11.5.5: Permitir carga siempre para que el cache esté disponible para asignaciones de preventivos
+      // V.12.0.0: Permitir carga siempre para que el cache esté disponible para asignaciones de preventivos
       // if (!currentUserDoc?.canSeeVehicles) return; 
       if (!force && (!mapReady || (!mapEmergencias && !mapPreventivos))) {
         console.log(`[Oysta] Gating active: mapReady=${mapReady}, maps available=${!!mapEmergencias || !!mapPreventivos}`);
@@ -2464,12 +2464,12 @@
 
       const indicator = document.getElementById('oysta-status-indicator');
       const statusText = document.getElementById('oysta-status-text');
-      // V.11.5.5: Solo mostrar el cuadro de estado a Super Admins (transparente para el resto)
+      // V.12.0.0: Solo mostrar el cuadro de estado a Super Admins (transparente para el resto)
       if (indicator) indicator.style.display = (currentRole === 'super_admin') ? 'flex' : 'none';
 
       try {
         if (statusText) statusText.textContent = "Sincronizando...";
-        // V.11.5.5: Usar Cloud Function autenticada en vez de fetch directo al GAS
+        // V.12.0.0: Usar Cloud Function autenticada en vez de fetch directo al GAS
         const getOystaVehiclesFn = httpsCallable(functions, 'getOystaVehicles');
         const result = await getOystaVehiclesFn();
         const data = result.data;
@@ -2481,16 +2481,16 @@
           return;
         }
 
-        oystaVehiclesCache = data.vehicles; // V.11.5.5: Guardar en cache para vinculación
+        oystaVehiclesCache = data.vehicles; // V.12.0.0: Guardar en cache para vinculación
 
-        // V.11.5.5: Guardar en localStorage para disponibilidad inmediata en el próximo inicio
+        // V.12.0.0: Guardar en localStorage para disponibilidad inmediata en el próximo inicio
         localStorage.setItem('emercre_oysta_cache', JSON.stringify(data.vehicles.map(v => ({ id: v.id, name: v.name }))));
 
         const now = new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
         const label = `Actualizado ${now} (${data.vehicles.length} v.)`;
         if (statusText) statusText.textContent = label;
 
-        // V.11.5.5: Update indicator in Preventivos
+        // V.12.0.0: Update indicator in Preventivos
         const indicatorPrev = document.getElementById('oysta-status-indicator-prev');
         const statusTextPrev = document.getElementById('oysta-status-text-prev');
         const btnMoving = document.getElementById('btn-toggle-oysta-moving');
@@ -2506,7 +2506,7 @@
         renderOystaVehicleList(data.vehicles);
         if (mapPreventivos) {
           renderOystaVehicleListPrev(data.vehicles);
-          // V.11.5.5: Refrescar vehículos asignados a intervenciones de preventivos
+          // V.12.0.0: Refrescar vehículos asignados a intervenciones de preventivos
           if (typeof window.refreshGlobalPreventivoMarkers === 'function') {
             window.refreshGlobalPreventivoMarkers();
           }
@@ -2514,7 +2514,7 @@
 
         console.log(`Cargando ${data.vehicles.length} vehículos de Oysta...`);
 
-        // V.11.5.5: Tracking de rutas activas en Emergencias para limpiar las obsoletas
+        // V.12.0.0: Tracking de rutas activas en Emergencias para limpiar las obsoletas
         if (!window._prevIntRoutes) window._prevIntRoutes = {};
         const vehicleIds = data.vehicles.map(v => String(v.id));
         Object.keys(oystaMarkers).forEach(id => {
@@ -2568,7 +2568,7 @@
             marker.vehicleData = v;
             marker.localVehicleData = localVeh;
 
-            // V.11.5.5: Delegate click to custom content
+            // V.12.0.0: Delegate click to custom content
             marker.addListener('gmp-click', () => {
               if (content && typeof content.click === 'function') content.click();
             });
@@ -2576,7 +2576,7 @@
             oystaMarkers[mid] = marker;
           }
 
-          // V.11.5.5: Monitorización de Estados para EMERGENCIAS (Operaciones)
+          // V.12.0.0: Monitorización de Estados para EMERGENCIAS (Operaciones)
           if (localVeh && ops) {
             // Buscamos si este vehículo está asignado a alguna operación abierta
             const assignedOp = Object.values(ops).find(op =>
@@ -2595,7 +2595,7 @@
               // Necesitamos los comentarios para evitar duplicados. 
               // Como no los tenemos en 'ops' (están en subcolección 'acciones'), 
               // tendríamos que consultarlos, pero eso puede ser costoso en cada loop.
-              // V.11.5.5: Usamos una cache local para evitar spam si no hemos consultado aún.
+              // V.12.0.0: Usamos una cache local para evitar spam si no hemos consultado aún.
               if (!window._oystaLogCache) window._oystaLogCache = new Set();
 
               // 1. Salida (Status != 'parado' o Speed > 5)
@@ -2651,7 +2651,7 @@
                             }
                             window._prevIntRoutes[routeKey].setDirections(result);
 
-                            // Oysta logging logic (V.11.5.5)
+                            // Oysta logging logic (V.12.0.0)
                             const isMoving = (v.status && v.status.toLowerCase() !== 'parado') || (v.speed && v.speed > 5);
                             if (isMoving && !window._oystaLogCache.has(`${opId}_${mid}_salida`)) {
                               const departureTime = Date.now() - (durSec * 1000);
@@ -2678,7 +2678,7 @@
                   });
               }
 
-              // 2. Llegada (Distancia en línea recta < 100m - V.11.5.5)
+              // 2. Llegada (Distancia en línea recta < 100m - V.12.0.0)
               if (opCoords) {
                 const dist = calculateHaversineDist(pos, opCoords);
                 const arrKey = `arr_${opId}_${mid}`;
@@ -2709,7 +2709,7 @@
           }
         });
 
-        // V.11.5.5: Limpiar rutas de Emergencias que ya no son necesarias (vehículo desasignado u op cerrada)
+        // V.12.0.0: Limpiar rutas de Emergencias que ya no son necesarias (vehículo desasignado u op cerrada)
         Object.keys(window._prevIntRoutes).forEach(k => {
           if (k.includes('_')) {
             const parts = k.split('_');
@@ -2770,7 +2770,7 @@
       });
     };
 
-    // V.11.5.5: Global click listener to close expanded vehicles
+    // V.12.0.0: Global click listener to close expanded vehicles
     document.addEventListener('click', (e) => {
       // If click is not inside a marker, close all expanded
       if (!e.target.closest('.oysta-linked-marker')) {
@@ -2780,7 +2780,7 @@
       }
     });
 
-    // V.11.5.5: Función global compartida para generar el HTML del marcador Oysta (Emergencias y Preventivos)
+    // V.12.0.0: Función global compartida para generar el HTML del marcador Oysta (Emergencias y Preventivos)
     window.createOystaMarkerContent = (v, localVeh, statusClass) => {
       const content = document.createElement('div');
       if (localVeh) {
@@ -2809,7 +2809,7 @@
           </div>
         `;
 
-        // V.11.5.5: Interaction for expanding the marker circle
+        // V.12.0.0: Interaction for expanding the marker circle
         content.addEventListener('click', (e) => {
           e.stopPropagation(); // Avoid double toggling with the gmp-click proxy
           const isExpanded = content.classList.contains('expanded');
@@ -2826,7 +2826,7 @@
           }
         });
 
-        // V.11.5.5: Añadir badge de ranking si existe
+        // V.12.0.0: Añadir badge de ranking si existe
         const oystaId = String(v.id);
         if (window._ambulanceRanks && window._ambulanceRanks[oystaId]) {
           const badge = document.createElement('div');
@@ -2843,8 +2843,8 @@
       return content;
     };
 
-    // V.11.5.5: Función modular para renderizar la lista de vehículos
-    // V.11.5.5: Redundant definitions removed (consolidated at top of file)
+    // V.12.0.0: Función modular para renderizar la lista de vehículos
+    // V.12.0.0: Redundant definitions removed (consolidated at top of file)
 
     function renderOystaVehicleList(vehicles) {
       console.log(`[Oysta] renderOystaVehicleList called with ${vehicles?.length} vehicles.`);
@@ -2859,7 +2859,7 @@
 
         const div = document.createElement('div');
         div.className = 'vehicle-selector-item';
-        // V.11.5.5 Fix: Mostrar indicativo local si existe asociación
+        // V.12.0.0 Fix: Mostrar indicativo local si existe asociación
         const localVeh = localVehiclesByOystaId[mid];
         const displayName = localVeh ? `${localVeh.indicativo} (${v.name})` : v.name;
 
@@ -2871,15 +2871,15 @@
         listContainer.appendChild(div);
       });
 
-      // V.11.5.5: Si todos están marcados, marcar el switch maestro
+      // V.12.0.0: Si todos están marcados, marcar el switch maestro
       const total = vehicles.length;
       const marcados = vehicles.filter(v => visibleVehicles[String(v.id)]).length;
       const sw = document.getElementById('chk-toggle-all-oysta');
       if (sw) sw.checked = total > 0 && total === marcados;
     }
 
-    // V.11.5.5: Carga la lista inicial desde cache local
-    // V.11.5.5: Retorna true si se cargó algo, false si la caché está vacía
+    // V.12.0.0: Carga la lista inicial desde cache local
+    // V.12.0.0: Retorna true si se cargó algo, false si la caché está vacía
     function populateOystaVehicleListFromCache() {
       console.log("[Oysta] populateOystaVehicleListFromCache called.");
       const cached = localStorage.getItem('emercre_oysta_cache');
@@ -2897,7 +2897,7 @@
       return false;
     }
 
-    // V.11.5.5: Carga la lista inicial en Preventivos
+    // V.12.0.0: Carga la lista inicial en Preventivos
     function populateOystaVehicleListPrevFromCache() {
       const cached = localStorage.getItem('emercre_oysta_cache');
       if (cached) {
@@ -2989,14 +2989,14 @@
         visible = visible.filter(o => o.provincia === selectedProvincia);
       }
 
-      // Lógica de filtrado de intervenciones ocultas (V.11.5.5)
+      // Lógica de filtrado de intervenciones ocultas (V.12.0.0)
       visible = visible.filter(op => {
         const isOculta = op.oculta === true;
         if (isOculta) return mostrarCerradas && canShowHidden();
         return true;
       });
 
-      // Búsqueda de texto (V.11.5.5)
+      // Búsqueda de texto (V.12.0.0)
       if (searchQuery.trim()) {
         const q = searchQuery.trim().toLowerCase();
         visible = visible.filter(op => {
@@ -3080,7 +3080,7 @@
       renderSidebar();
     };
 
-    // V.11.5.5: Toggle de vehículos Oysta en movimiento
+    // V.12.0.0: Toggle de vehículos Oysta en movimiento
     window.toggleMovingOysta = () => {
       showMovingOysta = !showMovingOysta;
       const btn = document.getElementById('btn-toggle-oysta-moving');
@@ -3178,7 +3178,7 @@
 
     function suscribirAcciones(opId) {
       if (unsubAcciones) unsubAcciones();
-      // V.11.5.5: Limitar a las últimas 50 acciones del timeline
+      // V.12.0.0: Limitar a las últimas 50 acciones del timeline
       const q = query(collection(db, 'operaciones', opId, 'acciones'), orderBy('timestamp', 'desc'), limit(50));
       unsubAcciones = onSnapshot(q, snap => {
         const acciones = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -3191,7 +3191,7 @@
     let currentAssignedIds = [];
     function suscribirRecursos(opId) {
       if (unsubRecursos) unsubRecursos();
-      // V.11.5.5: Limitar a 50 recursos asignados
+      // V.12.0.0: Limitar a 50 recursos asignados
       const q = query(collection(db, 'operaciones', opId, 'recursos'), orderBy('asignadoEn', 'desc'), limit(50));
       unsubRecursos = onSnapshot(q, snap => {
         const recursos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -3212,7 +3212,7 @@
       if (!currentOp) return;
 
       if (cat === 'vehiculos') {
-        // V.11.5.5: Filtrar por provincia directamente en el servidor
+        // V.12.0.0: Filtrar por provincia directamente en el servidor
         const q = query(collection(db, 'vehiculos'), where('provincia', '==', currentOp.provincia || 'Málaga'));
         const snap = await getDocs(q);
         opcionesRecursosCache.vehiculos = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -3225,7 +3225,7 @@
           sel.innerHTML += `<option value="${v.id}">${v.indicativo} - ${v.tipo} (${v.matricula})</option>`;
         });
       } else if (cat === 'erbes') {
-        // V.11.5.5: Filtrar por provincia directamente en el servidor
+        // V.12.0.0: Filtrar por provincia directamente en el servidor
         const q = query(collection(db, 'erbes'), where('provincia', '==', currentOp.provincia || 'Málaga'));
         const snap = await getDocs(q);
         opcionesRecursosCache.erbes = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -3236,7 +3236,7 @@
           sel.innerHTML += `<option value="${e.id}">ERBE ${e.localidad} (${e.provincia})</option>`;
         });
       } else if (cat === 'eries') {
-        // V.11.5.5: Filtrar por provincia directamente en el servidor
+        // V.12.0.0: Filtrar por provincia directamente en el servidor
         const q = query(collection(db, 'eries'), where('provincia', '==', currentOp.provincia || 'Málaga'));
         const snap = await getDocs(q);
         opcionesRecursosCache.eries = snap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -3321,7 +3321,7 @@
               recursosAsignadosIds: arrayUnion(itemId),
               actualizadoEn: serverTimestamp()
             };
-            // V.11.5.5: Capturar posición inicial para decalaje dinámico
+            // V.12.0.0: Capturar posición inicial para decalaje dinámico
             const vLocal = opcionesRecursosCache.vehiculos.find(x => x.id === itemId);
             if (vLocal && vLocal.oystaId) {
               const ov = oystaVehiclesCache.find(x => String(x.id) === String(vLocal.oystaId));
@@ -3357,7 +3357,7 @@
           const opSnap = await getDoc(opRef);
           const rSum = opSnap.data().recursosSummary || {};
 
-          // Inferir tipo de la descripción de forma más robusta (V.11.5.5)
+          // Inferir tipo de la descripción de forma más robusta (V.12.0.0)
           let key = 'otros';
           const dLower = desc.toLowerCase();
           if (desc.includes('🚗')) {
@@ -3474,7 +3474,7 @@
         ? formatCommentFecha(op.creadoEn.toDate())
         : '—';
       ir.innerHTML = '';
-      // V.11.5.5: Sanitización XSS — usar textContent para campos de usuario
+      // V.12.0.0: Sanitización XSS — usar textContent para campos de usuario
       function addInfoItem(container, value, label) {
         const item = document.createElement('div');
         item.className = 'dp-info-item';
@@ -3503,9 +3503,9 @@
 
       const isHighAdmin = currentRole === 'super_admin' || currentRole === 'manager';
       document.getElementById('dp-admin-btns').style.display = (isAdmin) ? 'flex' : 'none';
-      // V.11.5.5: Tanto Admins como Responsables pueden reabrir
+      // V.12.0.0: Tanto Admins como Responsables pueden reabrir
       document.getElementById('dp-reabrir-btn').style.display = (isAdmin && isFinalizada) ? 'inline-flex' : 'none';
-      // V.11.5.5: Solo Admins de alto nivel (manager/super_admin) pueden borrar, siempre.
+      // V.12.0.0: Solo Admins de alto nivel (manager/super_admin) pueden borrar, siempre.
       if (document.getElementById('dp-borrar-btn')) {
         document.getElementById('dp-borrar-btn').style.display = isHighAdmin ? 'inline-flex' : 'none';
       }
@@ -3515,7 +3515,7 @@
         b.disabled = isFinalizada;
       });
 
-      // Lógica de Ocultar (V.11.5.5)
+      // Lógica de Ocultar (V.12.0.0)
       const hideWrapper = document.getElementById('dp-hide-wrapper');
       if (hideWrapper) {
         if (isFinalizada && (currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'manager')) {
@@ -3547,21 +3547,21 @@
       }
       mostrarCerradas = checked;
 
-      // V.11.5.5: Sincronizar todos los toggles de la app
+      // V.12.0.0: Sincronizar todos los toggles de la app
       document.querySelectorAll('input[type="checkbox"][onchange*="toggleGlobalCerradas"]').forEach(cb => {
         cb.checked = checked;
       });
 
       renderSidebar();
       renderMapa();
-      // V.11.5.5: Refrescar preventivos y días si están cargados
+      // V.12.0.0: Refrescar preventivos y días si están cargados
       if (lastPreventivosSnap) renderPreventivosList(lastPreventivosSnap);
       if (currentPreventivoId && lastSubpreventivosSnap) {
         renderSubpreventivosList(lastSubpreventivosSnap, currentPreventivoId, null);
       }
-      // V.11.5.5/23: También re-renderizar intervenciones si el panel está abierto
+      // V.12.0.0/23: También re-renderizar intervenciones si el panel está abierto
       if (document.getElementById('preventivos-detail-panel')?.classList.contains('open')) {
-        activeIntManageId = null; // V.11.5.5: Forzar colapso al cambiar visibilidad
+        activeIntManageId = null; // V.12.0.0: Forzar colapso al cambiar visibilidad
         if (lastIntervencionesSnap) renderPreventivoIntervenciones(lastIntervencionesSnap);
       }
     };
@@ -3734,7 +3734,7 @@
     window.borrarOp = async () => {
       if (!selOpId) return;
 
-      // V.11.5.5: Verificación de permisos estrictamente para Administradores
+      // V.12.0.0: Verificación de permisos estrictamente para Administradores
       const isHighAdmin = currentRole === 'super_admin' || currentRole === 'manager';
 
       if (!isHighAdmin) {
@@ -4087,7 +4087,7 @@ ${dataContext}
       document.getElementById('overlay-ai-report').style.display = 'none';
     };
 
-    // ── INFORME IA PREVENTIVOS (V.11.5.5) ──────────────────────────────
+    // ── INFORME IA PREVENTIVOS (V.12.0.0) ──────────────────────────────
     window.generarInformeIA_Preventivo = async (type, id, parentId = null, parentId2 = null) => {
       let dataContext = "";
       let titleReport = "";
@@ -4125,7 +4125,7 @@ ${dataContext}
           nombreOp = op.descripcion || 'Intervención';
           numeroIntervencion = op.numeroIntervencion || 'S/N';
           provincia = op.provincia || 'Andalucía';
-          creadoEn = op.timestamp; // V.11.5.5: Usar timestamp de la intervención
+          creadoEn = op.timestamp; // V.12.0.0: Usar timestamp de la intervención
           actualizadoEn = op.actualizadoEn;
 
           const pSnap = await getDoc(doc(db, 'preventivos', pId));
@@ -4133,7 +4133,7 @@ ${dataContext}
             const pData = pSnap.data();
             org = pData.organizacion || "";
             dir = pData.contacto || "";
-            loc = op.direccion || pData.localizacion || ""; // V.11.5.5: Priorizar dirección de la intervención
+            loc = op.direccion || pData.localizacion || ""; // V.12.0.0: Priorizar dirección de la intervención
           }
 
           const recIndicativos = (op.recursosAsignados || []).map(rid => (window.globalVehiculos && window.globalVehiculos[rid]?.indicativo) || rid).join(', ');
@@ -4145,7 +4145,7 @@ ${dataContext}
           const logData = [];
           if (op.comentarios) {
             op.comentarios.slice().reverse().forEach(c => {
-              // V.11.5.5: Robust date parsing
+              // V.12.0.0: Robust date parsing
               let ts = null;
               if (c.timestamp) {
                 ts = { toDate: () => new Date(c.timestamp) };
@@ -4175,7 +4175,7 @@ ${dataContext}
           const qInt = query(collection(db, 'preventivos', pId, 'subpreventivos', id, 'intervenciones'));
           const snapInt = await getDocs(qInt);
 
-          // V.11.5.5: Capturar recursos del día
+          // V.12.0.0: Capturar recursos del día
           const recIndicativos = (op.recursos || []).map(rid => (window.globalVehiculos && window.globalVehiculos[rid]?.indicativo) || rid).join(', ');
 
           dataContext = `DÍA: ${op.nombre}\nRecursos Desplegados: ${recIndicativos}\nINTERVENCIONES REGISTRADAS (${snapInt.size}):\n`;
@@ -4204,7 +4204,7 @@ ${dataContext}
           const qSub = query(collection(db, 'preventivos', id, 'subpreventivos'));
           const snapSub = await getDocs(qSub);
 
-          // V.11.5.5: Deduplicar recursos de todos los días
+          // V.12.0.0: Deduplicar recursos de todos los días
           const allRecSet = new Set();
 
           dataContext = `PREVENTIVO GLOBAL: ${op.nombre}\n`;
@@ -4351,7 +4351,7 @@ ${dataContext}
             break;
           case 'Jefe de Operaciones':
             subSelect.style.display = 'block';
-            // Auto-seleccionar el jefe que ya está puesto en el campo de dirección (V.11.5.5)
+            // Auto-seleccionar el jefe que ya está puesto en el campo de dirección (V.12.0.0)
             const jefeActual = document.getElementById(`${prefix}-dir`).value;
             if (jefeActual) subSelect.value = jefeActual;
             break;
@@ -4472,7 +4472,7 @@ ${dataContext}
             timestamp: serverTimestamp()
           });
         }
-        broadcastNuevaOperacion({ id: ref.id, nombre, provincia, creadoPorNombre: autorNombre }); // V.11.5.5
+        broadcastNuevaOperacion({ id: ref.id, nombre, provincia, creadoPorNombre: autorNombre }); // V.12.0.0
         cerrarModalOp();
         window.abrirDetalle(ref.id);
       } catch (e) { alert('Error: ' + e.message); }
@@ -4611,7 +4611,7 @@ ${dataContext}
         if (editPickedCoords && gmMarkers[selOpId]) {
           const tipo = TIPOS[updates.tipo] || TIPOS.otro;
           gmMarkers[selOpId].position = editPickedCoords;
-          // V.11.5.5: Corregir argumentos (op completa, tipo objeto)
+          // V.12.0.0: Corregir argumentos (op completa, tipo objeto)
           gmMarkers[selOpId].content = nivelIcon(ops[selOpId], tipo);
         }
 
@@ -4623,7 +4623,7 @@ ${dataContext}
 
     // ── SECTIONS ───────────────────────────────────────────────────────
     window.showSection = sec => {
-      // V.11.5.5: Bloqueo explícito de chat si no tiene acceso a emergencias
+      // V.12.0.0: Bloqueo explícito de chat si no tiene acceso a emergencias
       if (sec === 'chat' && currentUserDoc.accesoEmergencias === false) {
         mostrarToast('Acceso al Chat restringido por permisos.');
         if (currentUserDoc.accesoPreventivos) showSection('preventivos');
@@ -4636,18 +4636,18 @@ ${dataContext}
       if (document.getElementById('section-preventivos')) {
         document.getElementById('section-preventivos').style.display = sec === 'preventivos' ? 'flex' : 'none';
         if (sec !== 'preventivos') {
-          // V.11.5.5: Cerrar panel si salimos de preventivos
+          // V.12.0.0: Cerrar panel si salimos de preventivos
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         }
         if (sec === 'preventivos') {
-          currentPreventivoId = null; // V.11.5.5: Reset para vista global por defecto
-          window._preventivosNeedsZoom = true; // V.11.5.5: Zoom al entrar
+          currentPreventivoId = null; // V.12.0.0: Reset para vista global por defecto
+          window._preventivosNeedsZoom = true; // V.12.0.0: Zoom al entrar
           initMapPreventivos();
           refreshPreventivosMap();
-          suscribirGlobalPreventivoIntervenciones(); // V.11.5.5
+          suscribirGlobalPreventivoIntervenciones(); // V.12.0.0
           cargarPreventivos();
 
-          // V.11.5.5: Política de auto-activación robusta
+          // V.12.0.0: Política de auto-activación robusta
           // Intentamos durante 6 segundos (una vez por segundo) ver si hay coches, si no, forzamos sync.
           let checkAttempts = 0;
           const forceOystaCheck = setInterval(() => {
@@ -4680,15 +4680,15 @@ ${dataContext}
         document.getElementById('section-chat-view').style.display = 'flex';
         document.getElementById('section-chat').style.display = 'flex';
         cargarUsuariosParaChat();
-        // Al entrar, no auto-seleccionamos si no hay nada (V.11.5.5)
+        // Al entrar, no auto-seleccionamos si no hay nada (V.12.0.0)
         if (currentChatId) selectChat(currentChatId);
         else selectChat(null);
       } else {
         document.getElementById('section-chat-view').style.display = 'none';
         document.getElementById('section-chat').style.display = 'none';
-        // Detener listener de detalle al salir del chat para permitir notificaciones (V.11.5.5)
+        // Detener listener de detalle al salir del chat para permitir notificaciones (V.12.0.0)
         if (unsubChatDetail) { unsubChatDetail(); unsubChatDetail = null; }
-        // Deseleccionar chat al salir para que al volver no se marque como leído auto (V.11.5.5)
+        // Deseleccionar chat al salir para que al volver no se marque como leído auto (V.12.0.0)
         currentChatId = null;
       }
 
@@ -4698,14 +4698,14 @@ ${dataContext}
       }
       if (sec === 'operaciones' && mapEmergencias) setTimeout(() => google.maps.event.trigger(mapEmergencias, 'resize'), 100);
 
-      // Toggle mobile FAB: only show on operaciones (V.11.5.5)
+      // Toggle mobile FAB: only show on operaciones (V.12.0.0)
       const fab = document.getElementById('btn-mobile-nueva-op');
       if (fab) {
         const isAdmin = currentRole === 'admin' || currentRole === 'super_admin' || currentRole === 'autonomica' || currentRole === 'provincial' || currentRole === 'manager';
         fab.style.display = (sec === 'operaciones' && window.innerWidth < 900 && isAdmin) ? 'flex' : 'none';
       }
 
-      // V.11.5.5: Gestionar visibilidad de botones de mapa en móvil en todos los cambios de sección
+      // V.12.0.0: Gestionar visibilidad de botones de mapa en móvil en todos los cambios de sección
       const mapZone = document.querySelector('.map-zone');
       const prevMapZone = document.querySelector('#section-preventivos .panel-right');
       const toggleBtn = document.getElementById('btn-mobile-map-toggle');
@@ -4732,7 +4732,7 @@ ${dataContext}
 
     function suscribirUsuarios() {
       if (unsubUsuarios) unsubUsuarios();
-      // V.11.5.5: Limitar a 100 usuarios en la tabla de gestión
+      // V.12.0.0: Limitar a 100 usuarios en la tabla de gestión
       const q = query(collection(db, 'users'), limit(100));
       unsubUsuarios = onSnapshot(q, snap => {
         cachedUsersSnap = snap;
@@ -4874,7 +4874,7 @@ ${dataContext}
 
       document.getElementById('u-activo').value = 'true';
       document.getElementById('u-todos-chats').checked = true; // Por defecto checked
-      document.getElementById('u-can-see-vehicles').checked = false; // V.11.5.5: Por defecto desmarcado
+      document.getElementById('u-can-see-vehicles').checked = false; // V.12.0.0: Por defecto desmarcado
       document.getElementById('u-acc-emergencias').checked = true;
       document.getElementById('u-acc-preventivos').checked = false;
       document.getElementById('u-pass-row').style.display = 'flex';
@@ -4889,7 +4889,7 @@ ${dataContext}
       const tbody = document.getElementById('log-tbody');
       tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;padding:20px;">Cargando historial...</td></tr>';
 
-      // V.11.5.5: Limitar a las últimas 50 sesiones de inicio/cierre
+      // V.12.0.0: Limitar a las últimas 50 sesiones de inicio/cierre
       const q = query(collection(db, 'users', uid, 'sessions'), orderBy('timestamp', 'desc'), limit(50));
       if (unsubUserLog) unsubUserLog();
 
@@ -4944,7 +4944,7 @@ ${dataContext}
       document.getElementById('u-activo').value = u.activo === false ? 'false' : 'true';
       // Retrocompatibilidad: si no está definido, asume true
       document.getElementById('u-todos-chats').checked = u.aparecerEnTodosLosChats !== false;
-      // V.11.5.5: Cargar permiso de vehículos
+      // V.12.0.0: Cargar permiso de vehículos
       document.getElementById('u-can-see-vehicles').checked = !!u.canSeeVehicles;
 
       document.getElementById('u-acc-emergencias').checked = u.accesoEmergencias !== false; // True por defecto (retrocompatibilidad)
@@ -4974,7 +4974,7 @@ ${dataContext}
       try {
         if (editingUserId) {
           let updateData = { nombre, role, provincia, activo };
-          updateData.canSeeVehicles = document.getElementById('u-can-see-vehicles').checked; // V.11.5.5
+          updateData.canSeeVehicles = document.getElementById('u-can-see-vehicles').checked; // V.12.0.0
           updateData.accesoEmergencias = document.getElementById('u-acc-emergencias').checked;
           updateData.accesoPreventivos = document.getElementById('u-acc-preventivos').checked;
           if (currentUserDoc.role === 'super_admin') {
@@ -4995,7 +4995,7 @@ ${dataContext}
           if (data.error) throw new Error(data.error.message);
           let newData = {
             nombre, email, role, provincia, activo,
-            canSeeVehicles: document.getElementById('u-can-see-vehicles').checked, // V.11.5.5
+            canSeeVehicles: document.getElementById('u-can-see-vehicles').checked, // V.12.0.0
             accesoEmergencias: document.getElementById('u-acc-emergencias').checked,
             accesoPreventivos: document.getElementById('u-acc-preventivos').checked,
             creadoPor: currentUser.uid,
@@ -5106,7 +5106,7 @@ ${dataContext}
 
       renderSidebar();
       renderMapa();
-      // V.11.5.5: Refrescar preventivos y marcadores globales
+      // V.12.0.0: Refrescar preventivos y marcadores globales
       if (typeof renderPreventivosList === 'function' && lastPreventivosSnap) {
         renderPreventivosList(lastPreventivosSnap);
       }
@@ -5122,7 +5122,7 @@ ${dataContext}
       if (typeof cargarErbes === 'function') cargarErbes();
       if (typeof cargarEries === 'function') cargarEries();
 
-      // Sync drawer selectors (V.11.5.5)
+      // Sync drawer selectors (V.12.0.0)
       const dProvSel = document.getElementById('drawer-prov-selector');
       if (dProvSel) dProvSel.value = val;
       const hProvSel = document.getElementById('hdr-prov-selector');
@@ -5195,12 +5195,12 @@ ${dataContext}
         provSel.value = selectedProvincia === 'Andalucía' ? 'Andalucía' : selectedProvincia;
       }
 
-      // V.11.5.5/14: Poblar vinculación con Oysta (filtrando ya asociados)
+      // V.12.0.0/14: Poblar vinculación con Oysta (filtrando ya asociados)
       const oystaSel = document.getElementById('v-oysta-link');
       if (oystaSel) {
         oystaSel.innerHTML = '<option value="">(Sin vinculación)</option>';
         oystaVehiclesCache.forEach(v => {
-          // V.11.5.5: Solo mostrar si no está asociado a nadie
+          // V.12.0.0: Solo mostrar si no está asociado a nadie
           const estaAsociado = !!localVehiclesByOystaId[v.id];
           if (!estaAsociado) {
             const opt = document.createElement('option');
@@ -5234,12 +5234,12 @@ ${dataContext}
         provRow.style.display = 'block';
       }
 
-      // V.11.5.5/14: Poblar vinculación con Oysta y seleccionar actual (filtrando ya asociados ajenos)
+      // V.12.0.0/14: Poblar vinculación con Oysta y seleccionar actual (filtrando ya asociados ajenos)
       const oystaSel = document.getElementById('v-oysta-link');
       if (oystaSel) {
         oystaSel.innerHTML = '<option value="">(Sin vinculación)</option>';
         oystaVehiclesCache.forEach(veh => {
-          // V.11.5.5: Mostrar si no está asociado O si es el ID actual de este vehículo
+          // V.12.0.0: Mostrar si no está asociado O si es el ID actual de este vehículo
           const estaAsociadoAAjax = !!localVehiclesByOystaId[veh.id];
           const esElMismo = v.oystaId && String(v.oystaId) === String(veh.id);
 
@@ -5739,7 +5739,7 @@ ${dataContext}
             document.getElementById(`${prefix}-dir`).value = jefeNombre;
             const orgSelect = document.getElementById(`${prefix}-org`);
             if (orgSelect) {
-              // Si ya está seleccionado 'Jefe de Operaciones', sincronizamos el sub-selector (V.11.5.5)
+              // Si ya está seleccionado 'Jefe de Operaciones', sincronizamos el sub-selector (V.12.0.0)
               if (orgSelect.value === 'Jefe de Operaciones') {
                 const subSelect = document.getElementById(`${prefix}-org-sub-select`);
                 if (subSelect) subSelect.value = jefeNombre;
@@ -5761,7 +5761,7 @@ ${dataContext}
           if (valEl) valEl.textContent = jefeGuardiaActual || 'Sin asignar';
           const sel = document.getElementById('hdr-jefe-guardia-sel');
           if (sel) sel.value = jefeGuardiaActual || '';
-          // Drawer sync (V.11.5.5)
+          // Drawer sync (V.12.0.0)
           const dVal = document.getElementById('drawer-jefe-guardia-val');
           if (dVal) dVal.textContent = jefeGuardiaActual || 'Sin asignar';
           const dSel = document.getElementById('drawer-jefe-guardia-sel');
@@ -5772,7 +5772,7 @@ ${dataContext}
           if (valEl) valEl.textContent = 'Sin asignar';
           const sel = document.getElementById('hdr-jefe-guardia-sel');
           if (sel) sel.value = '';
-          // Drawer sync (V.11.5.5)
+          // Drawer sync (V.12.0.0)
           const dVal = document.getElementById('drawer-jefe-guardia-val');
           if (dVal) dVal.textContent = 'Sin asignar';
           const dSel = document.getElementById('drawer-jefe-guardia-sel');
@@ -5854,7 +5854,7 @@ ${dataContext}
       });
     });
 
-    // --- LOGICA MOBILE V.11.5.5 ---
+    // --- LOGICA MOBILE V.12.0.0 ---
     window.toggleMobileMenu = () => {
       document.getElementById('mobile-menu-overlay').classList.toggle('open');
     };
@@ -5887,7 +5887,7 @@ ${dataContext}
     };
 
     // ==========================================
-    // MÓDULO DE PREVENTIVOS - LÓGICA (V.11.5.5)
+    // MÓDULO DE PREVENTIVOS - LÓGICA (V.12.0.0)
     // ==========================================
 
     window.initMapPreventivos = () => {
@@ -5916,7 +5916,7 @@ ${dataContext}
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         });
 
-        // V.11.5.5: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
+        // V.12.0.0: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
         google.maps.event.addListenerOnce(mapPreventivos, 'tilesloaded', function () {
           ensureOystaScriptIsRunning();
           cargarVehiculosOysta(true);
@@ -5926,7 +5926,7 @@ ${dataContext}
       }
     };
 
-    // Control de capas y vehículos (V.11.5.5)
+    // Control de capas y vehículos (V.12.0.0)
     window.refreshPreventivosMap = () => {
       if (mapPreventivos) {
         google.maps.event.trigger(mapPreventivos, 'resize');
@@ -5960,7 +5960,7 @@ ${dataContext}
       const list = document.getElementById('prev-oysta-vehicle-list');
       if (!list || !vehicles) return;
 
-      // V.11.5.5: Cargar preferences guardadas de preventivos en local
+      // V.12.0.0: Cargar preferences guardadas de preventivos en local
       if (currentUser && Object.keys(visibleVehiclesPrev).length === 0) {
         const saved = localStorage.getItem(`emercre_vehs_prev_${currentUser.uid}`);
         if (saved) {
@@ -5976,7 +5976,7 @@ ${dataContext}
         const isVisible = visibleVehiclesPrev[mid];
         const div = document.createElement('div');
         div.className = 'vehicle-selector-item';
-        // V.11.5.5 Fix: Mostrar indicativo local si existe asociación
+        // V.12.0.0 Fix: Mostrar indicativo local si existe asociación
         const localVeh = localVehiclesByOystaId[mid];
         const displayName = localVeh ? `${localVeh.indicativo} (${v.name})` : v.name;
 
@@ -6041,11 +6041,11 @@ ${dataContext}
           map: ((isVisible && currentUserDoc?.canSeeVehicles) || movingFilter || isLocalAssigned) ? mapPreventivos : null,
           content: content,
           title: v.name,
-          zIndex: 1000, // V.11.5.5
+          zIndex: 1000, // V.12.0.0
           gmpClickable: true
         });
 
-        // V.11.5.5: Delegate click to custom content
+        // V.12.0.0: Delegate click to custom content
         marker.addListener('gmp-click', () => {
           if (content && typeof content.click === 'function') content.click();
         });
@@ -6056,16 +6056,16 @@ ${dataContext}
 
     window.cargarPreventivos = () => {
       if (unsubPreventivos) unsubPreventivos();
-      // V.11.5.5: Limitar a los 50 preventivos más recientes
+      // V.12.0.0: Limitar a los 50 preventivos más recientes
       const q = query(collection(db, 'preventivos'), orderBy('creadoEn', 'desc'), limit(50));
       unsubPreventivos = onSnapshot(q, snap => {
-        // V.11.5.5: Poblar cache inmediatamente para evitar problemas de sincronía con intervenciones
+        // V.12.0.0: Poblar cache inmediatamente para evitar problemas de sincronía con intervenciones
         snap.forEach(doc => {
           preventivosCache[doc.id] = doc.data();
         });
         lastPreventivosSnap = snap;
         renderPreventivosList(snap);
-        // V.11.5.5: Si la cache cambia, re-procesamos marcadores por si faltaba el padre
+        // V.12.0.0: Si la cache cambia, re-procesamos marcadores por si faltaba el padre
         if (typeof window.refreshGlobalPreventivoMarkers === 'function') {
           window.refreshGlobalPreventivoMarkers();
         }
@@ -6090,12 +6090,12 @@ ${dataContext}
         const p = doc.data();
         const id = doc.id;
 
-        // V.11.5.5: Filtrado Provincial
+        // V.12.0.0: Filtrado Provincial
         if (selectedProvincia !== 'Andalucía' && p.provincia !== selectedProvincia) return '';
 
         preventivosCache[id] = p;
 
-        // V.11.5.5: Filtrar si está finalizado/oculto
+        // V.12.0.0: Filtrar si está finalizado/oculto
         if (p.abierta === false && !canShowHidden()) return '';
         if (p.oculta === true && !mostrarCerradas) return '';
 
@@ -6179,7 +6179,7 @@ ${dataContext}
         document.getElementById('prev-main-dias').value = '';
       }
 
-      // V.11.5.5: Limpiar y cargar recursos para preventivo de 1 día
+      // V.12.0.0: Limpiar y cargar recursos para preventivo de 1 día
       const resCont = document.getElementById('prev-main-recursos-wrap');
       resCont.style.display = 'none';
       const resList = document.getElementById('prev-main-recursos-list');
@@ -6260,7 +6260,7 @@ ${dataContext}
         }
       } else fDias.value = '';
 
-      // V.11.5.5: Mostrar recursos si es 1 día
+      // V.12.0.0: Mostrar recursos si es 1 día
       resWrap.style.display = (fDias.value == 1) ? 'block' : 'none';
     };
 
@@ -6285,7 +6285,7 @@ ${dataContext}
             actualizadoEn: serverTimestamp()
           });
 
-          // V.11.5.5: Si al editar sigue siendo 1 día, sincronizar el subpreventivo "Día Único"
+          // V.12.0.0: Si al editar sigue siendo 1 día, sincronizar el subpreventivo "Día Único"
           if (dias === 1) {
             const recursos = Array.from(document.querySelectorAll('input[name="prev-main-recurso-v"]:checked')).map(cb => cb.value);
             const qSub = query(collection(db, 'preventivos', editingPreventivoId, 'subpreventivos'));
@@ -6334,7 +6334,7 @@ ${dataContext}
             creadoEn: serverTimestamp()
           });
 
-          // V.11.5.5: Si es 1 día, crear subpreventivo automáticamente
+          // V.12.0.0: Si es 1 día, crear subpreventivo automáticamente
           if (dias === 1) {
             const recursos = Array.from(document.querySelectorAll('input[name="prev-main-recurso-v"]:checked')).map(cb => cb.value);
             await addDoc(collection(db, 'preventivos', ref.id, 'subpreventivos'), {
@@ -6373,14 +6373,14 @@ ${dataContext}
       const side = document.getElementById('preventivos-detail-panel');
       if (side) side.classList.remove('open');
 
-      // V.11.5.5: Limpieza de rastro de lista global
+      // V.12.0.0: Limpieza de rastro de lista global
       const globalRow = document.getElementById('prev-global-active-intervenciones');
       if (globalRow) globalRow.style.display = 'none';
 
-      // if (typeof clearPreventivoMarkers === 'function') clearPreventivoMarkers(); // Removido V.11.5.5
+      // if (typeof clearPreventivoMarkers === 'function') clearPreventivoMarkers(); // Removido V.12.0.0
 
       const p = preventivosCache[id];
-      // V.11.5.5: Permitir navegación aunque esté cerrado para quienes puedan verlo
+      // V.12.0.0: Permitir navegación aunque esté cerrado para quienes puedan verlo
       // if (p && p.abierta === false) { ... }
 
       if (isCurrentlyOpen) {
@@ -6403,7 +6403,7 @@ ${dataContext}
       bread.innerHTML = `<span style="color:var(--text-3); cursor:pointer;" onclick="backToPreventivosList()">🗓️ Preventivo:</span> <span style="font-weight:700;">${p.nombre}</span>`;
 
       cargarSubpreventivos(id, (subIds) => {
-        // V.11.5.5: Asegurar que el acordeón se expande antes de intentar seleccionar
+        // V.12.0.0: Asegurar que el acordeón se expande antes de intentar seleccionar
         if (wrap) wrap.style.display = 'block';
 
         // Atajo para 1 día — Abrir detalle directamente
@@ -6425,7 +6425,7 @@ ${dataContext}
         }
       }).catch(e => console.error("Error cargando vehículos:", e));
 
-      // V.11.5.5: Hacer zoom ajustado al interactuar
+      // V.12.0.0: Hacer zoom ajustado al interactuar
       window._preventivosNeedsZoom = true;
       if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
     };
@@ -6436,18 +6436,18 @@ ${dataContext}
       if (unsubSubpreventivos) unsubSubpreventivos();
       if (unsubIntervenciones) unsubIntervenciones();
 
-      window.clearPreventivoMapEffects(); // V.11.5.5
+      window.clearPreventivoMapEffects(); // V.12.0.0
 
       document.querySelectorAll('[id^="prev-dias-wrap-"]').forEach(el => el.style.display = 'none');
       document.querySelectorAll('#preventivos-list .op-card').forEach(c => c.style.border = '');
 
-      // V.11.5.5: Cerrar panel lateral si estuviera abierto
+      // V.12.0.0: Cerrar panel lateral si estuviera abierto
       const side = document.getElementById('preventivos-detail-panel');
       if (side) side.classList.remove('open');
 
       document.getElementById('prev-breadcrumb').style.display = 'none';
 
-      // V.11.5.5: Refrescar suscripción global al volver a la raíz
+      // V.12.0.0: Refrescar suscripción global al volver a la raíz
       suscribirGlobalPreventivoIntervenciones();
     };
 
@@ -6476,7 +6476,7 @@ ${dataContext}
         const id = doc.id;
         subpreventivosCache[id] = d;
 
-        // V.11.5.5: Filtrar si está cerrado/oculto
+        // V.12.0.0: Filtrar si está cerrado/oculto
         if (d.abierta === false && !canShowHidden()) return '';
         if (d.oculta === true && !mostrarCerradas) return '';
 
@@ -6580,7 +6580,7 @@ ${dataContext}
     window.cerrarDetallePreventivo = () => {
       currentPreventivoDiaId = null;
       activeIntManageId = null;
-      window.clearPreventivoMapEffects(); // V.11.5.5: Limpiar mapa al salir del día
+      window.clearPreventivoMapEffects(); // V.12.0.0: Limpiar mapa al salir del día
       document.getElementById('preventivos-detail-panel').classList.remove('open');
       // Refrescar acordeón para quitar resaltado
       if (currentPreventivoId) cargarSubpreventivos(currentPreventivoId);
@@ -6594,7 +6594,7 @@ ${dataContext}
         }
       }
 
-      // V.11.5.5: Hacer zoom ajustado al interactuar
+      // V.12.0.0: Hacer zoom ajustado al interactuar
       window._preventivosNeedsZoom = true;
       if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
     };
@@ -6615,7 +6615,7 @@ ${dataContext}
         } else {
           await addDoc(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos'), {
             nombre, fecha, recursos,
-            abierta: true, // V.11.5.5: Explícito
+            abierta: true, // V.12.0.0: Explícito
             creadoEn: serverTimestamp()
           });
           mostrarToast('Día añadido');
@@ -6676,12 +6676,12 @@ ${dataContext}
       const side = document.getElementById('preventivos-detail-panel');
 
       if (side && side.classList.contains('open') && currentPreventivoDiaId === id) {
-        // V.11.5.5: Si ya estaba abierto este día y clicamos sobre él, lo cerramos
+        // V.12.0.0: Si ya estaba abierto este día y clicamos sobre él, lo cerramos
         cerrarDetallePreventivo();
         return;
       }
 
-      // V.11.5.5: Permitir navegación aunque el día esté cerrado
+      // V.12.0.0: Permitir navegación aunque el día esté cerrado
       // if (d && d.abierta === false) { ... }
 
       currentPreventivoId = d?.preventivoId || currentPreventivoId;
@@ -6730,19 +6730,19 @@ ${dataContext}
 
       cargarIntervenciones(currentPreventivoId, id);
 
-      // V.11.5.5: Hacer zoom ajustado al interactuar
+      // V.12.0.0: Hacer zoom ajustado al interactuar
       window._preventivosNeedsZoom = true;
       if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
     };
 
     window.backToPreventivoDias = () => {
-      // V.11.5.5: Esto ahora solo cierra el detalle ya que el acordeón es permanente
+      // V.12.0.0: Esto ahora solo cierra el detalle ya que el acordeón es permanente
       cerrarDetallePreventivo();
     };
 
     function cargarIntervenciones(pId, dId) {
       if (unsubIntervenciones) unsubIntervenciones();
-      // V.11.5.5: Limitar a las últimas 50 intervenciones del día
+      // V.12.0.0: Limitar a las últimas 50 intervenciones del día
       const q = query(collection(db, 'preventivos', pId, 'subpreventivos', dId, 'intervenciones'), orderBy('timestamp', 'desc'), limit(50));
       unsubIntervenciones = onSnapshot(q, snap => {
         lastIntervencionesSnap = snap;
@@ -6755,7 +6755,7 @@ ${dataContext}
       const cont = document.getElementById('prev-intervenciones-container');
       if (!cont) return;
 
-      // V.11.5.5: Los marcadores ahora los gestiona suscribirGlobalPreventivoIntervenciones
+      // V.12.0.0: Los marcadores ahora los gestiona suscribirGlobalPreventivoIntervenciones
       // ya no limpiamos ni añadimos aquí para que sean persistentes en todo el módulo.
 
       if (snap.empty) {
@@ -6777,11 +6777,11 @@ ${dataContext}
         if (i.coords && i.oculta !== true && !(isClosed && currentRole === 'usuario')) {
           hasCoords = true;
           bounds.extend(i.coords);
-          // addInterventionMarker(markerId, i); // Removido V.11.5.5
+          // addInterventionMarker(markerId, i); // Removido V.12.0.0
         }
 
         if (i.oculta === true && !mostrarCerradas) return '';
-        if (isClosed && currentRole === 'usuario') return ''; // V.11.5.5: Usuarios no ven cerradas
+        if (isClosed && currentRole === 'usuario') return ''; // V.12.0.0: Usuarios no ven cerradas
 
         const prioColor = { azul: '#3498db', amarillo: '#f1c40f', rojo: '#e74c3c', negro: '#000' }[i.prioridad] || '#95a5a6';
 
@@ -6836,7 +6836,7 @@ ${dataContext}
         }).join('')}
                   </div>
                   </div>
-                  <!--V.11.5.5: Sección de gestión inline-->
+                  <!--V.12.0.0: Sección de gestión inline-->
         <div id="prev-int-manage-${markerId}" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border-mid);" onclick="event.stopPropagation()">
           <!-- Se rellena al abrir -->
         </div>
@@ -6846,10 +6846,10 @@ ${dataContext}
 
       intervencionesCache = intCache;
 
-      // V.11.5.5: Refrescar semáforos de la cabecera reactivamente
+      // V.12.0.0: Refrescar semáforos de la cabecera reactivamente
       if (currentPreventivoDiaId) renderHeaderResourceBadges(currentPreventivoDiaId);
 
-      // V.11.5.5: Si había un panel abierto, lo recuperamos (para que se vean los comentarios nuevos reactivamente)
+      // V.12.0.0: Si había un panel abierto, lo recuperamos (para que se vean los comentarios nuevos reactivamente)
       if (activeIntManageId && intervencionesCache[activeIntManageId]) {
         setTimeout(() => abrirGestionIntervencion(activeIntManageId, true), 10);
       }
@@ -6888,7 +6888,7 @@ ${dataContext}
 
       // Sin filtro where para evitar error de índice en collectionGroup.
       // El filtro de abierta===true se hace en el cliente dentro de refreshGlobalPreventivoMarkers.
-      // V.11.5.5: CRÍTICO - Filtrar en servidor solo intervenciones ABIERTAS.
+      // V.12.0.0: CRÍTICO - Filtrar en servidor solo intervenciones ABIERTAS.
       // Esto ahorra miles de lecturas al no descargar el histórico cerrado.
       unsubGlobalPreventivoIntervenciones = onSnapshot(query(collectionGroup(db, 'intervenciones')), snap => {
         lastGlobalInterventionDocs = snap.docs.filter(d => d.data().abierta === true);
@@ -6898,7 +6898,7 @@ ${dataContext}
         console.error("[Preventivos] Error en suscripción global intervenciones:", err);
       });
 
-      // V.11.5.5: Suscribir a subpreventivos sin 'where' para evitar error de índice si no existe
+      // V.12.0.0: Suscribir a subpreventivos sin 'where' para evitar error de índice si no existe
       if (unsubGlobalSubpreventivos) unsubGlobalSubpreventivos();
       unsubGlobalSubpreventivos = onSnapshot(query(collectionGroup(db, 'subpreventivos')), snap => {
         lastGlobalSubpreventivoDocs = snap.docs.filter(d => d.data().abierta === true);
@@ -6917,7 +6917,7 @@ ${dataContext}
         doc.ref.path.startsWith('preventivos/') && doc.data().abierta === true
       );
 
-      // V.11.5.5: Recopilar todos los recursos asignados con redundancia (snapshots globales + caches locales)
+      // V.12.0.0: Recopilar todos los recursos asignados con redundancia (snapshots globales + caches locales)
       const assignedResourceIds = new Set();
       const addRids = (arr) => { if (arr && Array.isArray(arr)) arr.forEach(rid => { if (rid) assignedResourceIds.add(String(rid)); }); };
 
@@ -6946,7 +6946,7 @@ ${dataContext}
         const parentPrevId = doc.ref.path.split('/')[1];
         const parentData = preventivosCache[parentPrevId];
 
-        // V.11.5.5: Si la cache aún no tiene el padre, lo incluimos provisionalmente
+        // V.12.0.0: Si la cache aún no tiene el padre, lo incluimos provisionalmente
         // para no perder marcadores mientras la cache se llena
         if (!parentData) return true;
 
@@ -6962,17 +6962,17 @@ ${dataContext}
         }
       });
 
-      // V.11.5.5: Mostrar vehículos Oysta vinculados a CUALQUIER preventivo abierto
+      // V.12.0.0: Mostrar vehículos Oysta vinculados a CUALQUIER preventivo abierto
       renderPreventivoAssignedVehicles(filteredDocs, assignedResourceIds);
 
-      // V.11.5.5: Forzar refresco de visibilidad de todos los marcadores Oysta en este mapa
+      // V.12.0.0: Forzar refresco de visibilidad de todos los marcadores Oysta en este mapa
       if (oystaVehiclesCache && oystaVehiclesCache.length) {
         oystaVehiclesCache.forEach(v => {
           if (typeof syncOystaMarkerPrev === 'function') syncOystaMarkerPrev(v);
         });
       }
 
-      // V.11.5.5: Auto-zoom al entrar a Preventivos o abrir/cambiar
+      // V.12.0.0: Auto-zoom al entrar a Preventivos o abrir/cambiar
       if (window._preventivosNeedsZoom && mapPreventivos) {
         setTimeout(() => {
           let hasCoords = false;
@@ -7003,7 +7003,7 @@ ${dataContext}
     };
 
 
-    // V.11.5.5: Renderiar en el mapa los vehículos Oysta, e incluir RUTA DINÁMICA hacia su intervención asignada
+    // V.12.0.0: Renderiar en el mapa los vehículos Oysta, e incluir RUTA DINÁMICA hacia su intervención asignada
     function renderPreventivoAssignedVehicles(interventionDocs, allAssignedIds) {
       if (!mapPreventivos) return;
       if (!allAssignedIds) allAssignedIds = new Set();
@@ -7083,14 +7083,14 @@ ${dataContext}
           gmpClickable: true
         });
 
-        // V.11.5.5: Delegate click to custom content
+        // V.12.0.0: Delegate click to custom content
         marker.addListener('gmp-click', () => {
           if (content && typeof content.click === 'function') content.click();
         });
 
         window._prevIntVehicleMarkers[vehicleId] = marker;
 
-        // V.11.5.5: Monitorización de Estados (Salida y Llegada Automática)
+        // V.12.0.0: Monitorización de Estados (Salida y Llegada Automática)
         let dist = 999;
         let hasArrivedRemote = false;
         let hasLeftLocationRemote = false;
@@ -7168,7 +7168,7 @@ ${dataContext}
             console.log("[Oysta] Logged arrival PREV:", text);
           }
 
-          // 3. Hospital Carlos Haya (V.11.5.5)
+          // 3. Hospital Carlos Haya (V.12.0.0)
           const chCoords = { lat: 36.723012376884185, lng: -4.450232328090476 };
           const distCH = calculateHaversineDist(pos, chCoords);
           if (renderData.isUrgente) {
@@ -7188,7 +7188,7 @@ ${dataContext}
               };
               updateDoc(iDoc.ref, { comentarios: [...(iData.comentarios || []), logCH] });
             }
-            // Salida CH (decalaje dinámico - V.11.5.5)
+            // Salida CH (decalaje dinámico - V.12.0.0)
             if (isAtHosp && distCH > 0.2) {
               const text = `🏥 ${indicativo} sale de Hospital Regional Carlos Haya.`;
 
@@ -7268,10 +7268,10 @@ ${dataContext}
           }
         }
 
-        // ------ B. RUTA DINÁMICA (V.11.5.5) ------
+        // ------ B. RUTA DINÁMICA (V.12.0.0) ------
         const reachedLocation = (dist < 0.1) || hasArrivedRemote || hasLeftLocationRemote;
 
-        // V.11.5.5: Ahora mostramos ruta para TODAS las intervenciones asignadas (se omite filtro isUrgente)
+        // V.12.0.0: Ahora mostramos ruta para TODAS las intervenciones asignadas (se omite filtro isUrgente)
         if (directionsService && renderData.coords && !reachedLocation) {
           const routeKey = `${vehicleId}_${renderData.id}`;
           activeRouteKeys.add(routeKey);
@@ -7285,7 +7285,7 @@ ${dataContext}
                 preserveViewport: true, // ¡CRÍTICO! Para que no se mueva el mapa al refrescar solo cada 15s
                 polylineOptions: { strokeColor: '#1a3a6e', strokeOpacity: 0.8, strokeWeight: 5 }
               }),
-              labelMarker: null, // V.11.5.5: Etiqueta central de info
+              labelMarker: null, // V.12.0.0: Etiqueta central de info
               lastPos: null,
               lastDest: null
             };
@@ -7309,7 +7309,7 @@ ${dataContext}
                 routeObj.renderer.setDirections(result);
                 if (routeObj.fallbackLine) { routeObj.fallbackLine.setMap(null); routeObj.fallbackLine = null; }
 
-                // V.11.5.5: Generar y colocar la etiqueta a la derecha del vehículo
+                // V.12.0.0: Generar y colocar la etiqueta a la derecha del vehículo
                 if (!routeObj.labelMarker) {
                   const labelDiv = document.createElement('div');
                   // Transform translate la desplaza a la derecha y un poco más arriba del marcador de Oysta
@@ -7323,7 +7323,7 @@ ${dataContext}
 
                 const leg = result.routes[0].legs[0];
                 if (leg) {
-                  routeObj.labelMarker.position = pos; // V.11.5.5: Posición del vehículo
+                  routeObj.labelMarker.position = pos; // V.12.0.0: Posición del vehículo
                   routeObj.labelMarker.content.innerHTML = `<span style="opacity:0.8; font-size:10px;">🚩</span> ${leg.distance.text} <span style="opacity:0.4; margin:0 2px;">|</span> <span style="opacity:0.8; font-size:10px;">⏱️</span> ${leg.duration.text}`;
                 }
 
@@ -7472,7 +7472,7 @@ ${dataContext}
               const va = window.globalVehiculos && window.globalVehiculos[a];
               const vb = window.globalVehiculos && window.globalVehiculos[b];
 
-              // V.11.5.5: Priorizar por ranking de cercanía si existe
+              // V.12.0.0: Priorizar por ranking de cercanía si existe
               const rankA = va?.oystaId ? (window._ambulanceRanks[String(va.oystaId)]?.rank || 999) : 999;
               const rankB = vb?.oystaId ? (window._ambulanceRanks[String(vb.oystaId)]?.rank || 999) : 999;
 
@@ -7492,7 +7492,7 @@ ${dataContext}
               else if (v?.tipo?.includes('Turismo')) iconUrl = 'assets/icons/icon_turismo.png';
               else if (v?.tipo?.includes('mixto')) iconUrl = 'assets/icons/icon_transp_mixto.png';
 
-              // V.11.5.5: Obtener ranking si existe
+              // V.12.0.0: Obtener ranking si existe
               const oystaId = v?.oystaId;
               const rankInfo = oystaId && window._ambulanceRanks && window._ambulanceRanks[String(oystaId)];
 
@@ -7512,7 +7512,7 @@ ${dataContext}
       }
 
       document.getElementById('overlay-preventivo-intervencion').style.display = 'flex';
-      // V.11.5.5: Si ya hay coordenadas al abrir, calculamos ranking
+      // V.12.0.0: Si ya hay coordenadas al abrir, calculamos ranking
       if (pickedCoordsPrev && typeof window.calcularAmbulanciasCercanasPrev === 'function') {
         window.calcularAmbulanciasCercanasPrev(pickedCoordsPrev);
       }
@@ -7588,7 +7588,7 @@ ${dataContext}
           });
         }
 
-        // V.11.5.5: Re-ordenar las tarjetas en el modal si está abierto
+        // V.12.0.0: Re-ordenar las tarjetas en el modal si está abierto
         const recList = document.getElementById('prev-int-recursos-list');
         if (recList) {
           const container = recList.querySelector('div');
@@ -7652,7 +7652,7 @@ ${dataContext}
           title: "Intervención (Pin)"
         });
 
-        // V.11.5.5: Calcular cercanía de ambulancias al situar pin
+        // V.12.0.0: Calcular cercanía de ambulancias al situar pin
         if (typeof window.calcularAmbulanciasCercanasPrev === 'function') {
           window.calcularAmbulanciasCercanasPrev(pickedCoordsPrev);
         }
@@ -7740,7 +7740,7 @@ ${dataContext}
       if (prevMarkerInt) prevMarkerInt.setMap(null);
       prevMarkerInt = null;
 
-      // V.11.5.5: Limpiar ranking al cerrar el modal (reutilizando helper)
+      // V.12.0.0: Limpiar ranking al cerrar el modal (reutilizando helper)
       window.clearAmbulanceRanking();
     };
 
@@ -7799,7 +7799,7 @@ ${dataContext}
           data.oculta = false;
           data.timestamp = serverTimestamp();
 
-          // V.11.5.5: Log inicial de recursos
+          // V.12.0.0: Log inicial de recursos
           let initialComms = [];
           if (recs && recs.length > 0) {
             const logEntries = recs.map(rvId => {
@@ -8137,7 +8137,7 @@ ${dataContext}
         });
         if (newStatus === false) {
           activeIntManageId = null;
-          window.clearPreventivoMapEffects(); // V.11.5.5
+          window.clearPreventivoMapEffects(); // V.12.0.0
         }
 
         mostrarToast(newStatus ? 'Intervención reabierta' : 'Intervención cerrada y recursos liberados');
@@ -8161,7 +8161,7 @@ ${dataContext}
       if (!confirm('¿Seguro que deseas eliminar esta intervención permanentemente?')) return;
       try {
         await deleteDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id));
-        window.clearPreventivoMapEffects(); // V.11.5.5
+        window.clearPreventivoMapEffects(); // V.12.0.0
         mostrarToast('Intervención eliminada');
       } catch (e) { alert('Error al borrar: ' + e.message); }
     };
@@ -8170,14 +8170,14 @@ ${dataContext}
       if (!canDeleteSubpreventivo()) { mostrarToast('No tienes permiso para borrar días'); return; }
       if (!confirm('¿Seguro que deseas eliminar este día y todas sus intervenciones permanentemente?')) return;
       try {
-        // V.11.5.5: Borrado paulatino de intervenciones
+        // V.12.0.0: Borrado paulatino de intervenciones
         const intSnap = await getDocs(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos', id, 'intervenciones'));
         for (const intDoc of intSnap.docs) {
           // Si estaba abierta, liberamos (opcional por ser borrado, pero más seguro)
           await deleteDoc(intDoc.ref);
         }
         await deleteDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', id));
-        window.clearPreventivoMapEffects(); // V.11.5.5
+        window.clearPreventivoMapEffects(); // V.12.0.0
         if (currentPreventivoDiaId === id) cerrarDetallePreventivo();
         mostrarToast('Día e intervenciones eliminadas');
       } catch (e) { alert('Error al borrar: ' + e.message); }
@@ -8187,7 +8187,7 @@ ${dataContext}
       if (!canDeletePreventivo()) { mostrarToast('No tienes permiso para borrar preventivos'); return; }
       if (!confirm('¿Seguro que deseas eliminar este preventivo y TODO su contenido permanentemente?')) return;
       try {
-        // V.11.5.5: Borrado paulatino (recursivo)
+        // V.12.0.0: Borrado paulatino (recursivo)
         const snap = await getDocs(collection(db, 'preventivos', id, 'subpreventivos'));
         for (const docSub of snap.docs) {
           const intSnap = await getDocs(collection(db, 'preventivos', id, 'subpreventivos', docSub.id, 'intervenciones'));
@@ -8195,14 +8195,14 @@ ${dataContext}
           await deleteDoc(docSub.ref);
         }
         await deleteDoc(doc(db, 'preventivos', id));
-        window.clearPreventivoMapEffects(); // V.11.5.5
+        window.clearPreventivoMapEffects(); // V.12.0.0
         if (currentPreventivoId === id) backToPreventivosList();
         mostrarToast('Preventivo y todo su contenido eliminado');
       } catch (e) { alert('Error al borrar: ' + e.message); }
     };
 
     let currentComIntId = null;
-    let currentComMode = 'intervencion'; // V.11.5.5: 'intervencion' o 'dia'
+    let currentComMode = 'intervencion'; // V.12.0.0: 'intervencion' o 'dia'
 
     window.abrirComentarios = (id, mode = 'intervencion') => {
       currentComMode = mode;
@@ -8225,7 +8225,7 @@ ${dataContext}
       renderComentariosList(data.comentarios || []);
       document.getElementById('prev-comentario-txt').value = '';
 
-      // V.11.5.5: Ocultar controles de añadir comentario solo si no puede comentar (relajado)
+      // V.12.0.0: Ocultar controles de añadir comentario solo si no puede comentar (relajado)
       const canComment = (mode === 'intervencion') ? canCommentIntervencion(data) : canCommentSubpreventivo(data);
       document.querySelector('#overlay-prev-comentarios .field').style.display = canComment ? 'block' : 'none';
       document.querySelector('#overlay-prev-comentarios .btn-reg').style.display = canComment ? 'inline-block' : 'none';
@@ -8261,7 +8261,7 @@ ${dataContext}
       let data = (currentComMode === 'intervencion') ? intervencionesCache[currentComIntId] : subpreventivosCache[currentComIntId];
       if (!data) return;
 
-      // V.11.5.5: Guard de seguridad relajado para comentarios
+      // V.12.0.0: Guard de seguridad relajado para comentarios
       const canComment = (currentComMode === 'intervencion') ? canCommentIntervencion(data) : canCommentSubpreventivo(data);
       if (!canComment) { mostrarToast('No tienes permiso para comentar aquí (posiblemente cerrado)'); return; }
 
@@ -8288,7 +8288,7 @@ ${dataContext}
         });
         document.getElementById('prev-comentario-txt').value = '';
         mostrarToast('Comentario guardado');
-        // V.11.5.5: Refrescar modal forzando apertura
+        // V.12.0.0: Refrescar modal forzando apertura
         if (currentComMode === 'intervencion') abrirGestionIntervencion(currentComIntId, true);
         // renderComentariosList se actualizará por el snapshot listener de cargarSubpreventivos/cargarIntervenciones
         // O lo forzamos aquí localmente si queremos feedback instantáneo
@@ -8304,7 +8304,7 @@ ${dataContext}
 
       panToPreventivoMarker(id);
 
-      // V.11.5.5: También forzamos redimensionamiento inteligente
+      // V.12.0.0: También forzamos redimensionamiento inteligente
       window._preventivosNeedsZoom = true;
       if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
 
@@ -8336,7 +8336,7 @@ ${dataContext}
         ${(i.comentarios || []).slice().reverse().map((c, idx) => {
           const originalIdx = (i.comentarios.length - 1) - idx;
           const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
-          // V.11.5.5: Admin (Responsable), Manager (Administrador) y SuperAdmin para normales. Solo SuperAdmin para Oysta.
+          // V.12.0.0: Admin (Responsable), Manager (Administrador) y SuperAdmin para normales. Solo SuperAdmin para Oysta.
           const isPowerUser = (currentRole === 'admin' || currentRole === 'manager' || currentRole === 'super_admin');
           const canManageCom = canEdit && (!isOysta ? isPowerUser : (currentRole === 'super_admin'));
           return `
@@ -8408,7 +8408,7 @@ ${dataContext}
             }).join('')
           : `<div style="font-size:10px; color:var(--text-4); text-align:center; padding:6px;">No hay más vehículos libres para este día.</div> `;
 
-        // V.11.5.5: Renderizar recursos YA ASIGNADOS con opción de retirar
+        // V.12.0.0: Renderizar recursos YA ASIGNADOS con opción de retirar
         const assignedRecsHtml = (i.recursosAsignados || []).map(rvId => {
           const v = window.globalVehiculos && window.globalVehiculos[rvId];
           let iconUrl = 'assets/icons/icon_transp_personal.png';
@@ -8502,7 +8502,7 @@ ${dataContext}
       if (!i || !i.comentarios || !i.comentarios[index]) return;
       const c = i.comentarios[index];
 
-      // Permisos V.11.5.5
+      // Permisos V.12.0.0
       if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso'); return; }
 
       const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
@@ -8535,10 +8535,10 @@ ${dataContext}
       if (!i || !i.comentarios || !i.comentarios[index]) return;
       const c = i.comentarios[index];
 
-      // Permiso base (V.11.5.5)
+      // Permiso base (V.12.0.0)
       if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para editar comentarios'); return; }
 
-      // Restricción Oysta (V.11.5.5)
+      // Restricción Oysta (V.12.0.0)
       const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
       if (isOysta && currentRole !== 'super_admin') {
         mostrarToast('Solo los Super Administradores pueden editar avisos de Oysta');
@@ -8554,7 +8554,7 @@ ${dataContext}
       let d = new Date();
       if (c.timestamp) d = new Date(c.timestamp);
       else if (c.fecha) {
-        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.11.5.5)
+        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.12.0.0)
         const parts = c.fecha.split(/[ ,]+/);
         if (parts.length >= 2) {
           const fParts = parts[0].split("/");
@@ -8623,7 +8623,7 @@ ${dataContext}
       }
     };
 
-    window.cerrarModalGestionInt = () => { /* No longer used in V.11.5.5 */ };
+    window.cerrarModalGestionInt = () => { /* No longer used in V.12.0.0 */ };
 
     window.asignarRecursoIntervencion = async (id, recurso) => {
       const i = intervencionesCache[id];
@@ -8654,7 +8654,7 @@ ${dataContext}
           actualizadoEn: serverTimestamp()
         });
         mostrarToast('Recurso asignado');
-        // V.11.5.5: Refrescar modal forzando apertura
+        // V.12.0.0: Refrescar modal forzando apertura
         abrirGestionIntervencion(id, true);
       } catch (e) { console.error(e); }
     };
@@ -8688,7 +8688,7 @@ ${dataContext}
           actualizadoEn: serverTimestamp()
         });
         mostrarToast('Recurso retirado');
-        // V.11.5.5: Refrescar modal forzando apertura
+        // V.12.0.0: Refrescar modal forzando apertura
         abrirGestionIntervencion(id, true);
       } catch (e) { console.error(e); }
     };
@@ -8731,7 +8731,7 @@ ${dataContext}
       }
     };
 
-    // ── LOGS ADMIN JS (V.11.5.5) ────────────────────────────────────────
+    // ── LOGS ADMIN JS (V.12.0.0) ────────────────────────────────────────
     window.abrirModalLogsAdmin = () => {
       document.getElementById('overlay-logs-admin').classList.add('open');
     };
@@ -8808,7 +8808,7 @@ ${dataContext}
       }
     };
 
-    // ── API USAGE LOGIC (V.11.5.5) ──────────────────────────────────────
+    // ── API USAGE LOGIC (V.12.0.0) ──────────────────────────────────────
     window.abrirModalApiUsage = () => {
       cerrarModalLogsAdmin();
       document.getElementById('overlay-api-usage').classList.add('open');
@@ -8818,7 +8818,7 @@ ${dataContext}
       document.getElementById('overlay-api-usage').classList.remove('open');
     };
 
-    // V.11.5.5: Gestión de Conmutación de Google Maps
+    // V.12.0.0: Gestión de Conmutación de Google Maps
     window.guardarMapsConfig = async () => {
       if (currentRole !== 'super_admin') {
         mostrarToast("Solo los Super Administradores pueden cambiar la configuración.");
@@ -8867,7 +8867,7 @@ ${dataContext}
       const statusEl = document.getElementById('api-sync-status');
       if (statusEl) statusEl.textContent = '⏳ Sincronizando con Google...';
 
-      // 3. CARGAR CONFIGURACIÓN MAPS (V.11.5.5)
+      // 3. CARGAR CONFIGURACIÓN MAPS (V.12.0.0)
       if (currentRole === 'super_admin') {
         try {
           const mSnap = await getDoc(doc(db, 'config', 'maps'));
@@ -8879,7 +8879,7 @@ ${dataContext}
         } catch (e) { console.warn("Error cargando config Maps:", e); }
       }
 
-      // 1. INTENTAR DATOS REALES DESDE GOOGLE CLOUD (V.11.5.5)
+      // 1. INTENTAR DATOS REALES DESDE GOOGLE CLOUD (V.12.0.0)
       try {
         const getReal = httpsCallable(functions, 'getRealApiUsage');
         const res = await getReal();
@@ -8967,7 +8967,7 @@ ${dataContext}
         const totalMapsReqs = n(mData.maps_load) + n(mData.maps_route) + n(mData.maps_places) + n(mData.maps_geocode);
 
         updateUsageUI('maps', mapsCost, 200, `$${mapsCost.toFixed(2)} (Est) / - (Real)`, `${totalMapsReqs} (Est) / - (Real) peticiones`);
-        // V.11.5.5: Restaurado a 1500 peticiones/día (Límite Gemini Flash Lite Free)
+        // V.12.0.0: Restaurado a 1500 peticiones/día (Límite Gemini Flash Lite Free)
         updateUsageUI('gemini', n(dData.ia_report), 1500, `${n(dData.ia_report)} (Est) / - (Real)`, `Peticiones hoy (Límite: 1500 | Reset: 09:00 PT)`);
         updateUsageUI('fs-reads', n(dData.fs_read), 50000, `${n(dData.fs_read)} (Est) / - (Real)`, `Lecturas hoy (Límite: 50,000)`);
         updateUsageUI('fs-writes', n(dData.fs_write), 20000, `${n(dData.fs_write)} (Est) / - (Real)`, `Escrituras hoy (Límite: 20,000)`);
@@ -9058,9 +9058,9 @@ ${dataContext}
       --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.14);
     }
 
-    /* CSS Clean Sweep V.11.5.5 */
+    /* CSS Clean Sweep V.12.0.0 */
 
-    /* V.11.5.5: Estilos para Marcadores de Intervención en Preventivos */
+    /* V.12.0.0: Estilos para Marcadores de Intervención en Preventivos */
     .prev-int-marker {
       display: flex;
       flex-direction: column-reverse;
@@ -9608,7 +9608,7 @@ ${dataContext}
       width: 100%;
     }
 
-    /* Modales Preventivos pegados a la izquierda (V.11.5.5) */
+    /* Modales Preventivos pegados a la izquierda (V.12.0.0) */
     #overlay-preventivo-main,
     #overlay-preventivo-dia,
     #overlay-preventivo-intervencion {
@@ -9813,7 +9813,7 @@ ${dataContext}
       font-weight: 500;
     }
 
-    /* ═══════ CHAT UI — WhatsApp-Style (V.11.5.5) ═══════ */
+    /* ═══════ CHAT UI — WhatsApp-Style (V.12.0.0) ═══════ */
     #section-chat {
       display: none;
       height: calc(100vh - 120px);
@@ -11465,7 +11465,7 @@ ${dataContext}
       opacity: 0;
       transition: all 0.25s;
       pointer-events: none;
-      z-index: 2000;
+      z-index: 20000;
     }
 
     #toast.show {
@@ -11524,7 +11524,7 @@ ${dataContext}
       background: #102a54 !important;
     }
 
-    /* SECTIONS V.11.5.5 */
+    /* SECTIONS V.12.0.0 */
     #section-usuarios,
     #section-tablas {
       padding: 24px;
@@ -11750,7 +11750,7 @@ ${dataContext}
       }
     }
 
-    /* --- RESPONSIVE / MOBILE V.11.5.5 --- */
+    /* --- RESPONSIVE / MOBILE V.12.0.0 --- */
     .btn-menu-toggle {
       display: none;
       background: none;
@@ -12147,7 +12147,7 @@ ${dataContext}
         margin: 10px auto !important;
       }
 
-      /* V.11.5.5: Preventivos Modals Mobile Centered */
+      /* V.12.0.0: Preventivos Modals Mobile Centered */
       #overlay-preventivo-main,
       #overlay-preventivo-dia,
       #overlay-preventivo-intervencion {
@@ -12220,7 +12220,7 @@ ${dataContext}
         margin-bottom: 4px;
       }
 
-      /* ═══════ MOBILE FIX V.11.5.5 — Global Overflow Protection ═══════ */
+      /* ═══════ MOBILE FIX V.12.0.0 — Global Overflow Protection ═══════ */
       html,
       body {
         overflow: hidden !important;
@@ -12239,7 +12239,7 @@ ${dataContext}
         min-height: 0 !important;
       }
 
-      /* ═══════ Chat Section — Stacked Mobile Layout (V.11.5.5) ═══════ */
+      /* ═══════ Chat Section — Stacked Mobile Layout (V.12.0.0) ═══════ */
       #section-chat {
         flex-direction: column !important;
         height: calc(100vh - 60px) !important;
@@ -12363,7 +12363,7 @@ ${dataContext}
         display: none !important;
       }
 
-      /* ═══════ V.11.5.5 — Detail Panel Mobile Compact ═══════ */
+      /* ═══════ V.12.0.0 — Detail Panel Mobile Compact ═══════ */
 
       /* Nivel selector: compact single line */
       .detail-panel>div:nth-child(2) {
@@ -12462,7 +12462,7 @@ ${dataContext}
         font-size: 8px !important;
       }
 
-      /* ═══════ V.11.5.5 — Sidebar Scroll Fix ═══════ */
+      /* ═══════ V.12.0.0 — Sidebar Scroll Fix ═══════ */
       .panel-left {
         max-height: calc(100vh - 60px) !important;
         overflow: hidden !important;
@@ -12477,7 +12477,7 @@ ${dataContext}
         min-height: 0 !important;
       }
 
-      /* ═══════ V.11.5.5 — Main View Width Containment ═══════ */
+      /* ═══════ V.12.0.0 — Main View Width Containment ═══════ */
       #section-operaciones {
         overflow-x: hidden !important;
         max-width: 100vw !important;
@@ -12511,7 +12511,7 @@ ${dataContext}
       }
     }
 
-    /* ═══════ V.11.5.5 — Notification Toggle Rows ═══════ */
+    /* ═══════ V.12.0.0 — Notification Toggle Rows ═══════ */
     .drawer-notif-toggle {
       display: flex;
       align-items: center;
@@ -12628,7 +12628,7 @@ ${dataContext}
       border-color: #e67e22;
     }
 
-    /* V.11.5.5: Expanded marker style */
+    /* V.12.0.0: Expanded marker style */
     .oysta-linked-marker.expanded {
       z-index: 9999 !important;
     }
@@ -12685,7 +12685,7 @@ ${dataContext}
       box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     }
 
-    /* LEYENDA FERROCARRIL (V.11.5.5) */
+    /* LEYENDA FERROCARRIL (V.12.0.0) */
     .railway-legend {
       position: absolute;
       bottom: 80px;
@@ -12714,7 +12714,7 @@ ${dataContext}
       border-radius: 2px;
     }
 
-    /* ═══════ LOGS ADMIN (V.11.5.5) ═══════ */
+    /* ═══════ LOGS ADMIN (V.12.0.0) ═══════ */
     .logs-choice-container {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -12808,7 +12808,7 @@ ${dataContext}
       gap: 6px;
     }
 
-    /* ═══════ API USAGE UI (V.11.5.5) ═══════ */
+    /* ═══════ API USAGE UI (V.12.0.0) ═══════ */
     .usage-grid {
       display: grid;
       grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
@@ -13123,7 +13123,7 @@ ${dataContext}
 
         <!-- Footer actions -->
         <div class="drawer-foot" style="display:flex; flex-direction:column; gap:8px; flex-shrink:0;">
-          <!-- V.11.5.5: Notification Toggles -->
+          <!-- V.12.0.0: Notification Toggles -->
           <div class="drawer-notif-toggle">
             <div class="drawer-notif-info">
               <span class="drawer-notif-icon">🗺</span>
@@ -13195,7 +13195,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.11.5.5
+          Versión V.12.0.0
         </div>
       </div>
 
@@ -13571,11 +13571,11 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.11.5.5
+          Versión V.12.0.0
         </div>
       </div>
 
-      <!-- V.11.5.5: Nuevo Panel de Detalle Deslizable -->
+      <!-- V.12.0.0: Nuevo Panel de Detalle Deslizable -->
       <div class="detail-panel" id="preventivos-detail-panel">
         <div class="dp-header">
           <div class="dp-scope-title">Detalle del Día</div>
@@ -13621,7 +13621,7 @@ ${dataContext}
       <div class="panel-right">
         <!-- Mapa Principal de Preventivos -->
         <div class="map-controls-floating">
-          <!-- V.11.5.5: Status Oysta para Super Admin (Clickable) -->
+          <!-- V.12.0.0: Status Oysta para Super Admin (Clickable) -->
           <div id="oysta-status-indicator-prev" class="map-btn-float" onclick="window.cargarVehiculosOysta(true)"
             title="Forzar sincronización Oysta"
             style="font-size: 9px; cursor: pointer; opacity: 0.9; display: none; background: rgba(11, 34, 65, 0.9); border-color: var(--accent); color: white; min-width: 140px; justify-content: center; align-items: center;">
@@ -14108,7 +14108,7 @@ ${dataContext}
           <select class="f-input f-select" id="prev-main-jefe" style="width:100%"></select>
         </div>
 
-        <!-- V.11.5.5: Selección de recursos para 1 día -->
+        <!-- V.12.0.0: Selección de recursos para 1 día -->
         <div id="prev-main-recursos-wrap"
           style="display:none; margin-top:12px; border-top:1px dashed var(--border-mid); padding-top:12px;">
           <div class="field-lbl">Asignar Recursos (Solo para 1 día)</div>
@@ -14204,7 +14204,7 @@ ${dataContext}
           </select>
         </div>
 
-        <!-- Ubicación en Mapa (Pin eliminado por petición del usuario V.11.5.5) -->
+        <!-- Ubicación en Mapa (Pin eliminado por petición del usuario V.12.0.0) -->
         <div id="prev-int-coords" style="display:none;"></div>
 
         <div class="field" style="margin-top: 12px; border-top: 1px dashed var(--border-mid); padding-top: 12px;">
@@ -14223,8 +14223,8 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL COMENTARIOS INTERVENCION (V.11.5.5) -->
-  <!-- MODAL GESTION INTERVENCION (V.11.5.5) -->
+  <!-- MODAL COMENTARIOS INTERVENCION (V.12.0.0) -->
+  <!-- MODAL GESTION INTERVENCION (V.12.0.0) -->
   <div class="overlay" id="overlay-prev-gestion-int" style="display:none;"
     onclick="if(event.target===this) cerrarModalGestionInt()">
     <div class="modal" style="width:380px;">
@@ -14266,7 +14266,7 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL EDITAR COMENTARIO (V.11.5.5) -->
+  <!-- MODAL EDITAR COMENTARIO (V.12.0.0) -->
   <div class="overlay" id="overlay-edit-comentario" style="display:none;"
     onclick="if(event.target===this) window.cerrarModalEditComentario()">
     <div class="modal" style="width:380px;">
@@ -14421,7 +14421,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.11.5.5
+            Versión V.12.0.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
@@ -14579,7 +14579,7 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL ERROR CUOTA IA (V.11.5.5) -->
+  <!-- MODAL ERROR CUOTA IA (V.12.0.0) -->
   <div class="overlay" id="overlay-ai-quota-error" style="z-index:10002;">
     <div class="modal"
       style="width:400px; text-align:center; padding:30px; border-radius:15px; background:white; position:relative; box-shadow: 0 20px 60px rgba(0,0,0,0.3);">
@@ -14726,7 +14726,7 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL SELECCIÓN LOGS ADMIN (V.11.5.5) -->
+  <!-- MODAL SELECCIÓN LOGS ADMIN (V.12.0.0) -->
   <div class="overlay" id="overlay-logs-admin">
     <div class="modal" style="width:450px;">
       <div class="modal-head">
@@ -14750,7 +14750,7 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL LISTADO LOGS OYSTA (V.11.5.5) -->
+  <!-- MODAL LISTADO LOGS OYSTA (V.12.0.0) -->
   <div class="overlay" id="overlay-oysta-logs">
     <div class="modal" style="width:700px; max-width:95vw;">
       <div class="modal-head">
@@ -14787,7 +14787,7 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL CONSUMO API (V.11.5.5) -->
+  <!-- MODAL CONSUMO API (V.12.0.0) -->
   <div class="overlay" id="overlay-api-usage">
     <div class="modal" style="width:700px; max-width:95vw;">
       <div class="modal-head">
@@ -14888,7 +14888,7 @@ ${dataContext}
           </div>
         </div>
 
-        <!-- V.11.5.5: Conmutador de Cuentas de Google Maps -->
+        <!-- V.12.0.0: Conmutador de Cuentas de Google Maps -->
         <div id="maps-key-manager"
           style="margin: 20px 16px; padding: 16px; background: var(--bg-1); border: 1px solid var(--border); border-radius: 8px; display: none;">
           <div style="font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 8px;">
