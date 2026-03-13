@@ -241,7 +241,8 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     }
 
     const userSnap = await admin.firestore().collection("users").doc(context.auth.uid).get();
-    const role = userSnap.exists ? userSnap.data().role : null;
+    const userData = userSnap.exists ? userSnap.data() : {};
+    const role = userData.role || null;
 
     if (role !== "super_admin") {
         throw new functions.https.HttpsError("permission-denied", "Solo el super_admin puede ver costos reales.");
@@ -261,9 +262,8 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     // Correctly queries Cloud Monitoring with resource.type = "consumed_api"
     // serviceruntime metrics require this resource type in the filter
     const getMetric = async (serviceLabel, startTime) => {
-        let grandTotal = 0;
+        let results = {}; // pid -> total
         let errors = [];
-        let debugInfo = [];
 
         for (const pid of targetProjectIds) {
             const request = {
@@ -281,26 +281,23 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
                 let projectTotal = 0;
                 timeSeries.forEach(ts => {
                     ts.points.forEach(p => {
-                        // int64Value is returned as a string by the gRPC library
                         const val = Number(p.value.int64Value) || Number(p.value.doubleValue) || 0;
                         projectTotal += val;
                     });
                 });
-                grandTotal += projectTotal;
-                debugInfo.push(`${pid}/${serviceLabel}: ${projectTotal} (${timeSeries.length} series)`);
+                results[pid] = projectTotal;
             } catch (e) {
                 const errMsg = `Error ${serviceLabel} en ${pid}: ${e.message}`;
                 console.warn(errMsg);
                 errors.push(errMsg);
-                debugInfo.push(`${pid}/${serviceLabel}: ERROR - ${e.message}`);
             }
         }
-        return { total: grandTotal, errors, debugInfo };
+        return { results, errors };
     };
 
     // Firestore metrics use a different resource type
     const getFirestoreMetric = async (metricType, startTime) => {
-        let grandTotal = 0;
+        let results = {};
         let errors = [];
         for (const pid of targetProjectIds) {
             const request = {
@@ -321,12 +318,12 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
                         total += val;
                     });
                 });
-                grandTotal += total;
+                results[pid] = total;
             } catch (e) {
                 errors.push(`${pid}/${metricType}: ${e.message}`);
             }
         }
-        return { total: grandTotal, errors };
+        return { results, errors };
     };
 
     // Consultamos datos reales
@@ -351,36 +348,44 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
         ...geminiDayRes.errors, ...fsReadsRes.errors, ...fsWritesRes.errors, ...fsDeletesRes.errors
     ];
 
-    const allDebugInfo = [
-        ...(mapsLoadRes.debugInfo || []),
-        ...(mapsPlacesRes.debugInfo || []),
-        ...(mapsRouteRes.debugInfo || []),
-        ...(mapsGeocodeRes.debugInfo || []),
-        ...(geminiDayRes.debugInfo || [])
-    ];
-
-    console.log("[getRealApiUsage] Debug:", JSON.stringify(allDebugInfo));
-    if (allErrors.length > 0) console.warn("[getRealApiUsage] Errors:", JSON.stringify(allErrors));
+    const getP = (res, pid, defaultVal = 0) => Number(res.results[pid] || defaultVal);
 
     return {
-        maps: {
-            load: mapsLoadRes.total,
-            places: mapsPlacesRes.total,
-            route: mapsRouteRes.total,
-            geocode: mapsGeocodeRes.total
+        acc1: {
+            maps: {
+                load: getP(mapsLoadRes, "emercre"),
+                places: getP(mapsPlacesRes, "emercre"),
+                route: getP(mapsRouteRes, "emercre"),
+                geocode: getP(mapsGeocodeRes, "emercre")
+            },
+            gemini: {
+                day: getP(geminiDayRes, "emercre"),
+                month: getP(geminiMonthRes, "emercre")
+            },
+            firestore: {
+                reads: getP(fsReadsRes, "emercre"),
+                writes: getP(fsWritesRes, "emercre"),
+                deletes: getP(fsDeletesRes, "emercre")
+            }
         },
-        gemini: {
-            day: geminiDayRes.total,
-            month: geminiMonthRes.total,
-            limit: 1500
+        acc2: {
+            maps: {
+                load: getP(mapsLoadRes, "emercre-488009"),
+                places: getP(mapsPlacesRes, "emercre-488009"),
+                route: getP(mapsRouteRes, "emercre-488009"),
+                geocode: getP(mapsGeocodeRes, "emercre-488009")
+            },
+            gemini: {
+                day: getP(geminiDayRes, "emercre-488009"),
+                month: getP(geminiMonthRes, "emercre-488009")
+            },
+            firestore: {
+                reads: getP(fsReadsRes, "emercre-488009"),
+                writes: getP(fsWritesRes, "emercre-488009"),
+                deletes: getP(fsDeletesRes, "emercre-488009")
+            }
         },
-        firestore: {
-            reads: fsReadsRes.total,
-            writes: fsWritesRes.total,
-            deletes: fsDeletesRes.total
-        },
-        syncErrors: allErrors,
-        debug: allDebugInfo
+        syncErrors: allErrors
     };
 });
 
