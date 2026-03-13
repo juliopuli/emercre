@@ -249,9 +249,8 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     }
 
     const key = require("./usage-key.json");
-    // Ambos proyectos monitorizados. emercre-488009 requiere que
-    // emercre@appspot.gserviceaccount.com tenga rol "Monitoring Viewer" en ese proyecto.
-    const targetProjectIds = ["emercre", "emercre-488009"];
+    // Triple Proyecto: Account 1 (emercre + emercre-488009) y Account 2 (emercre-mapsec)
+    const targetProjectIds = ["emercre", "emercre-488009", "emercre-mapsec"];
 
     const monitoringClient = new monitoring.MetricServiceClient({ credentials: key });
 
@@ -260,7 +259,6 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     const startOfDay = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
 
     // Correctly queries Cloud Monitoring with resource.type = "consumed_api"
-    // serviceruntime metrics require this resource type in the filter
     const getMetric = async (serviceLabel, startTime) => {
         let results = {}; // pid -> total
         let errors = [];
@@ -268,8 +266,7 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
         for (const pid of targetProjectIds) {
             const request = {
                 name: `projects/${pid}`,
-                // CRITICAL FIX: must include resource.type = "consumed_api"
-                filter: `metric.type = "serviceruntime.googleapis.com/api/request_count" AND resource.type = "consumed_api" AND resource.labels.service = "${serviceLabel}"`,
+                filter: `metric.type = "serviceruntime.googleapis.com/api/request_count" AND resource.type = "consumed_api" AND resource.labels.service = "${serviceLabel}" AND resource.labels.project_id = "${pid}"`,
                 interval: {
                     startTime: { seconds: startTime },
                     endTime: { seconds: now }
@@ -302,7 +299,7 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
         for (const pid of targetProjectIds) {
             const request = {
                 name: `projects/${pid}`,
-                filter: `metric.type = "${metricType}"`,
+                filter: `metric.type = "${metricType}" AND resource.labels.project_id = "${pid}"`,
                 interval: {
                     startTime: { seconds: startTime },
                     endTime: { seconds: now }
@@ -349,40 +346,41 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     ];
 
     const getP = (res, pid, defaultVal = 0) => Number(res.results[pid] || defaultVal);
+    const sumAcc1 = (res, field) => getP(res, "emercre") + getP(res, "emercre-488009");
 
     return {
         acc1: {
             maps: {
-                load: getP(mapsLoadRes, "emercre"),
-                places: getP(mapsPlacesRes, "emercre"),
-                route: getP(mapsRouteRes, "emercre"),
-                geocode: getP(mapsGeocodeRes, "emercre")
+                load: sumAcc1(mapsLoadRes),
+                places: sumAcc1(mapsPlacesRes),
+                route: sumAcc1(mapsRouteRes),
+                geocode: sumAcc1(mapsGeocodeRes)
             },
             gemini: {
-                day: getP(geminiDayRes, "emercre"),
-                month: getP(geminiMonthRes, "emercre")
+                day: sumAcc1(geminiDayRes),
+                month: sumAcc1(geminiMonthRes)
             },
             firestore: {
-                reads: getP(fsReadsRes, "emercre"),
-                writes: getP(fsWritesRes, "emercre"),
-                deletes: getP(fsDeletesRes, "emercre")
+                reads: sumAcc1(fsReadsRes),
+                writes: sumAcc1(fsWritesRes),
+                deletes: sumAcc1(fsDeletesRes)
             }
         },
         acc2: {
             maps: {
-                load: getP(mapsLoadRes, "emercre-488009"),
-                places: getP(mapsPlacesRes, "emercre-488009"),
-                route: getP(mapsRouteRes, "emercre-488009"),
-                geocode: getP(mapsGeocodeRes, "emercre-488009")
+                load: getP(mapsLoadRes, "emercre-mapsec"),
+                places: getP(mapsPlacesRes, "emercre-mapsec"),
+                route: getP(mapsRouteRes, "emercre-mapsec"),
+                geocode: getP(mapsGeocodeRes, "emercre-mapsec")
             },
             gemini: {
-                day: getP(geminiDayRes, "emercre-488009"),
-                month: getP(geminiMonthRes, "emercre-488009")
+                day: getP(geminiDayRes, "emercre-mapsec"),
+                month: getP(geminiMonthRes, "emercre-mapsec")
             },
             firestore: {
-                reads: getP(fsReadsRes, "emercre-488009"),
-                writes: getP(fsWritesRes, "emercre-488009"),
-                deletes: getP(fsDeletesRes, "emercre-488009")
+                reads: getP(fsReadsRes, "emercre-mapsec"),
+                writes: getP(fsWritesRes, "emercre-mapsec"),
+                deletes: getP(fsDeletesRes, "emercre-mapsec")
             }
         },
         syncErrors: allErrors
