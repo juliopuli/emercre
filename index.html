@@ -8867,6 +8867,18 @@ ${dataContext}
       const statusEl = document.getElementById('api-sync-status');
       if (statusEl) statusEl.textContent = '⏳ Sincronizando con Google...';
 
+      // 3. CARGAR CONFIGURACIÓN MAPS (V.11.5.5)
+      if (currentRole === 'super_admin') {
+        try {
+          const mSnap = await getDoc(doc(db, 'config', 'maps'));
+          if (mSnap.exists()) {
+            const mCfg = mSnap.data();
+            const elA = document.getElementById('maps-active-key');
+            if (elA) elA.value = mCfg.activeKey || 'key1';
+          }
+        } catch (e) { console.warn("Error cargando config Maps:", e); }
+      }
+
       // 1. INTENTAR DATOS REALES DESDE GOOGLE CLOUD (V.11.5.5)
       try {
         const getReal = httpsCallable(functions, 'getRealApiUsage');
@@ -8963,17 +8975,6 @@ ${dataContext}
         console.error("Error cargando consumo local:", e);
       }
 
-      // 3. CARGAR CONFIGURACIÓN MAPS (V.11.5.5)
-      if (currentRole === 'super_admin') {
-        try {
-          const mSnap = await getDoc(doc(db, 'config', 'maps'));
-          if (mSnap.exists()) {
-            const mCfg = mSnap.data();
-            const elA = document.getElementById('maps-active-key');
-            if (elA) elA.value = mCfg.activeKey || 'key1';
-          }
-        } catch (e) { console.warn("Error cargando config Maps:", e); }
-      }
     };
 
     function updateUsageUI(id, current, limit, labelText = null, metaText = null) {
