@@ -1082,7 +1082,7 @@
       });
     }
 
-    console.log('EmerCRE V.12.5.3 Loaded');
+    console.log('EmerCRE V.12.5.4 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -6050,11 +6050,16 @@ ${dataContext}
         map.panTo(place.geometry.location);
         map.setZoom(16);
         placeSearchPin(map, place.geometry.location, place.formatted_address, type);
+
+        // V.12.5.4: Limpiar buscador tras selección
+        input.value = "";
+        window.toggleMapSearch(type);
+        if (infoWindowSearch) infoWindowSearch.close();
       });
     }
 
     function placeSearchPin(map, location, address, mapType) {
-      // V.12.5.0: Ahora los pines son persistentes. Guardamos en DB
+      // V.12.5.4: Ahora los pines son persistentes. Guardamos en DB
       const id = "pin_" + Date.now();
       const pinData = {
         lat: location.lat(),
@@ -7876,10 +7881,17 @@ ${dataContext}
           window._ambulanceRanks[r.oystaId] = { rank: idx + 1, duration: r.duration.text };
         });
 
+        // V.12.5.4: Refrescar marcadores en ambos mapas para ver los globos (ranking-badge)
         if (oystaMarkersPrev) {
           Object.keys(oystaMarkersPrev).forEach(mid => {
             const v = oystaVehiclesCache.find(ov => String(ov.id) === mid);
             if (v) window.syncOystaMarkerPrev(v);
+          });
+        }
+        if (oystaMarkers) {
+          Object.keys(oystaMarkers).forEach(mid => {
+            const v = oystaVehiclesCache.find(ov => String(ov.id) === mid);
+            if (v && typeof syncOystaMarkerGlobal === 'function') syncOystaMarkerGlobal(v);
           });
         }
 
@@ -7892,8 +7904,8 @@ ${dataContext}
             cards.sort((a, b) => {
               const idA = a.dataset.id;
               const idB = b.dataset.id;
-              const va = window.globalVehiculos && window.globalVehiculos[idA];
-              const vb = window.globalVehiculos && window.globalVehiculos[idB];
+              const va = localVehiclesById[idA];
+              const vb = localVehiclesById[idB];
 
               const rankA = va?.oystaId ? (window._ambulanceRanks[String(va.oystaId)]?.rank || 999) : 999;
               const rankB = vb?.oystaId ? (window._ambulanceRanks[String(vb.oystaId)]?.rank || 999) : 999;
@@ -7905,7 +7917,7 @@ ${dataContext}
             cards.forEach(card => {
               container.appendChild(card); // Re-insertar en orden
               const resId = card.dataset.id;
-              const v = window.globalVehiculos && window.globalVehiculos[resId];
+              const v = localVehiclesById[resId];
               const rankInfo = v?.oystaId && window._ambulanceRanks[String(v.oystaId)];
               let b = card.querySelector('.ranking-badge');
               if (rankInfo) {
@@ -8108,7 +8120,7 @@ ${dataContext}
           let initialComms = [];
           if (recs && recs.length > 0) {
             const logEntries = recs.map(rvId => {
-              const v = window.globalVehiculos && window.globalVehiculos[rvId];
+              const v = localVehiclesById[rvId];
               const indicativo = v?.alias || v?.indicativo || rvId;
               let icon = '🚐';
               if (v?.tipo === 'Camión') icon = '🚒';
@@ -13807,7 +13819,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.12.5.3
+          Versión V.12.5.4
         </div>
       </div>
 
@@ -14193,7 +14205,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.12.5.3
+          Versión V.12.5.4
         </div>
       </div>
 
@@ -15080,7 +15092,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.12.5.3
+            Versión V.12.5.4
           </div>
         </div>
         <div class="field" id="j-prov-row">
