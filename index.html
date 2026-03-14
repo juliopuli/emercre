@@ -2796,7 +2796,8 @@
           'Turismo': 'assets/icons/icon_turismo.png'
         };
         const iconPath = iconMap[localVeh.tipo] || 'assets/icons/icon_transp_personal.png';
-        content.innerHTML = `
+                content.innerHTML = `
+          <div class="vehicle-top-label">${localVeh.alias || localVeh.indicativo || 'Sin ind.'}</div>
           <div class="marker-main" style="width:32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative;">
             <img class="marker-icon" src="${iconPath}" style="width:28px; height:28px; object-fit:contain; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); flex-shrink: 0;">
             <div class="marker-details">
@@ -2835,9 +2836,13 @@
           badge.title = `Llegada aprox en: ${window._ambulanceRanks[oystaId].duration}`;
           content.appendChild(badge);
         }
-      } else {
-        content.className = `oysta-marker ${statusClass}`;
-        content.innerHTML = v.name;
+            } else {
+        content.className = `custom-marker unlinked-marker ${statusClass}`;
+        content.style.position = 'relative';
+        content.innerHTML = `
+          <div class="vehicle-top-label">${v.name}</div>
+          <div class="marker-main" style="width:16px; height: 16px; border-radius: 50%; background: ${statusClass === 'moving' ? '#27ae60' : '#e67e22'}; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>
+        `;
       }
       content.title = `${v.name}${localVeh ? ' (' + localVeh.indicativo + ')' : ''}\nEstado: ${v.status}\nVelocidad: ${v.speed} km/h\nÚltima pos: ${v.last_pos}`;
       return content;
@@ -12592,6 +12597,46 @@ ${dataContext}
     }
 
     /* ═══════ OYSTA VEHICLE MARKERS ═══════ */
+
+    /* V.12.0.0: Modern floating label over vehicles */
+    .vehicle-top-label {
+      position: absolute;
+      bottom: calc(100% + 8px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.95);
+      color: #f8fafc;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: 'Inter', sans-serif;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 10;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(4px);
+    }
+
+    .vehicle-top-label::after {
+      content: '';
+      position: absolute;
+      top: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      border-width: 5px;
+      border-style: solid;
+      border-color: rgba(15, 23, 42, 0.95) transparent transparent transparent;
+    }
+
+    .oysta-linked-marker.expanded .vehicle-top-label {
+      opacity: 0;
+      pointer-events: none;
+      bottom: calc(100% + 20px);
+    }
+
     .oysta-marker {
       background: #1a3a6e;
       color: white;
