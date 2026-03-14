@@ -24,7 +24,7 @@
     import {
       getFirestore, collection, doc, addDoc, setDoc, updateDoc, deleteDoc,
       onSnapshot, query, where, orderBy, limit, limitToLast, serverTimestamp, getDoc, getDocs, arrayUnion, arrayRemove, or, and,
-      collectionGroup, increment, writeBatch
+      collectionGroup, increment, writeBatch, deleteField
     }
       from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
     import { initializeAppCheck, ReCaptchaV3Provider }
@@ -2587,7 +2587,7 @@
 
             if (assignedOp) {
               const opId = assignedOp.id;
-              const indicativo = localVeh.indicativo || v.name;
+              const indicativo = localVeh.alias || localVeh.indicativo || v.name;
               const speed = parseFloat(v.speed);
               const opCoords = assignedOp.coords;
               const opRef = doc(db, 'operaciones', opId);
@@ -2800,7 +2800,7 @@
           <div class="marker-main" style="width:32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative;">
             <img class="marker-icon" src="${iconPath}" style="width:28px; height:28px; object-fit:contain; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); flex-shrink: 0;">
             <div class="marker-details">
-                <div class="md-ind">${localVeh.indicativo || 'Sin ind.'}</div>
+                <div class="md-ind">${localVeh.alias || localVeh.indicativo || 'Sin ind.'}</div>
                 <div class="md-mat">${localVeh.matricula || '---'}</div>
                 <div class="md-status" style="margin-top:4px; font-size:11px;">Est: <b>${v.status}</b></div>
                 <div class="md-speed" style="font-size:11px;">Vel: <b>${v.speed} km/h</b></div>
@@ -2861,7 +2861,7 @@
         div.className = 'vehicle-selector-item';
         // V.12.0.0 Fix: Mostrar indicativo local si existe asociación
         const localVeh = localVehiclesByOystaId[mid];
-        const displayName = localVeh ? `${localVeh.indicativo} (${v.name})` : v.name;
+        const displayName = localVeh ? `${localVeh.alias || localVeh.indicativo} (${v.name})` : v.name;
 
         div.innerHTML = `
           <input type="checkbox" id="chk-veh-${mid}" ${visibleVehicles[mid] ? 'checked' : ''} 
@@ -3222,7 +3222,7 @@
         filtered = filtered.filter(v => !currentAssignedIds.includes(v.id));
 
         filtered.forEach(v => {
-          sel.innerHTML += `<option value="${v.id}">${v.indicativo} - ${v.tipo} (${v.matricula})</option>`;
+          sel.innerHTML += `<option value="${v.id}">${v.alias || v.indicativo} - ${v.tipo} (${v.matricula})</option>`;
         });
       } else if (cat === 'erbes') {
         // V.12.0.0: Filtrar por provincia directamente en el servidor
@@ -3262,7 +3262,7 @@
         let recursoDesc = '';
         if (cat === 'vehiculos') {
           const v = opcionesRecursosCache.vehiculos.find(x => x.id === itemId);
-          if (v) recursoDesc = `🚗 ${v.indicativo} - ${v.tipo} (${v.matricula})`;
+          if (v) recursoDesc = `🚗 ${v.alias || v.indicativo} - ${v.tipo} (${v.matricula})`;
         } else if (cat === 'erbes') {
           const e = opcionesRecursosCache.erbes.find(x => x.id === itemId);
           if (e) recursoDesc = `🏥 ERBE ${e.localidad}`;
@@ -4136,7 +4136,7 @@ ${dataContext}
             loc = op.direccion || pData.localizacion || ""; // V.12.0.0: Priorizar dirección de la intervención
           }
 
-          const recIndicativos = (op.recursosAsignados || []).map(rid => (window.globalVehiculos && window.globalVehiculos[rid]?.indicativo) || rid).join(', ');
+          const recIndicativos = (op.recursosAsignados || []).map(rid => (window.globalVehiculos && (window.globalVehiculos[rid]?.alias || window.globalVehiculos[rid]?.indicativo)) || rid).join(', ');
           dataContext = `INTERVENCIÓN: ${nombreOp}\nNúmero: ${numeroIntervencion}\nRecursos: ${recIndicativos}\nCOMENTARIOS/LOGS:\n`;
           (op.comentarios || []).forEach(c => {
             dataContext += `[${c.fecha}] ${c.autor}: ${c.texto}\n`;
@@ -4176,7 +4176,7 @@ ${dataContext}
           const snapInt = await getDocs(qInt);
 
           // V.12.0.0: Capturar recursos del día
-          const recIndicativos = (op.recursos || []).map(rid => (window.globalVehiculos && window.globalVehiculos[rid]?.indicativo) || rid).join(', ');
+          const recIndicativos = (op.recursos || []).map(rid => (window.globalVehiculos && (window.globalVehiculos[rid]?.alias || window.globalVehiculos[rid]?.indicativo)) || rid).join(', ');
 
           dataContext = `DÍA: ${op.nombre}\nRecursos Desplegados: ${recIndicativos}\nINTERVENCIONES REGISTRADAS (${snapInt.size}):\n`;
           let logs = [];
@@ -4223,7 +4223,7 @@ ${dataContext}
             globalLogs.push({ timestamp: sd.creadoEn, texto: `Día iniciado: ${sd.nombre} (${sI.size} intervenciones)` });
           }
 
-          const recSorted = Array.from(allRecSet).map(rid => (window.globalVehiculos && window.globalVehiculos[rid]?.indicativo) || rid).join(', ');
+          const recSorted = Array.from(allRecSet).map(rid => (window.globalVehiculos && (window.globalVehiculos[rid]?.alias || window.globalVehiculos[rid]?.indicativo)) || rid).join(', ');
           dataContext += `RECURSOS TOTALES UTILIZADOS: ${recSorted}\n`;
 
           snap = { empty: globalLogs.length === 0, forEach: (cb) => globalLogs.forEach(cb) };
@@ -5154,7 +5154,7 @@ ${dataContext}
       if (tablasSearchQuery.trim()) {
         const q = tablasSearchQuery.trim().toLowerCase();
         visible = visible.filter(v => {
-          const fields = [v.indicativo || '', v.matricula || '', v.tipo || '', v.provincia || ''].join(' ').toLowerCase();
+          const fields = [v.alias || '', v.indicativo || '', v.matricula || '', v.tipo || '', v.provincia || ''].join(' ').toLowerCase();
           return fields.includes(q);
         });
       }
@@ -5164,7 +5164,7 @@ ${dataContext}
         const svgTrash = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td><strong>${v.indicativo}</strong></td>
+          <td><strong>${v.alias || v.indicativo}</strong>${v.alias ? `<br><span style="font-size:11px;color:var(--text-2);">${v.indicativo}</span>` : ''}</td>
           <td style="font-family:'IBM Plex Mono',monospace; font-size:12px;">${v.matricula}</td>
           <td>${v.tipo || '-'}</td>
           <td style="font-size:11px; color:#6c757d;">${v.provincia || 'Málaga'}</td>
@@ -5179,7 +5179,7 @@ ${dataContext}
     window.abrirModalVehiculo = () => {
       editingVehiculoId = null;
       document.getElementById('modal-vehiculo-title').textContent = 'Nuevo vehículo';
-      ['v-indicativo', 'v-matricula'].forEach(id => {
+      ['v-indicativo', 'v-matricula', 'v-alias'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
       });
@@ -5222,6 +5222,7 @@ ${dataContext}
       editingVehiculoId = id;
       document.getElementById('modal-vehiculo-title').textContent = 'Editar vehículo';
       document.getElementById('v-indicativo').value = v.indicativo || '';
+      document.getElementById('v-alias').value = v.alias || '';
       document.getElementById('v-matricula').value = v.matricula || '';
       document.getElementById('v-tipo').value = v.tipo || 'Camión';
 
@@ -5265,6 +5266,7 @@ ${dataContext}
     window.guardarVehiculo = async () => {
       let indicativo = document.getElementById('v-indicativo').value.trim();
       let matricula = document.getElementById('v-matricula').value.trim();
+      let alias = document.getElementById('v-alias').value.trim();
       const tipo = document.getElementById('v-tipo').value;
       if (!indicativo || !matricula) { alert('Indicativo y matrícula son obligatorios.'); return; }
 
@@ -5295,12 +5297,12 @@ ${dataContext}
 
         if (editingVehiculoId) {
           await updateDoc(doc(db, 'vehiculos', editingVehiculoId), {
-            indicativo, matricula, tipo, provincia, oystaId, actualizadoEn: serverTimestamp()
+            indicativo, matricula, alias, tipo, provincia, oystaId, actualizadoEn: serverTimestamp()
           });
           mostrarToast('Vehículo actualizado.');
         } else {
           await addDoc(collection(db, 'vehiculos'), {
-            indicativo, matricula, tipo, provincia, oystaId,
+            indicativo, matricula, alias, tipo, provincia, oystaId,
             creadoPor: currentUser.uid,
             creadoEn: serverTimestamp(),
             actualizadoEn: serverTimestamp()
@@ -5311,6 +5313,31 @@ ${dataContext}
         cargarVehiculos();
       } catch (e) { alert('Error: ' + e.message); }
       btn.disabled = false; btn.textContent = 'Guardar';
+    };
+
+
+    window.restablecerNombresVehiculos = async () => {
+      if (!confirm('¿Estás seguro de que quieres borrar todos los alias de los vehículos? Esta acción no se puede deshacer.')) return;
+      try {
+        const snap = await getDocs(collection(db, 'vehiculos'));
+        const batch = writeBatch(db);
+        let count = 0;
+        snap.forEach(d => {
+          if (d.data().alias) {
+            batch.update(d.ref, { alias: deleteField() });
+            count++;
+          }
+        });
+        if (count > 0) {
+          await batch.commit();
+          mostrarToast(count + ' alias borrados correctamente.');
+          cargarVehiculos();
+        } else {
+          mostrarToast('No hay alias que borrar.');
+        }
+      } catch (e) {
+        alert('Error al restablecer nombres: ' + e.message);
+      }
     };
 
     window.borrarVehiculo = async id => {
@@ -5978,7 +6005,7 @@ ${dataContext}
         div.className = 'vehicle-selector-item';
         // V.12.0.0 Fix: Mostrar indicativo local si existe asociación
         const localVeh = localVehiclesByOystaId[mid];
-        const displayName = localVeh ? `${localVeh.indicativo} (${v.name})` : v.name;
+        const displayName = localVeh ? `${localVeh.alias || localVeh.indicativo} (${v.name})` : v.name;
 
         div.innerHTML = `
           <input type="checkbox" id="chk-prev-veh-${mid}" ${isVisible ? 'checked' : ''} 
@@ -6232,7 +6259,7 @@ ${dataContext}
             <label style="display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer;">
               <input type="checkbox" name="prev-main-recurso-v" value="${dv.id}" ${isChecked ? 'checked' : ''}>
               <img src="${iconUrl}" style="width:14px; height:14px;">
-              <span style="font-size:12px; font-weight:600;">${v.indicativo || 'SIN IND'}</span>
+              <span style="font-size:12px; font-weight:600;">${v.alias || v.indicativo || 'SIN IND'}</span>
             </label>
           `;
         }).join('');
@@ -6562,7 +6589,7 @@ ${dataContext}
             <label style="display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer;">
               <input type="checkbox" name="prev-recurso-v" value="${dv.id}" ${isSelected ? 'checked' : ''}>
               <img src="${iconUrl}" style="width:16px; height:16px;">
-              <span style="font-size:13px; font-weight:600;">${v.indicativo || 'SIN IND'}</span>
+              <span style="font-size:13px; font-weight:600;">${v.alias || v.indicativo || 'SIN IND'}</span>
               <span style="font-size:11px; color:var(--text-3);">(${v.matricula || 'SIN MAT'})</span>
             </label>
           `;
@@ -6648,7 +6675,7 @@ ${dataContext}
           return `<span class="badge-tipo" style="background:var(--bg-3); color:var(--text-1); font-size:11px; display:inline-flex; align-items:center; gap:4px; margin-right:4px; padding:2px 6px; border-radius:4px; border:1px solid var(--border-mid); position:relative;">
             <span style="width:6px; height:6px; background:${statusColor}; border-radius:50%; box-shadow:0 0 4px ${statusColor}a0;" title="${isOccupied ? 'Ocupado' : 'Disponible'}"></span>
             <img src="${iconUrl}" style="width:14px; height:14px;">
-            ${v.indicativo || 'SIN IND'}
+            ${v.alias || v.indicativo || 'SIN IND'}
           </span>`;
         }
         return `<span class="badge-tipo" style="background:var(--bg-3); color:var(--text-1); font-size:10px;">🚗 ${rvId}</span>`;
@@ -6824,7 +6851,7 @@ ${dataContext}
             else if (v.tipo === 'Vehículo de transporte mixto') iconUrl = 'assets/icons/icon_transp_mixto.png';
             else if (v.tipo === 'Turismo') iconUrl = 'assets/icons/icon_turismo.png';
             else if (v.tipo === 'Vehículo transporte personal') iconUrl = 'assets/icons/icon_transp_personal.png';
-            label = v.indicativo || 'SIN IND';
+            label = v.alias || v.indicativo || 'SIN IND';
           } else {
             return `<span style="font-size:9px; background:var(--bg-2); padding:2px 6px; border:1px solid var(--border-mid); border-radius:3px; color:var(--text-2);">🚗 ${r}</span>`;
           }
@@ -7071,14 +7098,14 @@ ${dataContext}
         } else {
           content = document.createElement('div');
           content.className = 'oysta-marker';
-          content.innerHTML = localVeh.indicativo || oystaVeh.name;
+          content.innerHTML = localVeh.alias || localVeh.indicativo || oystaVeh.name;
         }
 
         const marker = new google.maps.marker.AdvancedMarkerElement({
           position: pos,
           map: mapPreventivos,
           content: content,
-          title: `${localVeh.indicativo || oystaVeh.name} — asignado a intervención`,
+          title: `${localVeh.alias || localVeh.indicativo || oystaVeh.name} — asignado a intervención`,
           zIndex: 900,
           gmpClickable: true
         });
@@ -7098,7 +7125,7 @@ ${dataContext}
         const iDoc = interventionDocs.find(d => d.id === renderData.interventionId);
         if (iDoc) {
           const iData = iDoc.data();
-          const indicativo = localVeh.indicativo || oystaVeh.name;
+          const indicativo = localVeh.alias || localVeh.indicativo || oystaVeh.name;
           const comments = iData.comentarios || [];
 
           // 1. Salida: Se considera "en movimiento" si status != 'parado' o speed > 5
@@ -7501,7 +7528,7 @@ ${dataContext}
                        style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:${isSelected ? 'var(--accent)' : 'var(--bg-1)'}; color:${isSelected ? '#fff' : 'var(--text-1)'}; border:1px solid ${isSelected ? 'var(--accent)' : 'var(--border-mid)'}; border-radius:6px; cursor:pointer; transition:all 0.2s; position:relative;"
                        onclick="this.dataset.selected=(this.dataset.selected==='true'?'false':'true'); this.style.background=(this.dataset.selected==='true'?'var(--accent)':'var(--bg-1)'); this.style.color=(this.dataset.selected==='true'?'#fff':'var(--text-1)'); this.style.borderColor=(this.dataset.selected==='true'?'var(--accent)':'var(--border-mid)');">
                     <img src="${iconUrl}" style="width:14px; height:14px; filter:${isSelected ? 'brightness(0) invert(1)' : 'none'};">
-                    <span style="font-size:12px; font-weight:600;">${v?.indicativo || rvId}</span>
+                    <span style="font-size:12px; font-weight:600;">${v?.alias || v?.indicativo || rvId}</span>
                     ${rankInfo ? `<div class="ranking-badge ranking-badge-small" title="Aproximadamente ${rankInfo.duration}">${rankInfo.rank}</div>` : ''}
                   </div>
                 `;
@@ -7804,7 +7831,7 @@ ${dataContext}
           if (recs && recs.length > 0) {
             const logEntries = recs.map(rvId => {
               const v = window.globalVehiculos && window.globalVehiculos[rvId];
-              const indicativo = v?.indicativo || rvId;
+              const indicativo = v?.alias || v?.indicativo || rvId;
               let icon = '🚐';
               if (v?.tipo === 'Camión') icon = '🚒';
               else if (v?.tipo === 'Ambulancia') icon = '🚑';
@@ -7941,7 +7968,7 @@ ${dataContext}
             if (intData.abierta !== false) {
               const releases = (intData.recursosAsignados || []).map(rvId => {
                 const v = window.globalVehiculos && window.globalVehiculos[rvId];
-                const indicativo = v?.indicativo || rvId;
+                const indicativo = v?.alias || v?.indicativo || rvId;
                 return {
                   texto: `📤 Recurso liberado por cierre del día: ${indicativo}`,
                   autor: 'Sistema', autorId: 'system', timestamp: Date.now(),
@@ -8033,7 +8060,7 @@ ${dataContext}
                 if (intData.abierta !== false) {
                   const releases = (intData.recursosAsignados || []).map(rvId => {
                     const v = window.globalVehiculos && window.globalVehiculos[rvId];
-                    const indicativo = v?.indicativo || rvId;
+                    const indicativo = v?.alias || v?.indicativo || rvId;
                     return {
                       texto: `📤 Recurso liberado por cierre de preventivo: ${indicativo}`,
                       autor: 'Sistema', autorId: 'system', timestamp: Date.now(),
@@ -8109,7 +8136,7 @@ ${dataContext}
         // Liberar recursos
         releases = (i.recursosAsignados || []).map(rvId => {
           const v = window.globalVehiculos && window.globalVehiculos[rvId];
-          const indicativo = v?.indicativo || rvId;
+          const indicativo = v?.alias || v?.indicativo || rvId;
           return {
             texto: `📤 Recurso liberado por cierre: ${indicativo}`,
             autor: 'Sistema',
@@ -8399,9 +8426,9 @@ ${dataContext}
 
               return `
         <div class="res-item-row" style="display:flex; align-items:center; gap:8px; padding:4px 6px; background:var(--bg-1); border:1px solid var(--border-mid); border-radius:4px; ${canEdit ? 'cursor:pointer;' : 'opacity:0.6; cursor:not-allowed;'} transition:all 0.2s;"
-      ${canEdit ? `onclick="asignarRecursoIntervencion('${id}', '${rvId}')" onmouseover="this.style.borderColor='var(--accent)';" onmouseout="this.style.borderColor='var(--border-mid)';" title="Añadir ${v?.indicativo || rvId}"` : ''}>
+      ${canEdit ? `onclick="asignarRecursoIntervencion('${id}', '${rvId}')" onmouseover="this.style.borderColor='var(--accent)';" onmouseout="this.style.borderColor='var(--border-mid)';" title="Añadir ${v?.alias || v?.indicativo || rvId}"` : ''}>
         <img src="${iconUrl}" style="width:14px; height:14px; opacity:0.8;">
-          <span style="font-size:11px; font-weight:600; flex:1;">${v?.indicativo || rvId}</span>
+          <span style="font-size:11px; font-weight:600; flex:1;">${v?.alias || v?.indicativo || rvId}</span>
           ${canEdit ? '<span style="font-size:10px; color:var(--accent); font-weight:700;">+</span>' : ''}
         </div>
       `;
@@ -8421,7 +8448,7 @@ ${dataContext}
           return `
             <div class="res-item-row" style="display:flex; align-items:center; gap:8px; padding:4px 6px; background:var(--accent-light); border:1px solid var(--accent); border-radius:4px; opacity:0.9;">
               <img src="${iconUrl}" style="width:14px; height:14px;">
-              <span style="font-size:11px; font-weight:700; flex:1; color:var(--text-1);">${v?.indicativo || rvId}</span>
+              <span style="font-size:11px; font-weight:700; flex:1; color:var(--text-1);">${v?.alias || v?.indicativo || rvId}</span>
               <button class="btn-cancel-m" style="padding:0; width:18px; height:18px; line-height:16px; font-size:12px; border-radius:3px; background:#fdd; color:#c00; border-color:#faa;" 
                       onclick="retirarRecursoIntervencion('${id}', '${rvId}')" title="Retirar">×</button>
             </div>
@@ -8629,7 +8656,7 @@ ${dataContext}
       const i = intervencionesCache[id];
       if (!i) return;
       const v = window.globalVehiculos && window.globalVehiculos[recurso];
-      const indicativo = v?.indicativo || recurso;
+      const indicativo = v?.alias || v?.indicativo || recurso;
 
       let icon = '🚐';
       if (v?.tipo === 'Camión') icon = '🚒';
@@ -8663,7 +8690,7 @@ ${dataContext}
       const i = intervencionesCache[id];
       if (!i) return;
       const v = window.globalVehiculos && window.globalVehiculos[recurso];
-      const indicativo = v?.indicativo || recurso;
+      const indicativo = v?.alias || v?.indicativo || recurso;
 
       let icon = '🚐';
       if (v?.tipo === 'Camión') icon = '🚒';
@@ -13756,14 +13783,17 @@ ${dataContext}
 
       <!-- Contenedor Vehículos -->
       <div id="tabla-vehiculos-container" style="display:flex; flex-direction:column; flex:1; gap:16px;">
-        <div style="display:flex; justify-content:flex-end;">
+        <div style="display:flex; justify-content:flex-end; gap: 8px;">
+          <button class="btn-nueva" onclick="restablecerNombresVehiculos()"
+            style="background:var(--card-bg); color:var(--text-1); border:1px solid var(--border-color);">Restablecer
+            nombres</button>
           <button class="btn-nueva" onclick="abrirModalVehiculo()">+ Nuevo vehículo</button>
         </div>
         <div class="users-table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Indicativo</th>
+                <th>Vehículo / Indicativo</th>
                 <th>Matrícula</th>
                 <th>Tipo de vehículo</th>
                 <th>Acciones</th>
@@ -14456,6 +14486,10 @@ ${dataContext}
         <div class="field">
           <div class="field-lbl">Indicativo *</div>
           <input class="f-input" id="v-indicativo" placeholder="Ej: A-10">
+        </div>
+        <div class="field">
+          <div class="field-lbl">Alias (Opcional)</div>
+          <input class="f-input" id="v-alias" placeholder="Ej: Ambulancia 1">
         </div>
         <div class="field">
           <div class="field-lbl">Matrícula *</div>
