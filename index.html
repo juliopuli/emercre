@@ -177,6 +177,11 @@
     const reverseGeocodeCache = {};
     const routeCache = {};
     let reverseGeocodeThrottle = false;
+    let _geocoderInstance = null; // V.11.5.2: Instancia compartida
+    function getGeocoder() {
+      if (!_geocoderInstance) _geocoderInstance = new google.maps.Geocoder();
+      return _geocoderInstance;
+    }
 
     // Helper: Debounce (V.12.4.1)
     function debounce(func, wait) {
@@ -215,13 +220,21 @@
 
     // Helper: Reverse Geocode con Caché y Throttle (V.12.4.1)
     function reverseGeocodeWithCache(latlng, callback) {
+      // V.11.5.2: Throttle global — máximo 1 petición por segundo
+      if (reverseGeocodeThrottle) {
+        console.log('[API Optimize] Reverse geocode throttled, skipping.');
+        callback(null);
+        return;
+      }
+      reverseGeocodeThrottle = true;
+      setTimeout(() => { reverseGeocodeThrottle = false; }, 1000);
       // Redondear para mejorar hits (aprox 11m)
       const key = latlng.lat.toFixed(4) + ',' + latlng.lng.toFixed(4);
       if (reverseGeocodeCache[key]) {
         callback(reverseGeocodeCache[key]);
         return;
       }
-      const gc = new google.maps.Geocoder();
+      const gc = getGeocoder(); // V.11.5.2: Instancia compartida
       gc.geocode({ location: latlng }, (results, status) => {
         if (status === 'OK' && results[0]) {
           reverseGeocodeCache[key] = results[0].formatted_address;
@@ -2507,7 +2520,12 @@
       }
 
       // V.12.4.1: Permitir carga siempre para que el cache esté disponible para asignaciones de preventivos
-      // if (!currentUserDoc?.canSeeVehicles) return; 
+      // V.11.5.2: Guard — solo cargar si tiene permiso O está en Preventivos
+      const _isInPreventivos = document.getElementById('section-preventivos')?.style.display === 'flex';
+      if (!currentUserDoc?.canSeeVehicles && !_isInPreventivos) {
+        console.log('[Oysta] Sin permiso canSeeVehicles y fuera de Preventivos, abortando.');
+        return;
+      }
       if (!force && (!mapReady || (!mapEmergencias && !mapPreventivos))) {
         console.log(`[Oysta] Gating active: mapReady=${mapReady}, maps available=${!!mapEmergencias || !!mapPreventivos}`);
         return;
