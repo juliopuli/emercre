@@ -7268,7 +7268,7 @@ ${dataContext}
 
 
     // V.12.4.1: Renderiar en el mapa los vehículos Oysta, e incluir RUTA DINÁMICA hacia su intervención asignada
-    function renderPreventivoAssignedVehicles(interventionDocs, allAssignedIds) {
+    async function renderPreventivoAssignedVehicles(interventionDocs, allAssignedIds) {
       if (!mapPreventivos) return;
       if (!allAssignedIds) allAssignedIds = new Set();
 
@@ -7298,7 +7298,7 @@ ${dataContext}
 
       // 2. Procesar vehículos
       if (oystaVehiclesCache && oystaVehiclesCache.length > 0) {
-        routeRequests.forEach((renderData) => {
+        routeRequests.forEach(async (renderData) => {
           const vehicleId = renderData.vehicleId;
           const localVeh = localVehiclesById[vehicleId];
           if (!localVeh || !localVeh.oystaId) return;
@@ -13642,7 +13642,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.12.4.1
+          Versión V.12.4.5
         </div>
       </div>
 
@@ -14028,7 +14028,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.12.4.4
+          Versión V.12.4.5
         </div>
       </div>
 
@@ -14915,7 +14915,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.12.4.1
+            Versión V.12.4.5
           </div>
         </div>
         <div class="field" id="j-prov-row">
