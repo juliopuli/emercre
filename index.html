@@ -146,6 +146,12 @@
     let unsubGlobalPreventivoIntervenciones = null; // V.12.4.1: Restaurado
     let unsubGlobalSubpreventivos = null; // V.12.4.1: Para seguimiento de recursos asignados a días
     let oystaMarkersPrev = {};
+    let searchMarkerEme = null;
+    let searchMarkerPrev = null;
+    let infoWindowSearch = null;
+    let searchPinsCache = {}; // Cache de pines persistentes {id: {marker, data}}
+    let searchMarkersEmeMap = {}; // mid -> marker
+    let searchMarkersPrevMap = {}; // mid -> marker
     let markersPreventivos = {};
     window._oystaLogCache = new Set(); // V.12.4.1: Registro de envíos para evitar duplicados en sesión
     window._emeRoutesMap = {};      // V.12.4.1: Rutas de Emergencias
@@ -371,7 +377,10 @@
 
     // ── GOOGLE MAPS READY CALLBACK (V.12.4.1) ──────────────────────────
     window.onGoogleMapsReady = function () {
-      console.log('✅ Google Maps API Loaded & Ready');
+      // V.12.5.0: Iniciar sincronización de pines
+      if (typeof window.suscribirPinesMapa === 'function') window.suscribirPinesMapa();
+      console.log("📍 Google Maps API Loaded & Ready.");
+      if (typeof window.refreshSearchPinsMapHelper === 'function') window.refreshSearchPinsMapHelper();
       googleMapsReady = true;
       // Note: No se inicializan mapas aquí para ahorrar quota (Lazy Load)
     };
@@ -431,6 +440,7 @@
           if (Object.keys(ops).length) renderMapa();
         }
       }).observe(document.getElementById('map'));
+      if (typeof window.refreshSearchPinsMapHelper === 'function') window.refreshSearchPinsMapHelper();
     };
 
     window.initGoogleMap = function () {
@@ -4498,6 +4508,15 @@ ${dataContext}
         }
         broadcastNuevaOperacion({ id: ref.id, nombre, provincia, creadoPorNombre: autorNombre }); // V.12.4.1
         cerrarModalOp();
+
+        // V.12.5.0: Borrar pin si venimos de búsqueda
+        if (window._pinPendingToDelete) {
+          try {
+            await deleteDoc(doc(db, 'pines_mapa', window._pinPendingToDelete));
+            window._pinPendingToDelete = null;
+          } catch (e) { console.warn("Error borrando pin tras crear OP:", e); }
+        }
+
         window.abrirDetalle(ref.id);
       } catch (e) { alert('Error: ' + e.message); }
       btn.disabled = false; btn.textContent = 'Crear operación →';
@@ -5972,6 +5991,7 @@ ${dataContext}
         google.maps.event.addListenerOnce(mapPreventivos, 'tilesloaded', function () {
           ensureOystaScriptIsRunning();
           cargarVehiculosOysta(true);
+          if (typeof window.refreshSearchPinsMapHelper === 'function') window.refreshSearchPinsMapHelper();
         });
       } catch (e) {
         console.error("Error en initMapPreventivos:", e);
@@ -6036,44 +6056,110 @@ ${dataContext}
     }
 
     function placeSearchPin(map, location, address, mapType) {
-      // Limpiar anterior
-      if (mapType === 'eme' && searchMarkerEme) searchMarkerEme.setMap(null);
-      if (mapType === 'prev' && searchMarkerPrev) searchMarkerPrev.setMap(null);
+      // V.12.5.0: Ahora los pines son persistentes. Guardamos en DB
+      const id = "pin_" + Date.now();
+      const pinData = {
+        lat: location.lat(),
+        lng: location.lng(),
+        address: address,
+        mapType: mapType,
+        label: "",
+        autorId: currentUser?.uid || 'anon',
+        timestamp: serverTimestamp()
+      };
 
-      const marker = new google.maps.marker.AdvancedMarkerElement({
-        position: location,
-        map: map,
-        title: address,
-        gmpDraggable: false
-      });
-
-      if (mapType === 'eme') searchMarkerEme = marker;
-      else searchMarkerPrev = marker;
-
-      marker.addListener('gmp-click', () => {
-        abrirVentanaFlotantePin(marker, address, mapType);
-      });
-
-      // Abrir automáticamente al ponerlo
-      abrirVentanaFlotantePin(marker, address, mapType);
+      addDoc(collection(db, 'pines_mapa'), pinData)
+        .then(() => console.log("[Search-Pin] Pin guardado en DB"))
+        .catch(e => console.error("[Search-Pin] Error guardando pin:", e));
     }
 
-    function abrirVentanaFlotantePin(marker, address, mapType) {
-      if (!infoWindowSearch) {
-        infoWindowSearch = new google.maps.InfoWindow();
+    // V.12.5.0: Sincronización de pines desde Firestore
+    window.suscribirPinesMapa = () => {
+      onSnapshot(collection(db, 'pines_mapa'), (snap) => {
+        // Limpiar marcadores obsoletos
+        const currentIds = new Set();
+        snap.forEach(docPin => {
+          const pid = docPin.id;
+          const p = docPin.data();
+          currentIds.add(pid);
+
+          if (!searchPinsCache[pid]) {
+            renderPersistentPin(pid, p);
+          } else {
+            updatePersistentPin(pid, p);
+          }
+        });
+
+        // Eliminar los que ya no están
+        Object.keys(searchPinsCache).forEach(pid => {
+          if (!currentIds.has(pid)) {
+            const cache = searchPinsCache[pid];
+            if (cache.markerEme) cache.markerEme.setMap(null);
+            if (cache.markerPrev) cache.markerPrev.setMap(null);
+            delete searchPinsCache[pid];
+          }
+        });
+      });
+    };
+
+    function renderPersistentPin(pid, p) {
+      const pos = { lat: p.lat, lng: p.lng };
+
+      const createContent = (label) => {
+        const el = document.createElement('div');
+        el.className = 'custom-pin-container';
+        el.innerHTML = `
+          ${label ? `<div class="pin-label-tag">${label}</div>` : ''}
+          <div class="pin-icon">📍</div>
+        `;
+        return el;
+      };
+
+      const markerEme = new google.maps.marker.AdvancedMarkerElement({
+        position: pos, map: mapEmergencias, content: createContent(p.label), title: p.address
+      });
+      const markerPrev = new google.maps.marker.AdvancedMarkerElement({
+        position: pos, map: mapPreventivos, content: createContent(p.label), title: p.address
+      });
+
+      markerEme.addListener('gmp-click', () => abrirVentanaFlotantePin(pid, p, markerEme));
+      markerPrev.addListener('gmp-click', () => abrirVentanaFlotantePin(pid, p, markerPrev));
+
+      searchPinsCache[pid] = { markerEme, markerPrev, data: p, contentFn: createContent };
+    }
+
+    function updatePersistentPin(pid, p) {
+      const cache = searchPinsCache[pid];
+      if (cache.data.label !== p.label) {
+        cache.markerEme.content = cache.contentFn(p.label);
+        cache.markerPrev.content = cache.contentFn(p.label);
+        cache.data.label = p.label;
       }
+    }
+
+    function abrirVentanaFlotantePin(pid, p, marker) {
+      if (!infoWindowSearch) infoWindowSearch = new google.maps.InfoWindow();
 
       const content = document.createElement('div');
       content.className = 'search-pin-window';
       content.innerHTML = `
-        <div class="search-pin-title">📍 Ubicación Encontrada</div>
-        <div class="search-pin-addr">${address}</div>
-        <div class="search-pin-actions">
-          <button class="btn-pin-action btn-pin-assign" onclick="assignInterventionFromPin('${mapType}', '${address.replace(/'/g, "\\'")}', ${marker.position.lat}, ${marker.position.lng})">
+        <div class="search-pin-title">📍 Ubicación Guardada</div>
+        <div class="search-pin-addr">${p.address}</div>
+        
+        <div style="margin-top:8px;">
+          <div class="field-lbl" style="font-size:10px;">Etiqueta del marcador:</div>
+          <div style="display:flex; gap:4px;">
+            <input type="text" id="pin-label-input-${pid}" class="f-input" style="flex:1; height:24px; font-size:11px;" value="${p.label || ''}" placeholder="Ej: Puesto Sanitario">
+            <button class="btn-reg" style="height:24px; padding:0 8px; font-size:10px;" onclick="window.savePinLabel('${pid}')">OK</button>
+          </div>
+        </div>
+
+        <div class="search-pin-actions" style="margin-top:12px;">
+          <button class="btn-pin-action btn-pin-assign" onclick="assignInterventionFromPin('${p.mapType}', '${p.address.replace(/'/g, "\\'")}', ${p.lat}, ${p.lng}, '${pid}')">
              <span>➕</span> Asignar Intervención
           </button>
-          <button class="btn-pin-action btn-pin-remove" onclick="removeSearchPin('${mapType}')">
-             <span>🗑️</span> Quitar
+          <button class="btn-pin-action btn-pin-remove" onclick="window.removePersistentPin('${pid}')">
+             <span>🗑️</span> Borrar Definitivo
           </button>
         </div>
       `;
@@ -6082,25 +6168,51 @@ ${dataContext}
       infoWindowSearch.open(marker.map, marker);
     }
 
+    window.savePinLabel = async (pid) => {
+      const input = document.getElementById(`pin-label-input-${pid}`);
+      if (!input) return;
+      const label = input.value.trim();
+      try {
+        await updateDoc(doc(db, 'pines_mapa', pid), { label: label });
+        mostrarToast("Etiqueta guardada");
+      } catch (e) { alert("Error: " + e.message); }
+    };
+
+    window.removePersistentPin = async (pid) => {
+      if (!confirm("¿Seguro que quieres borrar este marcador permanentemente?")) return;
+      try {
+        await deleteDoc(doc(db, 'pines_mapa', pid));
+        if (infoWindowSearch) infoWindowSearch.close();
+      } catch (e) { alert("Error: " + e.message); }
+    };
+
+    window.refreshSearchPinsMapHelper = () => {
+      Object.keys(searchPinsCache).forEach(pid => {
+        const cache = searchPinsCache[pid];
+        if (cache.markerEme && mapEmergencias) cache.markerEme.map = mapEmergencias;
+        if (cache.markerPrev && mapPreventivos) cache.markerPrev.map = mapPreventivos;
+      });
+    };
+
     window.removeSearchPin = (type) => {
-      if (type === 'eme' && searchMarkerEme) { searchMarkerEme.setMap(null); searchMarkerEme = null; }
-      if (type === 'prev' && searchMarkerPrev) { searchMarkerPrev.setMap(null); searchMarkerPrev = null; }
+      // Se mantiene para compatibilidad pero los pines reales se borran con removePersistentPin
       if (infoWindowSearch) infoWindowSearch.close();
     };
 
-    window.assignInterventionFromPin = (type, address, lat, lng) => {
+    window.assignInterventionFromPin = (type, address, lat, lng, pid) => {
       if (infoWindowSearch) infoWindowSearch.close();
       const loc = { lat, lng };
 
+      // V.12.5.0: Guardar el ID del pin para borrarlo cuando se cree la intervención
+      window._pinPendingToDelete = pid;
+
       if (type === 'eme') {
-        // En emergencias, abrir directamente el modal de nueva operación
         pickedCoords = loc;
         pickedAddress = address;
         document.getElementById('f-lugar').value = address;
         mostrarCoordBox();
         window.abrirModalOp();
       } else {
-        // En preventivos, abrir el árbol de selección
         fastAssignLocation = loc;
         fastAssignAddress = address;
         renderFastAssignTree();
@@ -7617,9 +7729,20 @@ ${dataContext}
         document.getElementById('prev-int-org-sub').style.display = 'none';
         if (document.getElementById('prev-int-org-sub-input')) document.getElementById('prev-int-org-sub-input').value = '';
 
-        if (prevMarkerInt) prevMarkerInt.setMap(null);
-        document.getElementById('prev-int-coords').innerText = 'Sin coordenadas fijadas.';
-        pickedCoordsPrev = null;
+        if (!pickedCoordsPrev) {
+          if (prevMarkerInt) prevMarkerInt.setMap(null);
+          document.getElementById('prev-int-coords').innerText = 'Sin coordenadas fijadas.';
+        } else {
+          // Si venimos de búsqueda, ya tenemos coordenadas y dirección
+          if (typeof fastAssignAddress !== 'undefined' && fastAssignAddress) {
+            document.getElementById('prev-int-dir').value = fastAssignAddress;
+          }
+          document.getElementById('prev-int-coords').innerText = `Ubicación: ${pickedCoordsPrev.lat.toFixed(5)}, ${pickedCoordsPrev.lng.toFixed(5)}`;
+          if (prevMarkerInt) {
+            prevMarkerInt.position = pickedCoordsPrev;
+            prevMarkerInt.setMap(mapPreventivos);
+          }
+        }
       }
 
       const recList = document.getElementById('prev-int-recursos-list');
@@ -8007,6 +8130,15 @@ ${dataContext}
           mostrarToast('Intervención registrada.');
         }
         cerrarModalPreventivoIntervencion();
+
+        // V.12.5.0: Borrar pin si venimos de búsqueda
+        if (window._pinPendingToDelete) {
+          await deleteDoc(doc(db, 'pines_mapa', window._pinPendingToDelete));
+          window._pinPendingToDelete = null;
+        }
+
+        // Forzar refresco rutas/marcadores
+        if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
       } catch (e) {
         alert('Error: ' + e.message);
       }
@@ -13199,11 +13331,13 @@ ${dataContext}
       border-radius: 20px;
       padding: 4px 12px;
       position: absolute;
-      right: 48px;
+      left: 48px;
+      /* V.12.5.0: Empujar hacia la derecha */
       top: 0;
       box-shadow: 0 4px 15px rgba(0, 0, 0, 0.5);
       backdrop-filter: blur(8px);
-      min-width: 260px;
+      min-width: 350px;
+      /* V.12.5.0: Más ancho */
       z-index: 1000;
       animation: slideInSearch 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
     }
@@ -13211,13 +13345,43 @@ ${dataContext}
     @keyframes slideInSearch {
       from {
         opacity: 0;
-        transform: translateX(20px);
+        transform: translateX(-20px);
+        /* V.12.5.0: Desde la izquierda */
       }
 
       to {
         opacity: 1;
         transform: translateX(0);
       }
+    }
+
+    /* V.12.5.0: Estilos para etiquetas de pines */
+    .custom-pin-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    .pin-label-tag {
+      background: white !important;
+      color: #333 !important;
+      padding: 2px 6px !important;
+      border-radius: 4px !important;
+      font-size: 11px !important;
+      font-weight: 700 !important;
+      border: 1.5px solid var(--accent) !important;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3) !important;
+      margin-bottom: 4px !important;
+      white-space: nowrap !important;
+      z-index: 2000;
+      pointer-events: none;
+    }
+
+    .pin-icon {
+      font-size: 24px;
+      line-height: 1;
+      filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.3));
     }
 
     .map-search-box input {
@@ -13642,7 +13806,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.12.4.5
+          Versión V.12.5.0
         </div>
       </div>
 
@@ -14028,7 +14192,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.12.4.5
+          Versión V.12.5.0
         </div>
       </div>
 
@@ -14915,7 +15079,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.12.4.5
+            Versión V.12.5.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
