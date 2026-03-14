@@ -101,6 +101,8 @@
     let visibleVehiclesPrev = {}; // V.12.4.1: id_vehiculo -> boolean
     let showMovingOysta = false; // V.12.4.1: Toggle para ver vehículos en movimiento
     let oystaVehiclesCache = []; // Última lista de vehículos recibida
+    window._oystaGlobalLastStop = {}; // V.13.0.4: Cache global de últimas paradas para decalajes y origen de salida
+
     let localVehiclesByOystaId = {}; // V.12.4.1: Mapeo OystaID -> Datos Vehículo Local
     let localVehiclesById = {};       // V.12.4.1: Mapeo FirestoreID -> Datos Vehículo Local
     window.OYSTA_LOG_OFFSET_MS = 120000; // V.12.4.1: Decalaje estándar (2 min)
@@ -1096,7 +1098,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.0.3 Loaded');
+    console.log('EmerCRE V.13.0.4 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2606,6 +2608,16 @@
           if (parseFloat(v.speed) > 5) statusClass = 'moving';
 
           const mid = String(v.id);
+          // V.13.0.4: Seguimiento global de paradas para detección de origen de salida
+          if (statusClass === 'stopped') {
+            window._oystaGlobalLastStop[mid] = {
+              lat: pos.lat,
+              lng: pos.lng,
+              addr: v.last_pos || 'posición conocida',
+              timestamp: Date.now()
+            };
+          }
+
           const localVeh = localVehiclesByOystaId[mid];
 
           // V.12.4.1: Determinar si el vehículo está asignado a una operación activa (Emergencia) antes de usarlo
@@ -7517,7 +7529,8 @@ ${dataContext}
             }
 
             // 1. Salida Inicial / Salida de Parada Intermedia
-            if (isMovingNow && !vs.moving) {
+            // V.13.0.4: Permitir trigger si es el primer movimiento detectado aunque ya estuviera moviéndose
+            if (isMovingNow && (!vs.moving || !vs.hasDeparted)) {
               vs.moving = true;
               const depKey = `dep_prev_${renderData.interventionId}_${vehicleId}`;
               if (!window._oystaSentPreventivos) window._oystaSentPreventivos = new Set();
@@ -7525,7 +7538,17 @@ ${dataContext}
               const hasDepartedLog = comments.some(c => c.texto?.includes("sale hacia el lugar") && c.texto?.includes(indicativo));
               if (!hasDepartedLog && !window._oystaSentPreventivos.has(depKey)) {
                 window._oystaSentPreventivos.add(depKey);
-                const text = `⚡️ ${indicativo} sale hacia el lugar (${iData.direccion || 'sin dirección'}).`;
+
+                let originText = `hacia el lugar (${iData.direccion || 'sin dirección'})`;
+                const globalLast = window._oystaGlobalLastStop[vehicleId];
+                let delayStr = "";
+                if (globalLast) {
+                  if (globalLast.addr) originText = `desde ${globalLast.addr} ${originText}`;
+                  const diffMin = Math.round((Date.now() - globalLast.timestamp) / 60000);
+                  if (diffMin > 1) delayStr = ` [Decalaje: Hace ${diffMin} min]`;
+                }
+                const text = `⚡️ ${indicativo} sale ${originText}.${delayStr}`;
+
                 const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
                 try {
                   await updateDoc(iDoc.ref, { comentarios: arrayUnion(newComment) });
@@ -7537,6 +7560,7 @@ ${dataContext}
               }
             } else if (vs.lastStopAddr && distToDest > 0.1) {
               const text = `⚡️ ${indicativo} sale de ${vs.lastStopAddr} hacia el lugar.`;
+
               const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
               try {
                 await updateDoc(iDoc.ref, { comentarios: arrayUnion(newComment) });
@@ -8152,18 +8176,41 @@ ${dataContext}
           data.oculta = false;
           data.timestamp = serverTimestamp();
 
-          // V.12.4.1: Log inicial de recursos
+          // V.13.0.4: Log inicial de recursos con detección de movimiento inmediato
           let initialComms = [];
           if (recs && recs.length > 0) {
-            const logEntries = recs.map(rvId => {
+            const logEntries = await Promise.all(recs.map(async rvId => {
               const v = localVehiclesById[rvId];
               const indicativo = v?.alias || v?.indicativo || rvId;
               let icon = '🚐';
               if (v?.tipo === 'Camión') icon = '🚒';
               else if (v?.tipo === 'Ambulancia') icon = '🚑';
               else if (v?.tipo?.includes('Terreno')) icon = '🛻';
-              return `${icon} Asignado: ${indicativo} `;
-            });
+
+              let baseMsg = `${icon} Asignado: ${indicativo}`;
+
+              // Verificación Oysta inmediata
+              if (v && v.oystaId) {
+                const ov = oystaVehiclesCache.find(x => String(x.id) === String(v.oystaId));
+                if (ov && parseFloat(ov.speed) > 5) {
+                  let origin = "";
+                  const globalLast = window._oystaGlobalLastStop[String(v.oystaId)];
+                  let delayStr = "";
+                  if (globalLast) {
+                    if (globalLast.addr) origin = ` desde ${globalLast.addr}`;
+                    const diffMin = Math.round((Date.now() - globalLast.timestamp) / 60000);
+                    if (diffMin > 1) delayStr = ` [Decalaje: Hace ${diffMin} min]`;
+                  } else if (ov.last_pos) {
+                    origin = ` desde ${ov.last_pos}`;
+                  }
+
+                  // Calcular decalaje si es posible (V.13.0.4)
+                  const speed = parseFloat(ov.speed);
+                  baseMsg += ` y ⚡️ SALE${origin} hacia el lugar (${speed} km/h)${delayStr}`;
+                }
+              }
+              return baseMsg;
+            }));
 
             initialComms.push({
               texto: `🚀 INTERVENCIÓN INICIADA\n${logEntries.join('\n')} `,
@@ -8173,6 +8220,7 @@ ${dataContext}
               fecha: formatCommentFecha(new Date())
             });
           }
+
           data.comentarios = initialComms;
 
           await addDoc(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones'), data);
@@ -13859,7 +13907,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.0.3
+          Versión V.13.0.4
         </div>
       </div>
 
@@ -14245,7 +14293,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.0.3
+          Versión V.13.0.4
         </div>
       </div>
 
@@ -15132,7 +15180,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.0.3
+            Versión V.13.0.4
           </div>
         </div>
         <div class="field" id="j-prov-row">
