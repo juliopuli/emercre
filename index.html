@@ -195,7 +195,7 @@
         callback(geocodeCache[key]);
         return;
       }
-      const gc = new google.maps.Geocoder();
+      const gc = getGeocoder(); // V.11.5.2: Instancia compartida
       // Sugerencia de contexto regional para mayor precisión
       gc.geocode({ address: address + ', Andalucía, España' }, (results, status) => {
         if (status === 'OK' && results[0]) {
@@ -431,13 +431,14 @@
 
       oystaInfoWindow = new google.maps.InfoWindow();
 
-      // Force refresh when map container becomes visible
-      new ResizeObserver(() => {
+      // Force refresh when map container becomes visible (V.11.5.2: debounce para evitar spam)
+      const _debouncedResizeMapa = debounce(() => {
         if (mapEmergencias && mapReady && document.getElementById('map').offsetWidth > 0) {
           google.maps.event.trigger(mapEmergencias, 'resize');
           if (Object.keys(ops).length) renderMapa();
         }
-      }).observe(document.getElementById('map'));
+      }, 300);
+      new ResizeObserver(_debouncedResizeMapa).observe(document.getElementById('map'));
       if (typeof window.refreshSearchPinsMapHelper === 'function') window.refreshSearchPinsMapHelper();
     };
 
@@ -1169,10 +1170,7 @@
       mapEmergencias.getDiv().style.cursor = 'crosshair';
 
       routingPickListener = mapEmergencias.addListener('click', e => {
-        if (reverseGeocodeThrottle) return;
-        reverseGeocodeThrottle = true;
-        setTimeout(() => reverseGeocodeThrottle = false, 1000);
-
+        // V.11.5.2: throttle gestionado dentro de reverseGeocodeWithCache
         reverseGeocodeWithCache(e.latLng, (addr) => {
           if (addr) {
             document.getElementById(routingPickField).value = addr;
@@ -2773,10 +2771,7 @@
       document.getElementById('pick-banner').textContent = '📍 Haz clic en el mapa para fijar la ubicación';
       mapEmergencias.getDiv().style.cursor = 'crosshair';
       pickListener = mapEmergencias.addListener('click', e => {
-        if (reverseGeocodeThrottle) return;
-        reverseGeocodeThrottle = true;
-        setTimeout(() => reverseGeocodeThrottle = false, 1000);
-
+        // V.11.5.2: throttle gestionado dentro de reverseGeocodeWithCache
         reverseGeocodeWithCache(e.latLng, (addr) => {
           if (addr) {
             pickedCoords = { lat: e.latLng.lat(), lng: e.latLng.lng() };
@@ -2965,7 +2960,7 @@
       mapEmergencias.getDiv().style.cursor = 'crosshair';
       editPickListener = mapEmergencias.addListener('click', e => {
         editPickedCoords = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-        const gc = new google.maps.Geocoder();
+        const gc = getGeocoder(); // V.11.5.2: Instancia compartida
         gc.geocode({ location: e.latLng }, (results, status) => {
           if (status === 'OK' && results[0]) {
             editPickedAddress = results[0].formatted_address;
