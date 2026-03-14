@@ -550,6 +550,17 @@
     window.toggleAllOystaVehicles = (checked) => {
       console.log(`[Oysta] toggleAllOystaVehicles consolidated: ${checked}`);
       oystaVehiclesCache.forEach(v => {
+
+        // V.12.3.0: Determinar si el vehículo está asignado a una operación activa
+        let assignedOp = null;
+        if (localVehiclesByOystaId[String(v.id)] && typeof ops !== 'undefined') {
+          const lVeh = localVehiclesByOystaId[String(v.id)];
+          assignedOp = Object.values(ops).find(op =>
+            op.estado === 'activa' &&
+            op.recursosAsignadosIds &&
+            op.recursosAsignadosIds.includes(lVeh.id)
+          );
+        }
         const mid = String(v.id);
         visibleVehicles[mid] = checked;
         visibleVehiclesPrev[mid] = checked;
@@ -582,6 +593,38 @@
       if (sw2) sw2.checked = checked;
     };
 
+    function getVehicleVisibilityStatus(mid, v, localVeh) {
+      if (!mid || !v) return false;
+      const localV = localVeh || localVehiclesByOystaId[mid];
+
+      // 1. Determinar si está seleccionado manual
+      const isVisible = visibleVehicles[mid] === true;
+
+      // 2. Determinar si está en movimiento (filtro dinámico)
+      const movingFilter = showMovingOysta && v.status && v.status.toLowerCase() !== 'parado';
+
+      // 3. Determinar si está asignado a una operación activa
+      let assignedOp = null;
+      if (localV && typeof ops !== 'undefined') {
+        assignedOp = Object.values(ops).find(op =>
+          op.estado === 'activa' &&
+          op.recursosAsignadosIds &&
+          op.recursosAsignadosIds.includes(localV.id)
+        );
+      }
+
+      // 4. Permisos: super_admin/admin/manager ven todo por defecto. Otros necesitan canSeeVehicles.
+      const isPrivileged = ['super_admin', 'admin', 'manager'].includes(currentRole);
+      const hasExplicitPermission = currentUserDoc && currentUserDoc.canSeeVehicles !== false;
+      const canSeeAll = isPrivileged || hasExplicitPermission;
+
+      // Un vehículo es visible si:
+      // - Está seleccionado Y tiene permiso de visión general
+      // - O está en movimiento Y tiene permiso de visión general
+      // - O está asignado a una operación activa (esto salta el permiso general)
+      return (canSeeAll && (isVisible || movingFilter)) || !!assignedOp;
+    }
+
     window.toggleVehicleVisibility = async (id, visible) => {
       visibleVehicles[id] = visible;
       // V.12.3.0: Guardar preferencia persistente
@@ -600,7 +643,7 @@
         await cargarVehiculosOysta(true);
       }
 
-      if (mapEmergencias) renderMapa(true); // V.12.3.0 / V.12.3.0: Forzar recalcular zoom una vez cargados
+      if (mapEmergencias) renderMapa(true); // V.12.3.0: Forzar recalcular zoom una vez cargados
     };
 
     // V.12.3.0: Función global para sincronizar marcadores en todos los mapas activos
@@ -612,12 +655,11 @@
 
       // Mapa Principal (Emergencias)
       if (mapEmergencias) {
+        const isActuallyVisible = getVehicleVisibilityStatus(mid, v);
         if (oystaMarkers[mid]) {
           oystaMarkers[mid].position = pos;
-          const movingFilter = showMovingOysta && v.status.toLowerCase() !== 'parado';
-          oystaMarkers[mid].setMap((isVisible || movingFilter) && currentUserDoc?.canSeeVehicles ? mapEmergencias : null);
-        } else if ((isVisible || (showMovingOysta && v.status.toLowerCase() !== 'parado')) && currentUserDoc?.canSeeVehicles) {
-          // Si no existe, cargarVehiculosOysta se encargará de crearlo con todo el detalle
+          oystaMarkers[mid].setMap(isActuallyVisible ? mapEmergencias : null);
+        } else if (isActuallyVisible) {
           cargarVehiculosOysta(true);
         }
       }
@@ -2535,6 +2577,17 @@
 
           const mid = String(v.id);
           const localVeh = localVehiclesByOystaId[mid];
+
+          // V.12.3.0: Determinar si el vehículo está asignado a una operación activa (Emergencia) antes de usarlo
+          let assignedOp = null;
+          if (localVeh && typeof ops !== 'undefined') {
+            assignedOp = Object.values(ops).find(op =>
+              op.estado === 'activa' &&
+              op.recursosAsignadosIds &&
+              op.recursosAsignadosIds.includes(localVeh.id)
+            );
+          }
+
           const isVisible = visibleVehicles[mid] !== false;
 
           let content;
@@ -2549,16 +2602,15 @@
           if (oystaMarkers[mid]) {
             oystaMarkers[mid].position = pos;
             oystaMarkers[mid].content = content;
-            const movingFilter = showMovingOysta && v.status.toLowerCase() !== 'parado';
-            oystaMarkers[mid].setMap(((isVisible && currentUserDoc?.canSeeVehicles) || movingFilter || assignedOp) ? mapEmergencias : null);
+            oystaMarkers[mid].setMap(getVehicleVisibilityStatus(mid, v, localVeh) ? mapEmergencias : null);
             // Actualizar datos para el InfoWindow
             oystaMarkers[mid].vehicleData = v;
             oystaMarkers[mid].localVehicleData = localVeh;
           } else {
-            const movingFilter = showMovingOysta && v.status.toLowerCase() !== 'parado';
+            const isActuallyVisible = getVehicleVisibilityStatus(mid, v, localVeh);
             const marker = new google.maps.marker.AdvancedMarkerElement({
               position: pos,
-              map: ((isVisible && currentUserDoc?.canSeeVehicles) || movingFilter || assignedOp) ? mapEmergencias : null,
+              map: isActuallyVisible ? mapEmergencias : null,
               content: content,
               title: v.name,
               gmpClickable: true
@@ -2577,133 +2629,106 @@
           }
 
           // V.12.3.0: Monitorización de Estados para EMERGENCIAS (Operaciones)
-          if (localVeh && ops) {
-            // Buscamos si este vehículo está asignado a alguna operación abierta
-            const assignedOp = Object.values(ops).find(op =>
-              op.estado === 'activa' &&
-              op.recursosAsignadosIds &&
-              op.recursosAsignadosIds.includes(localVeh.id)
-            );
+          if (localVeh && ops && assignedOp) {
+            const opId = assignedOp.id;
+            const indicativo = localVeh.alias || localVeh.indicativo || v.name;
+            const speed = parseFloat(v.speed);
+            const opCoords = assignedOp.coords;
+            const opRef = doc(db, 'operaciones', opId);
 
-            if (assignedOp) {
-              const opId = assignedOp.id;
-              const indicativo = localVeh.alias || localVeh.indicativo || v.name;
-              const speed = parseFloat(v.speed);
-              const opCoords = assignedOp.coords;
-              const opRef = doc(db, 'operaciones', opId);
+            if (!window._oystaLogCache) window._oystaLogCache = new Set();
 
-              // Necesitamos los comentarios para evitar duplicados. 
-              // Como no los tenemos en 'ops' (están en subcolección 'acciones'), 
-              // tendríamos que consultarlos, pero eso puede ser costoso en cada loop.
-              // V.12.3.0: Usamos una cache local para evitar spam si no hemos consultado aún.
-              if (!window._oystaLogCache) window._oystaLogCache = new Set();
+            // 1. Salida (Status != 'parado' o Speed > 5)
+            const statusVal = v.status ? v.status.toLowerCase() : '';
+            const isMovingNow = (statusVal !== '' && statusVal !== 'parado') || speed > 5;
+            const depKey = `dep_${opId}_${mid}`;
+            if (isMovingNow && !window._oystaLogCache.has(depKey)) {
+              // Consultamos acciones reales para confirmar
+              getDocs(query(collection(db, 'operaciones', opId, 'acciones'), where('texto', '>=', `⚡️ ${indicativo} sale hacia`)))
+                .then(snap => {
+                  const already = snap.docs.some(d => {
+                    const t = d.data().texto;
+                    return t && t.includes(indicativo) && t.includes("(");
+                  });
+                  if (!already) {
+                    const text = `⚡️ ${indicativo} sale hacia el lugar (${assignedOp.dir || 'sin dirección'}).`;
 
-              // 1. Salida (Status != 'parado' o Speed > 5)
-              const statusVal = v.status ? v.status.toLowerCase() : '';
-              const isMovingNow = (statusVal !== '' && statusVal !== 'parado') || speed > 5;
-              const depKey = `dep_${opId}_${mid}`;
-              if (isMovingNow && !window._oystaLogCache.has(depKey)) {
-                // Consultamos acciones reales para confirmar
-                getDocs(query(collection(db, 'operaciones', opId, 'acciones'), where('texto', '>=', `⚡️ ${indicativo} sale hacia`)))
+                    const processDep = (travelTimeMs) => {
+                      const logTime = Date.now() - travelTimeMs;
+                      addDoc(collection(db, 'operaciones', opId, 'acciones'), {
+                        texto: text,
+                        autor: 'Sist. Oysta',
+                        autorId: 'system',
+                        timestamp: logTime,
+                        prioridad: 'Baja'
+                      });
+                      console.log("[Oysta] Logged departure for Emergencia:", text, "offset:", travelTimeMs);
+                    };
+
+                    let offsetMs = window.OYSTA_LOG_OFFSET_MS;
+                    const initialPos = assignedOp.recursosPosicionesIniciales?.[localVeh.id];
+                    if (initialPos && directionsService) {
+                      calculateRouteWithCache(initialPos, pos, null, (result, status) => {
+                        if (status === 'OK') {
+                          const route = result.routes[0];
+                          const leg = route.legs[0];
+                          const dist = leg.distance.text;
+                          const dur = leg.duration.text;
+                          const durSec = leg.duration.value;
+
+                          if (!window._prevIntRoutes) window._prevIntRoutes = {};
+                          const routeKey = `${opId}_${mid}`;
+                          if (!window._prevIntRoutes[routeKey]) {
+                            window._prevIntRoutes[routeKey] = new google.maps.DirectionsRenderer({
+                              map: mapEmergencias,
+                              suppressMarkers: true,
+                              preserveViewport: true,
+                              polylineOptions: { strokeColor: '#e20613', strokeOpacity: 0.6, strokeWeight: 4 }
+                            });
+                          }
+                          window._prevIntRoutes[routeKey].setDirections(result);
+
+                          const isMoving = (v.status && v.status.toLowerCase() !== 'parado') || (v.speed && v.speed > 5);
+                          if (isMoving && !window._oystaLogCache.has(`${opId}_${mid}_salida`)) {
+                            processDep(durSec * 1000);
+                          }
+                        } else {
+                          processDep(offsetMs);
+                        }
+                      });
+                    } else {
+                      processDep(offsetMs);
+                    }
+                  }
+                  window._oystaLogCache.add(depKey);
+                });
+            }
+
+            // 2. Llegada (Distancia en línea recta < 100m - V.12.3.0)
+            if (opCoords) {
+              const dist = calculateHaversineDist(pos, opCoords);
+              const arrKey = `arr_${opId}_${mid}`;
+              if (dist < 0.1 && !window._oystaLogCache.has(arrKey)) {
+                getDocs(query(collection(db, 'operaciones', opId, 'acciones'), where('texto', '>=', `✅ ${indicativo} llega al lugar`)))
                   .then(snap => {
                     const already = snap.docs.some(d => {
                       const t = d.data().texto;
                       return t && t.includes(indicativo) && t.includes("(");
                     });
                     if (!already) {
-                      const text = `⚡️ ${indicativo} sale hacia el lugar (${assignedOp.dir || 'sin dirección'}).`;
-
-                      const processDep = (travelTimeMs) => {
-                        const logTime = Date.now() - travelTimeMs;
-                        addDoc(collection(db, 'operaciones', opId, 'acciones'), {
-                          texto: text,
-                          autor: 'Sist. Oysta',
-                          autorId: 'system',
-                          timestamp: logTime,
-                          prioridad: 'Baja'
-                        });
-                        console.log("[Oysta] Logged departure for Emergencia:", text, "offset:", travelTimeMs);
-                      };
-
-                      let offsetMs = window.OYSTA_LOG_OFFSET_MS;
-                      const initialPos = assignedOp.recursosPosicionesIniciales?.[localVeh.id];
-                      if (initialPos && directionsService) {
-                        calculateRouteWithCache(initialPos, pos, null, (result, status) => {
-                          if (status === 'OK') {
-                            const route = result.routes[0];
-                            const leg = route.legs[0];
-                            const dist = leg.distance.text;
-                            const dur = leg.duration.text;
-                            const durSec = leg.duration.value;
-
-                            // Draw route on map (This part seems to be for Preventivos, but placed here. Keeping as per instruction.)
-                            // If this is for Emergencias, it should use mapEmergencias and a different route key/renderer.
-                            // Assuming the user intends this for a different context or it's a placeholder.
-                            if (!window._prevIntRoutes) window._prevIntRoutes = {};
-                            const routeKey = `${opId}_${mid}`; // Using opId and mid for key
-                            if (!window._prevIntRoutes[routeKey]) {
-                              window._prevIntRoutes[routeKey] = new google.maps.DirectionsRenderer({
-                                map: mapEmergencias, // Changed to mapEmergencias for consistency with this block
-                                suppressMarkers: true,
-                                preserveViewport: true,
-                                polylineOptions: { strokeColor: '#e20613', strokeOpacity: 0.6, strokeWeight: 4 }
-                              });
-                            }
-                            window._prevIntRoutes[routeKey].setDirections(result);
-
-                            // Oysta logging logic (V.12.3.0)
-                            const isMoving = (v.status && v.status.toLowerCase() !== 'parado') || (v.speed && v.speed > 5);
-                            if (isMoving && !window._oystaLogCache.has(`${opId}_${mid}_salida`)) {
-                              const departureTime = Date.now() - (durSec * 1000);
-                              // Assuming registrarLogOysta is a helper function that needs to be defined or adapted
-                              // For now, calling processDep with the calculated offset
-                              processDep(durSec * 1000);
-                            }
-
-                            const distToScene = calculateHaversineDist(pos, opCoords); // Using pos (vehicle current) and opCoords (operation)
-                            if (distToScene < 0.1 && !window._oystaLogCache.has(`${opId}_${mid}_llegada`)) {
-                              const arrivalTime = Date.now() - window.OYSTA_LOG_OFFSET_MS;
-                              // Assuming registrarLogOysta is a helper function that needs to be defined or adapted
-                              // For now, the arrival logic is handled below this block.
-                            }
-                          } else {
-                            processDep(offsetMs); // Fallback if route calculation fails
-                          }
-                        });
-                      } else {
-                        processDep(offsetMs);
-                      }
-                    }
-                    window._oystaLogCache.add(depKey);
-                  });
-              }
-
-              // 2. Llegada (Distancia en línea recta < 100m - V.12.3.0)
-              if (opCoords) {
-                const dist = calculateHaversineDist(pos, opCoords);
-                const arrKey = `arr_${opId}_${mid}`;
-                if (dist < 0.1 && !window._oystaLogCache.has(arrKey)) {
-                  getDocs(query(collection(db, 'operaciones', opId, 'acciones'), where('texto', '>=', `✅ ${indicativo} llega al lugar`)))
-                    .then(snap => {
-                      const already = snap.docs.some(d => {
-                        const t = d.data().texto;
-                        return t && t.includes(indicativo) && t.includes("(");
+                      const text = `✅ ${indicativo} llega al lugar del aviso (${assignedOp.dir || 'sin dirección'}).`;
+                      const logTime = Date.now() - window.OYSTA_LOG_OFFSET_MS;
+                      addDoc(collection(db, 'operaciones', opId, 'acciones'), {
+                        texto: text,
+                        autor: 'Sist. Oysta',
+                        autorId: 'system',
+                        timestamp: logTime,
+                        prioridad: 'Baja'
                       });
-                      if (!already) {
-                        const text = `✅ ${indicativo} llega al lugar del aviso (${assignedOp.dir || 'sin dirección'}).`;
-                        const logTime = Date.now() - window.OYSTA_LOG_OFFSET_MS;
-                        addDoc(collection(db, 'operaciones', opId, 'acciones'), {
-                          texto: text,
-                          autor: 'Sist. Oysta',
-                          autorId: 'system',
-                          timestamp: logTime,
-                          prioridad: 'Baja'
-                        });
-                        console.log("[Oysta] Logged arrival for Emergencia:", text);
-                      }
-                      window._oystaLogCache.add(arrKey);
-                    });
-                }
+                      console.log("[Oysta] Logged arrival for Emergencia:", text);
+                    }
+                    window._oystaLogCache.add(arrKey);
+                  });
               }
             }
           }
@@ -2796,7 +2821,7 @@
           'Turismo': 'assets/icons/icon_turismo.png'
         };
         const iconPath = iconMap[localVeh.tipo] || 'assets/icons/icon_transp_personal.png';
-                content.innerHTML = `
+        content.innerHTML = `
           <div class="vehicle-top-label">${localVeh.alias || localVeh.indicativo || 'Sin ind.'}</div>
           <div class="marker-main" style="width:32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); position: relative;">
             <img class="marker-icon" src="${iconPath}" style="width:28px; height:28px; object-fit:contain; transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); flex-shrink: 0;">
@@ -2836,7 +2861,7 @@
           badge.title = `Llegada aprox en: ${window._ambulanceRanks[oystaId].duration}`;
           content.appendChild(badge);
         }
-            } else {
+      } else {
         content.className = `custom-marker unlinked-marker ${statusClass}`;
         content.style.position = 'relative';
         content.innerHTML = `
