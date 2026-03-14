@@ -1098,7 +1098,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.0.4 Loaded');
+    console.log('EmerCRE V.13.1.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1807,11 +1807,18 @@
         if (navChat) navChat.style.display = accesoEmergencias ? 'flex' : 'none';
         if (mnavChat) mnavChat.style.display = accesoEmergencias ? 'flex' : 'none';
 
-        if (accesoEmergencias) {
+        // V.13.1.0: Restaurar última sección guardada
+        const lastSection = localStorage.getItem('emercre_last_section');
+        if (lastSection === 'preventivos' && accesoPreventivos) {
+          showSection('preventivos');
+        } else if (lastSection === 'chat' && accesoEmergencias) {
+          showSection('chat');
+        } else if (accesoEmergencias) {
           showSection('operaciones');
         } else if (accesoPreventivos) {
           showSection('preventivos');
         }
+
 
         mostrarApp();
         initApp();
@@ -4698,6 +4705,10 @@ ${dataContext}
       }
 
       document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
+
+      // V.13.1.0: Guardar sección para persistencia
+      localStorage.setItem('emercre_last_section', sec);
+
       document.getElementById('section-operaciones').style.display = sec === 'operaciones' ? 'flex' : 'none';
       if (document.getElementById('section-preventivos')) {
         document.getElementById('section-preventivos').style.display = sec === 'preventivos' ? 'flex' : 'none';
@@ -13907,7 +13918,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.0.4
+          Versión V.13.1.0
         </div>
       </div>
 
@@ -14293,7 +14304,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.0.4
+          Versión V.13.1.0
         </div>
       </div>
 
@@ -15180,7 +15191,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.0.4
+            Versión V.13.1.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
