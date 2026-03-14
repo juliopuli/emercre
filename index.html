@@ -1096,7 +1096,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.0.1 Loaded');
+    console.log('EmerCRE V.13.0.2 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7044,12 +7044,22 @@ ${dataContext}
       if (!d || !recCont) return;
 
       const occupiedResources = new Set();
+      // 1. De intervenciones de este día (cache local)
       Object.keys(intervencionesCache).forEach(k => {
         const i = intervencionesCache[k];
         if (i.abierta !== false && !i.oculta) {
-          (i.recursosAsignados || []).forEach(r => occupiedResources.add(r));
+          (i.recursosAsignados || []).forEach(r => occupiedResources.add(String(r)));
         }
       });
+      // 2. De intervenciones globales abiertas (por si están asignados en otro día)
+      if (typeof lastGlobalInterventionDocs !== 'undefined' && lastGlobalInterventionDocs) {
+        lastGlobalInterventionDocs.forEach(doc => {
+          const i = doc.data();
+          if (i.abierta !== false && !i.oculta) {
+            (i.recursosAsignados || []).forEach(r => occupiedResources.add(String(r)));
+          }
+        });
+      }
 
       recCont.innerHTML = window.renderResourceBadges(d.recursos, occupiedResources);
     };
@@ -7138,8 +7148,11 @@ ${dataContext}
       const cont = document.getElementById('prev-intervenciones-container');
       if (!cont) return;
 
-      // V.12.4.1: Los marcadores ahora los gestiona suscribirGlobalPreventivoIntervenciones
-      // ya no limpiamos ni añadimos aquí para que sean persistentes en todo el módulo.
+      // V.13.0.2: Actualizar cache e indicadores antes de cualquier retorno
+      let intCache = {};
+      snap.forEach(doc => { intCache[doc.id] = doc.data(); });
+      intervencionesCache = intCache;
+      if (currentPreventivoDiaId) renderHeaderResourceBadges(currentPreventivoDiaId);
 
       if (snap.empty) {
         cont.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-4);">Sin intervenciones registradas este día.</div>';
@@ -7768,14 +7781,25 @@ ${dataContext}
       if (!d || !d.recursos || d.recursos.length === 0) {
         recList.innerHTML = '<div style="font-size:11px; color:var(--text-4);">No hay recursos asignados a este día.</div>';
       } else {
-        // Recursos ocupados en otras intervenciones ABIERTAS del mismo día
+        // Recursos ocupados en otras intervenciones ABIERTAS
         const occupiedResources = new Set();
+        // 1. De la cache del día actual
         Object.keys(intervencionesCache).forEach(k => {
           const other = intervencionesCache[k];
           if (k !== editIntervencionId && other.abierta !== false && !other.oculta) {
-            (other.recursosAsignados || []).forEach(r => occupiedResources.add(r));
+            (other.recursosAsignados || []).forEach(r => occupiedResources.add(String(r)));
           }
         });
+        // 2. De las intervenciones globales (por si están en otro preventivo/día)
+        if (typeof lastGlobalInterventionDocs !== 'undefined' && lastGlobalInterventionDocs) {
+          lastGlobalInterventionDocs.forEach(doc => {
+            if (doc.id === editIntervencionId) return;
+            const other = doc.data();
+            if (other.abierta !== false && !other.oculta) {
+              (other.recursosAsignados || []).forEach(r => occupiedResources.add(String(r)));
+            }
+          });
+        }
 
         recList.innerHTML = `
         <div style="display:flex; flex-wrap:wrap; gap:6px;">
@@ -8503,9 +8527,13 @@ ${dataContext}
       if (!confirm('¿Seguro que deseas eliminar esta intervención permanentemente?')) return;
       try {
         await deleteDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id));
-        // V.12.4.1: Sincronía inmediata local tras borrado
+        // V.13.0.2: Sincronía inmediata local tras borrado
         lastGlobalInterventionDocs = lastGlobalInterventionDocs.filter(d => d.id !== id);
+        if (intervencionesCache[id]) delete intervencionesCache[id];
+
         window.refreshGlobalPreventivoMarkers();
+        if (currentPreventivoDiaId) renderHeaderResourceBadges(currentPreventivoDiaId);
+
         mostrarToast('Intervención eliminada');
       } catch (e) { alert('Error al borrar: ' + e.message); }
     };
@@ -13832,7 +13860,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.0.1
+          Versión V.13.0.2
         </div>
       </div>
 
@@ -14218,7 +14246,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.0.1
+          Versión V.13.0.2
         </div>
       </div>
 
@@ -15105,7 +15133,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.0.1
+            Versión V.13.0.2
           </div>
         </div>
         <div class="field" id="j-prov-row">
