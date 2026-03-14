@@ -5170,6 +5170,7 @@ ${dataContext}
         const tr = document.createElement('tr');
         tr.innerHTML = `
           <td><strong>${v.alias || v.indicativo}</strong>${v.alias ? `<br><span style="font-size:11px;color:var(--text-2);">${v.indicativo}</span>` : ''}</td>
+          <td style="font-weight:600; color:var(--accent);">${v.alias || '-'}</td>
           <td style="font-family:'IBM Plex Mono',monospace; font-size:12px;">${v.matricula}</td>
           <td>${v.tipo || '-'}</td>
           <td style="font-size:11px; color:#6c757d;">${v.provincia || 'Málaga'}</td>
@@ -13863,6 +13864,7 @@ ${dataContext}
             <thead>
               <tr>
                 <th>Vehículo / Indicativo</th>
+                <th>Alias</th>
                 <th>Matrícula</th>
                 <th>Tipo de vehículo</th>
                 <th>Acciones</th>
