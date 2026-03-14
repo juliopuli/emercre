@@ -7384,13 +7384,23 @@ ${dataContext}
                 window._oystaSentPreventivos.add(depKey);
                 const text = `⚡️ ${indicativo} sale hacia el lugar (${iData.direccion || 'sin dirección'}).`;
                 const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
-                updateDoc(iDoc.ref, { comentarios: arrayUnion(newComment) });
+                try {
+                  await updateDoc(iDoc.ref, { comentarios: arrayUnion(newComment) });
+                  console.log(`[Oysta-Auto] Comentario de salida guardado para ${indicativo}`);
+                } catch (e) {
+                  console.error(`[Oysta-Auto] Error guardando salida para ${indicativo}:`, e);
+                }
                 vs.hasDeparted = true;
               }
             } else if (vs.lastStopAddr && distToDest > 0.1) {
               const text = `⚡️ ${indicativo} sale de ${vs.lastStopAddr} hacia el lugar.`;
               const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
-              updateDoc(iDoc.ref, { comentarios: arrayUnion(newComment) });
+              try {
+                await updateDoc(iDoc.ref, { comentarios: arrayUnion(newComment) });
+                console.log(`[Oysta-Auto] Comentario de salida de parada guardado para ${indicativo}`);
+              } catch (e) {
+                console.error(`[Oysta-Auto] Error guardando salida de parada para ${indicativo}:`, e);
+              }
               vs.lastStopAddr = "";
             }
             // 2. Parada / Llegada Final / Parada Intermedia
@@ -7403,15 +7413,24 @@ ${dataContext}
                 window._oystaSentPreventivos.add(arrKey);
                 const text = `✅ ${indicativo} llega al lugar del aviso (${iData.direccion || 'sin dirección'}).`;
                 const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
-                updateDoc(iDoc.ref, { comentarios: arrayUnion(newComment) });
+                try {
+                  await updateDoc(iDoc.ref, { comentarios: arrayUnion(newComment) });
+                  console.log(`[Oysta-Auto] Comentario de llegada guardado para ${indicativo}`);
+                } catch (e) {
+                  console.error(`[Oysta-Auto] Error guardando llegada para ${indicativo}:`, e);
+                }
                 vs.hasArrived = true;
                 vs.lastArrivedCoords = { ...iData.coords }; // V.12.4.2: Record where we arrived
-              } else if (distToDest >= 0.1) {
-                reverseGeocodeWithCache(pos, (addr) => {
+                reverseGeocodeWithCache(pos, async (addr) => {
                   vs.lastStopAddr = addr || 'posición desconocida';
                   const text = `✅ ${indicativo} llega a ${vs.lastStopAddr}.`;
                   const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
-                  updateDoc(iDoc.ref, { comentarios: arrayUnion(newComment) });
+                  try {
+                    await updateDoc(iDoc.ref, { comentarios: arrayUnion(newComment) });
+                    console.log(`[Oysta-Auto] Comentario de parada intermedia guardado para ${indicativo}`);
+                  } catch (e) {
+                    console.error(`[Oysta-Auto] Error guardando parada intermedia para ${indicativo}:`, e);
+                  }
                 });
               }
             }
@@ -14009,7 +14028,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.12.4.3
+          Versión V.12.4.4
         </div>
       </div>
 
@@ -14738,9 +14757,6 @@ ${dataContext}
         <button class="btn-cancel" onclick="cerrarFastAssign()">Cancelar</button>
       </div>
     </div>
-  </div>
-  <button class="btn-reg" onclick="guardarComentarioPrev()">Enviar Comentario</button>
-  </div>
   </div>
   </div>
 
