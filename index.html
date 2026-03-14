@@ -147,7 +147,10 @@
     let unsubGlobalSubpreventivos = null; // V.12.4.1: Para seguimiento de recursos asignados a días
     let oystaMarkersPrev = {};
     let markersPreventivos = {};
-    window._oystaRouteLabels = {}; // V.12.4.1: Registro persistente de etiquetas
+    window._oystaLogCache = new Set(); // V.12.4.1: Registro de envíos para evitar duplicados en sesión
+    window._emeRoutesMap = {};      // V.12.4.1: Rutas de Emergencias
+    window._prevRoutesMap = {};     // V.12.4.1: Rutas de Preventivos
+    window._prevLabelsMap = {};     // V.12.4.1: Etiquetas de Preventivos
     window._oystaSentPreventivos = new Set(); // V.12.4.1: Registro de eventos de salida/llegada enviados
     let lastGlobalInterventionDocs = []; // V.12.4.1: Cache de snapshot global para re-sincronía
     let lastGlobalSubpreventivoDocs = []; // V.12.4.1
@@ -2560,10 +2563,7 @@
           }
         }
 
-        console.log(`Cargando ${data.vehicles.length} vehículos de Oysta...`);
-
-        // V.12.4.1: Tracking de rutas activas en Emergencias para limpiar las obsoletas
-        if (!window._prevIntRoutes) window._prevIntRoutes = {};
+        // V.12.4.2: Tracking de rutas activas en Emergencias para limpiar las obsoletas
         const vehicleIds = data.vehicles.map(v => String(v.id));
         Object.keys(oystaMarkers).forEach(id => {
           if (!vehicleIds.includes(String(id))) {
@@ -2645,7 +2645,7 @@
 
             if (!window._oystaVehicleState) window._oystaVehicleState = {};
             if (!window._oystaVehicleState[stateKey]) {
-              window._oystaVehicleState[stateKey] = { moving: false, lastStopAddr: "", hasDeparted: false, hasArrived: false };
+              window._oystaVehicleState[stateKey] = { moving: speed > 5, lastStopAddr: "", hasDeparted: false, hasArrived: false };
             }
             const vs = window._oystaVehicleState[stateKey];
             const isMovingNow = speed > 5;
@@ -2710,20 +2710,19 @@
               }
             }
 
-            // Pintar ruta en Emergencias (Lógica existente)
+            // Pintar ruta en Emergencias (Lógica persistente V.12.4.1)
             if (isMovingNow && !vs.hasArrived) {
               const routeKey = `${opId}_${mid}`;
-              if (!window._prevIntRoutes) window._prevIntRoutes = {};
-              if (!window._prevIntRoutes[routeKey] && directionsService) {
+              if (!window._emeRoutesMap[routeKey] && directionsService) {
                 const initialPos = assignedOp.recursosPosicionesIniciales?.[localVeh.id];
                 if (initialPos) {
                   calculateRouteWithCache(initialPos, pos, null, (result, status) => {
-                    if (status === 'OK' && !window._prevIntRoutes[routeKey]) {
-                      window._prevIntRoutes[routeKey] = new google.maps.DirectionsRenderer({
+                    if (status === 'OK' && !window._emeRoutesMap[routeKey]) {
+                      window._emeRoutesMap[routeKey] = new google.maps.DirectionsRenderer({
                         map: mapEmergencias, suppressMarkers: true, preserveViewport: true,
                         polylineOptions: { strokeColor: '#e20613', strokeOpacity: 0.6, strokeWeight: 4 }
                       });
-                      window._prevIntRoutes[routeKey].setDirections(result);
+                      window._emeRoutesMap[routeKey].setDirections(result);
                     }
                   });
                 }
@@ -2732,24 +2731,21 @@
           }
         });
 
-        // V.12.4.1: Limpiar rutas de Emergencias que ya no son necesarias (vehículo desasignado u op cerrada)
-        Object.keys(window._prevIntRoutes).forEach(k => {
-          if (k.includes('_')) {
-            const parts = k.split('_');
-            if (parts.length === 2) {
-              const opId = parts[0];
-              const mid = parts[1];
-              const assignedOp = ops[opId];
-              const localVeh = localVehiclesByOystaId[mid];
-              const stillAssigned = assignedOp && assignedOp.estado === 'activa' &&
-                localVeh && assignedOp.recursosAsignadosIds?.includes(localVeh.id);
+        // V.12.4.1: Limpiar rutas de Emergencias obsoletas
+        Object.keys(window._emeRoutesMap).forEach(k => {
+          const parts = k.split('_');
+          if (parts.length === 2) {
+            const opId = parts[0];
+            const mid = parts[1];
+            const assignedOp = ops[opId];
+            const localVeh = localVehiclesByOystaId[mid];
+            const stillAssigned = assignedOp && assignedOp.estado === 'activa' &&
+              localVeh && assignedOp.recursosAsignadosIds?.includes(localVeh.id);
 
-              if (!stillAssigned) {
-                const r = window._prevIntRoutes[k];
-                if (r.setMap) r.setMap(null);
-                if (r.renderer) r.renderer.setMap(null);
-                delete window._prevIntRoutes[k];
-              }
+            if (!stillAssigned) {
+              const r = window._emeRoutesMap[k];
+              if (r && typeof r.setMap === 'function') r.setMap(null);
+              delete window._emeRoutesMap[k];
             }
           }
         });
@@ -7300,8 +7296,6 @@ ${dataContext}
         directionsService = new google.maps.DirectionsService();
       }
 
-      if (!window._prevIntRoutes) window._prevIntRoutes = {};
-
       // 2. Procesar vehículos
       if (oystaVehiclesCache && oystaVehiclesCache.length > 0) {
         routeRequests.forEach((renderData) => {
@@ -7317,6 +7311,19 @@ ${dataContext}
 
           activeVehicleIds.add(vehicleId);
           const routeKey = `${vehicleId}_${renderData.id}`;
+          const stateKey = `prev_${renderData.interventionId}_${vehicleId}`;
+
+          if (!window._oystaVehicleState) window._oystaVehicleState = {};
+          if (!window._oystaVehicleState[stateKey]) {
+            window._oystaVehicleState[stateKey] = {
+              moving: parseFloat(oystaVeh.speed) > 5,
+              lastStopAddr: "",
+              hasDeparted: false,
+              hasArrived: false,
+              lastArrivedCoords: null
+            };
+          }
+          const vs = window._oystaVehicleState[stateKey];
 
           // A. Marcador de Vehículo
           const statusClass = parseFloat(oystaVeh.speed) > 5 ? 'moving' : 'stopped';
@@ -7355,13 +7362,16 @@ ${dataContext}
             const speed = parseFloat(oystaVeh.speed);
             const isMovingNow = speed > 5;
             const distToDest = calculateHaversineDist(pos, iData.coords);
-            const stateKey = `prev_${renderData.interventionId}_${vehicleId}`;
 
-            if (!window._oystaVehicleState) window._oystaVehicleState = {};
-            if (!window._oystaVehicleState[stateKey]) {
-              window._oystaVehicleState[stateKey] = { moving: isMovingNow, lastStopAddr: "", hasDeparted: false, hasArrived: false };
+            // V.12.4.2: RESET arrival if destination changed
+            if (vs.hasArrived && vs.lastArrivedCoords) {
+              const dDest = calculateHaversineDist(iData.coords, vs.lastArrivedCoords);
+              if (dDest > 0.05) { // 50m threshold for "new address"
+                console.log(`[Oysta-Rules] Dirección cambiada para ${stateKey}. Reseteando estado de llegada.`);
+                vs.hasArrived = false;
+                vs.lastArrivedCoords = null;
+              }
             }
-            const vs = window._oystaVehicleState[stateKey];
 
             // 1. Salida Inicial / Salida de Parada Intermedia
             if (isMovingNow && !vs.moving) {
@@ -7373,13 +7383,15 @@ ${dataContext}
               if (!hasDepartedLog && !window._oystaSentPreventivos.has(depKey)) {
                 window._oystaSentPreventivos.add(depKey);
                 const text = `⚡️ ${indicativo} sale hacia el lugar (${iData.direccion || 'sin dirección'}).`;
-                updateDoc(iDoc.ref, { comentarios: [...comments, { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) }] });
+                const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
+                updateDoc(iDoc.ref, { comentarios: arrayUnion(newComment) });
                 vs.hasDeparted = true;
-              } else if (vs.lastStopAddr && distToDest > 0.1) {
-                const text = `⚡️ ${indicativo} sale de ${vs.lastStopAddr} hacia el lugar.`;
-                updateDoc(iDoc.ref, { comentarios: [...comments, { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) }] });
-                vs.lastStopAddr = "";
               }
+            } else if (vs.lastStopAddr && distToDest > 0.1) {
+              const text = `⚡️ ${indicativo} sale de ${vs.lastStopAddr} hacia el lugar.`;
+              const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
+              updateDoc(iDoc.ref, { comentarios: arrayUnion(newComment) });
+              vs.lastStopAddr = "";
             }
             // 2. Parada / Llegada Final / Parada Intermedia
             else if (!isMovingNow && vs.moving) {
@@ -7390,21 +7402,24 @@ ${dataContext}
               if (distToDest < 0.1 && !hasArrivedLog && !window._oystaSentPreventivos.has(arrKey)) {
                 window._oystaSentPreventivos.add(arrKey);
                 const text = `✅ ${indicativo} llega al lugar del aviso (${iData.direccion || 'sin dirección'}).`;
-                updateDoc(iDoc.ref, { comentarios: [...comments, { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) }] });
+                const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
+                updateDoc(iDoc.ref, { comentarios: arrayUnion(newComment) });
                 vs.hasArrived = true;
+                vs.lastArrivedCoords = { ...iData.coords }; // V.12.4.2: Record where we arrived
               } else if (distToDest >= 0.1) {
                 reverseGeocodeWithCache(pos, (addr) => {
                   vs.lastStopAddr = addr || 'posición desconocida';
                   const text = `✅ ${indicativo} llega a ${vs.lastStopAddr}.`;
-                  updateDoc(iDoc.ref, { comentarios: [...comments, { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) }] });
+                  const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
+                  updateDoc(iDoc.ref, { comentarios: arrayUnion(newComment) });
                 });
               }
             }
           }
 
-          // D. Control de llegada (Arrival) V.12.4.1
+          // D. Control de llegada (Arrival Rule V.12.4.2)
           const distToIntervention = calculateHaversineDist(pos, renderData.coords);
-          const hasArrivedIntervention = distToIntervention < 0.1; // 100 metros
+          const hasArrivedIntervention = (distToIntervention < 0.1) || (vs && vs.hasArrived);
 
           if (!hasArrivedIntervention) {
             activeRouteKeys.add(routeKey);
@@ -7414,9 +7429,9 @@ ${dataContext}
 
           // C. Ruta Dinámica (REVERTIDO A DirectionsRenderer V.12.4.1)
           if (directionsService && !hasArrivedIntervention) {
-            if (!window._prevIntRoutes[routeKey]) {
+            if (!window._prevRoutesMap[routeKey]) {
               console.log(`[Oysta] Inicializando DirectionsRenderer para ${routeKey}`);
-              window._prevIntRoutes[routeKey] = {
+              window._prevRoutesMap[routeKey] = {
                 renderer: new google.maps.DirectionsRenderer({
                   map: mapPreventivos,
                   suppressMarkers: true,
@@ -7431,7 +7446,7 @@ ${dataContext}
                 isCalculating: false, lastPos: null, lastDest: null
               };
             }
-            const routeObj = window._prevIntRoutes[routeKey];
+            const routeObj = window._prevRoutesMap[routeKey];
             const dest = renderData.coords;
 
             // Umbral de movimiento reducido a 20m para mayor reactividad
@@ -7444,7 +7459,7 @@ ${dataContext}
               routeObj.lastDest = dest;
 
               calculateRouteWithCache(pos, dest, null, (result, status) => {
-                if (!window._prevIntRoutes[routeKey] || window._prevIntRoutes[routeKey] !== routeObj) return;
+                if (!window._prevRoutesMap[routeKey] || window._prevRoutesMap[routeKey] !== routeObj) return;
                 routeObj.isCalculating = false;
 
                 if (status === 'OK' && result.routes && result.routes[0]) {
@@ -7452,12 +7467,12 @@ ${dataContext}
 
                   const leg = result.routes[0].legs[0];
                   if (leg) {
-                    if (!window._oystaRouteLabels[routeKey]) {
+                    if (!window._prevLabelsMap[routeKey]) {
                       const div = document.createElement('div');
                       div.style.cssText = 'background:rgba(26,58,110,0.95); color:white; padding:4px 8px; border-radius:12px; font-size:11px; font-weight:700; box-shadow:0 3px 6px rgba(0,0,0,0.4); pointer-events:none; white-space:nowrap; border:1px solid rgba(255,255,255,0.25); display:flex; align-items:center; gap:6px; transform:translate(35px, -35px);';
-                      window._oystaRouteLabels[routeKey] = new google.maps.marker.AdvancedMarkerElement({ map: mapPreventivos, content: div, zIndex: 950 });
+                      window._prevLabelsMap[routeKey] = new google.maps.marker.AdvancedMarkerElement({ map: mapPreventivos, content: div, zIndex: 950 });
                     }
-                    const lbl = window._oystaRouteLabels[routeKey];
+                    const lbl = window._prevLabelsMap[routeKey];
                     lbl.position = pos; lbl.map = mapPreventivos;
                     lbl.content.innerHTML = `<span style="opacity:0.8; font-size:10px;">🚩</span> ${leg.distance.text} <span style="opacity:0.4; margin:0 2px;">|</span> <span style="opacity:0.8; font-size:10px;">⏱️</span> ${leg.duration.text}`;
                   }
@@ -7466,9 +7481,9 @@ ${dataContext}
             } else {
               // Asegurar que siga visible
               if (routeObj.renderer && !routeObj.renderer.getMap()) routeObj.renderer.setMap(mapPreventivos);
-              if (window._oystaRouteLabels[routeKey]) {
-                window._oystaRouteLabels[routeKey].position = pos;
-                window._oystaRouteLabels[routeKey].map = mapPreventivos;
+              if (window._prevLabelsMap[routeKey]) {
+                window._prevLabelsMap[routeKey].position = pos;
+                window._prevLabelsMap[routeKey].map = mapPreventivos;
               }
             }
           }
@@ -7476,26 +7491,26 @@ ${dataContext}
       }
 
       // 3. Limpieza de obsoletos
-      Object.keys(window._prevIntRoutes || {}).forEach(k => {
-        const r = window._prevIntRoutes[k];
+      Object.keys(window._prevRoutesMap || {}).forEach(k => {
+        const r = window._prevRoutesMap[k];
         if (!activeRouteKeys.has(k)) {
           console.log(`[Oysta] Limpiando ruta obsoleta: ${k}`);
           if (r.line) { r.line.setMap(null); }
           if (r.fallbackLine) { r.fallbackLine.setMap(null); }
           if (r.renderer) { r.renderer.setMap(null); }
-          delete window._prevIntRoutes[k];
+          delete window._prevRoutesMap[k];
         } else {
           // Asegurar visibilidad
           if (r.renderer && !r.renderer.getMap()) r.renderer.setMap(mapPreventivos);
           if (r.line && !r.line.getMap()) r.line.setMap(mapPreventivos);
         }
       });
-      Object.keys(window._oystaRouteLabels || {}).forEach(k => {
+      Object.keys(window._prevLabelsMap || {}).forEach(k => {
         if (!activeRouteKeys.has(k)) {
           console.log(`[Oysta] Eliminando etiqueta obsoleta: ${k}`);
-          if (window._oystaRouteLabels[k]) {
-            window._oystaRouteLabels[k].map = null;
-            delete window._oystaRouteLabels[k];
+          if (window._prevLabelsMap[k]) {
+            window._prevLabelsMap[k].map = null;
+            delete window._prevLabelsMap[k];
           }
         }
       });
@@ -7825,20 +7840,20 @@ ${dataContext}
       clearPreventivoMarkers();
 
       // V.12.4.1: Limpieza TOTAL de artefactos de asignación
-      if (window._prevIntRoutes) {
-        Object.keys(window._prevIntRoutes).forEach(k => {
-          const r = window._prevIntRoutes[k];
+      if (window._prevRoutesMap) {
+        Object.keys(window._prevRoutesMap).forEach(k => {
+          const r = window._prevRoutesMap[k];
           if (r.line) r.line.setMap(null);
           if (r.fallbackLine) r.fallbackLine.setMap(null);
           if (r.renderer) r.renderer.setMap(null); // Defensa contra obsoletos
         });
-        window._prevIntRoutes = {};
+        window._prevRoutesMap = {};
       }
-      if (window._oystaRouteLabels) {
-        Object.keys(window._oystaRouteLabels).forEach(k => {
-          if (window._oystaRouteLabels[k]) window._oystaRouteLabels[k].map = null;
+      if (window._prevLabelsMap) {
+        Object.keys(window._prevLabelsMap).forEach(k => {
+          if (window._prevLabelsMap[k]) window._prevLabelsMap[k].map = null;
         });
-        window._oystaRouteLabels = {};
+        window._prevLabelsMap = {};
       }
       if (window._prevIntVehicleMarkers) {
         Object.keys(window._prevIntVehicleMarkers).forEach(vid => {
@@ -13994,7 +14009,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.12.4.1
+          Versión V.12.4.3
         </div>
       </div>
 
