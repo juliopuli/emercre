@@ -1082,7 +1082,7 @@
       });
     }
 
-    console.log('EmerCRE V.12.5.2 Loaded');
+    console.log('EmerCRE V.12.5.3 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -6145,10 +6145,13 @@ ${dataContext}
         <div class="search-pin-addr">${p.address}</div>
         
         <div style="margin-top:8px;">
-          <div class="field-lbl" style="font-size:10px;">Etiqueta del marcador:</div>
-          <div style="display:flex; gap:4px;">
-            <input type="text" id="pin-label-input-${pid}" class="f-input" style="flex:1; height:24px; font-size:11px;" value="${p.label || ''}" placeholder="Ej: Puesto Sanitario">
-            <button class="btn-reg" style="height:24px; padding:0 8px; font-size:10px;" onclick="window.savePinLabel('${pid}')">OK</button>
+          <div class="field-lbl" style="font-size:10px; color:var(--text-3); font-weight:700;">Etiqueta del marcador:</div>
+          <div style="display:flex; gap:6px; margin-top:4px;">
+            <input type="text" id="pin-label-input-${pid}" class="f-input" 
+                   style="flex:1; height:28px; font-size:12px; border-radius:4px; padding:0 8px;" 
+                   value="${p.label || ''}" placeholder="Ej: Puesto Sanitario">
+            <button style="height:28px; padding:0 12px; font-size:11px; font-weight:700; background:var(--accent); color:white; border:none; border-radius:4px; cursor:pointer;" 
+                    onclick="window.savePinLabel('${pid}')">OK</button>
           </div>
         </div>
 
@@ -7761,8 +7764,8 @@ ${dataContext}
           ${d.recursos
             .filter(rvId => !occupiedResources.has(rvId) || (iEdit?.recursosAsignados || []).includes(rvId))
             .sort((a, b) => {
-              const va = window.globalVehiculos && window.globalVehiculos[a];
-              const vb = window.globalVehiculos && window.globalVehiculos[b];
+              const va = localVehiclesById[a];
+              const vb = localVehiclesById[b];
 
               // V.12.4.1: Priorizar por ranking de cercanía si existe
               const rankA = va?.oystaId ? (window._ambulanceRanks[String(va.oystaId)]?.rank || 999) : 999;
@@ -7774,7 +7777,7 @@ ${dataContext}
               return getVehiclePriority(va?.tipo) - getVehiclePriority(vb?.tipo);
             })
             .map(rvId => {
-              const v = window.globalVehiculos && window.globalVehiculos[rvId];
+              const v = localVehiclesById[rvId];
               const isSelected = (iEdit?.recursosAsignados || []).includes(rvId);
 
               let iconUrl = 'assets/icons/icon_transp_personal.png';
@@ -13804,7 +13807,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.12.5.2
+          Versión V.12.5.3
         </div>
       </div>
 
@@ -14190,7 +14193,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.12.5.2
+          Versión V.12.5.3
         </div>
       </div>
 
@@ -15077,7 +15080,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.12.5.2
+            Versión V.12.5.3
           </div>
         </div>
         <div class="field" id="j-prov-row">
