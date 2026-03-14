@@ -12,12 +12,12 @@ functions/package-lock.json
 firebase.json
 .firebaserc
 functions/node_modules/
+firestore.rules
+RULES.md
 *.ps1
 sync_all.ps1
 functions/test_*.js
 query_fs.js
 query_all_fs.js
-RULES.md
-# firestore.rules (removido)
 
 
