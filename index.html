@@ -231,7 +231,7 @@
       reverseGeocodeThrottle = true;
       setTimeout(() => { reverseGeocodeThrottle = false; }, 1000);
 
-      // V.13.3.1: Normalizar coordenadas para hit de caché (soporta LatLng y Literales)
+      // V.13.4.0: Normalizar coordenadas para hit de caché (soporta LatLng y Literales)
       const lat = (typeof latlng.lat === 'function') ? latlng.lat() : latlng.lat;
       const lng = (typeof latlng.lng === 'function') ? latlng.lng() : latlng.lng;
       if (lat === undefined || lng === undefined) { callback(null); return; }
@@ -449,7 +449,7 @@
         if (!picking && !editPickMode) window.cerrarDetalle();
       });
 
-      // V.13.3.1: Crear pin solo con doble click para evitar saturación
+      // V.13.4.0: Crear pin solo con doble click para evitar saturación
       mapEmergencias.addListener('dblclick', (e) => {
         if (e.latLng) window.onMapClickPersistentPin(e, 'eme');
       });
@@ -1108,7 +1108,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.3.1 Loaded');
+    console.log('EmerCRE V.13.4.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1817,7 +1817,7 @@
         if (navChat) navChat.style.display = accesoEmergencias ? 'flex' : 'none';
         if (mnavChat) mnavChat.style.display = accesoEmergencias ? 'flex' : 'none';
 
-        // V.13.3.1: Restaurar última sección guardada
+        // V.13.4.0: Restaurar última sección guardada
         const lastSection = localStorage.getItem('emercre_last_section');
         if (lastSection === 'preventivos' && accesoPreventivos) {
           showSection('preventivos');
@@ -4716,7 +4716,7 @@ ${dataContext}
 
       document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
 
-      // V.13.3.1: Guardar sección para persistencia
+      // V.13.4.0: Guardar sección para persistencia
       localStorage.setItem('emercre_last_section', sec);
 
       document.getElementById('section-operaciones').style.display = sec === 'operaciones' ? 'flex' : 'none';
@@ -6017,7 +6017,7 @@ ${dataContext}
         const mapDiv = document.getElementById('preventivos-map');
         if (!mapDiv) return;
 
-        // V.13.3.1: Recuperar zoom y centro guardados
+        // V.13.4.0: Recuperar zoom y centro guardados
         const savedState = localStorage.getItem('emercre_prev_map_state');
         let initialCenter = { lat: 37.3891, lng: -5.9845 };
         let initialZoom = 7;
@@ -6039,7 +6039,7 @@ ${dataContext}
           fullscreenControl: false
         });
 
-        // V.13.3.1: Guardar estado al mover el mapa
+        // V.13.4.0: Guardar estado al mover el mapa
         mapPreventivos.addListener('idle', () => {
           const center = mapPreventivos.getCenter();
           const zoom = mapPreventivos.getZoom();
@@ -6054,7 +6054,7 @@ ${dataContext}
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         });
 
-        // V.13.3.1: Crear pin solo con doble click para evitar saturación
+        // V.13.4.0: Crear pin solo con doble click para evitar saturación
         mapPreventivos.addListener('dblclick', (e) => {
           if (e.latLng) window.onMapClickPersistentPin(e, 'prev');
         });
@@ -6150,7 +6150,7 @@ ${dataContext}
         .catch(e => console.error("[Search-Pin] Error guardando pin:", e));
     }
 
-    // V.13.3.1: Handler global para clicks en mapa que crean pines
+    // V.13.4.0: Handler global para clicks en mapa que crean pines
     window.onMapClickPersistentPin = function (e, mapType) {
       // Solo actuar si no hay modales de selección de ubicación activos
       if (picking || editPickMode || routingPickField) return;
@@ -6599,6 +6599,7 @@ ${dataContext}
                   </span>` : ''}
 
                   ${canDelete ? `<span onclick="event.stopPropagation(); window.borrarPreventivo('${id}')" style="cursor:pointer; opacity:0.7; font-size:14px;" title="Borrar">🗑️</span>` : ''}
+                  <span onclick="event.stopPropagation(); window.abrirComentarios('${id}', 'preventivo')" style="cursor:pointer; font-size:14px;" title="Comentarios">💬</span>
                   <span onclick="event.stopPropagation(); window.generarInformeIA_Preventivo('preventivo', '${id}')" style="cursor:pointer; font-size:14px;" title="Generar Informe IA">✨</span>
                 </div>
               </div>
@@ -7332,7 +7333,7 @@ ${dataContext}
         setTimeout(() => abrirGestionIntervencion(activeIntManageId, true), 10);
       }
 
-      /* V.13.3.1: Desactivado auto-ajuste por petición usuario
+      /* V.13.4.0: Desactivado auto-ajuste por petición usuario
       if (hasCoords && mapPreventivos) {
         mapPreventivos.fitBounds(bounds);
         if (mapPreventivos.getZoom() > 16) mapPreventivos.setZoom(16);
@@ -7484,7 +7485,7 @@ ${dataContext}
             });
           }
 
-          /* V.13.3.1: Desactivado auto-ajuste por petición usuario
+          /* V.13.4.0: Desactivado auto-ajuste por petición usuario
           if (hasCoords) {
             const isMobile = window.innerWidth < 900;
             mapPreventivos.fitBounds(bounds, isMobile ? { top: 50, bottom: 50, left: 50, right: 50 } : { top: 70, bottom: 70, left: 370, right: 70 });
@@ -7817,7 +7818,7 @@ ${dataContext}
       // Añadir listener para centrar al hacer click
       container.addEventListener('click', () => {
         mapPreventivos.panTo(i.coords);
-        // mapPreventivos.setZoom(18); // V.13.3.1: Desactivado para respetar zoom usuario
+        // mapPreventivos.setZoom(18); // V.13.4.0: Desactivado para respetar zoom usuario
         abrirGestionIntervencion(id);
       });
     }
@@ -7826,7 +7827,7 @@ ${dataContext}
       const m = markersPreventivos[id];
       if (m && mapPreventivos) {
         mapPreventivos.panTo(m.position);
-        // mapPreventivos.setZoom(17); // V.13.3.1: Desactivado para respetar zoom usuario
+        // mapPreventivos.setZoom(17); // V.13.4.0: Desactivado para respetar zoom usuario
       }
     };
 
@@ -8705,22 +8706,29 @@ ${dataContext}
       let data = null;
       if (mode === 'intervencion') {
         data = intervencionesCache[id];
-      } else {
+      } else if (mode === 'dia') {
         data = subpreventivosCache[id];
+      } else if (mode === 'preventivo') {
+        data = preventivosCache[id];
       }
 
       if (!data) return;
 
       const modalTitle = document.querySelector('#overlay-prev-comentarios .modal-title');
       if (modalTitle) {
-        modalTitle.textContent = mode === 'intervencion' ? 'Comentarios Intervención' : 'Registro / Incidencias del Día';
+        if (mode === 'intervencion') modalTitle.textContent = 'Comentarios Intervención';
+        else if (mode === 'preventivo') modalTitle.textContent = 'Comentarios de Preventivo';
+        else modalTitle.textContent = 'Registro / Incidencias del Día';
       }
 
       renderComentariosList(data.comentarios || []);
       document.getElementById('prev-comentario-txt').value = '';
 
-      // V.12.4.1: Ocultar controles de añadir comentario solo si no puede comentar (relajado)
-      const canComment = (mode === 'intervencion') ? canCommentIntervencion(data) : canCommentSubpreventivo(data);
+      // V.13.4.0: Permiso para comentar
+      let canComment = true;
+      if (mode === 'intervencion') canComment = canCommentIntervencion(data);
+      else if (mode === 'dia') canComment = canCommentSubpreventivo(data);
+      else if (mode === 'preventivo') canComment = canEditPreventivo(data);
       document.querySelector('#overlay-prev-comentarios .field').style.display = canComment ? 'block' : 'none';
       document.querySelector('#overlay-prev-comentarios .btn-reg').style.display = canComment ? 'inline-block' : 'none';
 
@@ -8736,28 +8744,114 @@ ${dataContext}
         cont.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-4); font-size:12px;">Sin comentarios todavía.</div>';
         return;
       }
-      cont.innerHTML = list.map(c => `
-        <div style="background:var(--bg-3); padding:8px 12px; border-radius:8px; border-left:3px solid var(--accent); margin-bottom:4px;">
+
+      const isSuper = currentRole === 'super_admin';
+      const isElevated = currentRole === 'admin' || currentRole === 'manager' || isSuper;
+
+      cont.innerHTML = list.map((c, idx) => {
+        // V.13.4.0: Reglas solicitadas - Admin/Responsable/SuperAdmin editan, solo SuperAdmin borra
+        const canEdit = isElevated && (c.autorId !== 'system');
+        const canDelete = isSuper;
+
+        return `
+        <div style="background:var(--bg-3); padding:8px 12px; border-radius:8px; border-left:3px solid var(--accent); margin-bottom:4px; position:relative;">
           <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
             <span style="font-size:11px; font-weight:700; color:var(--accent);">${c.autor}</span>
-            <span style="font-size:10px; color:var(--text-4);">${c.fecha || ''}</span>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <span style="font-size:10px; color:var(--text-4);">${c.fecha || ''}</span>
+              ${canEdit ? `<span onclick="window.editarComentarioGeneral(${idx})" style="cursor:pointer; font-size:11px;" title="Editar">✏️</span>` : ''}
+              ${canDelete ? `<span onclick="window.borrarComentarioGeneral(${idx})" style="cursor:pointer; font-size:11px;" title="Borrar">🗑️</span>` : ''}
+            </div>
           </div>
-          <div style="font-size:12px; line-height:1.4;">${c.texto}</div>
+          <div style="font-size:12px; line-height:1.4; white-space: pre-wrap;">${c.texto}</div>
         </div>
-        `).join('');
+        `;
+      }).join('');
       cont.scrollTop = cont.scrollHeight;
     }
+
+    // V.13.4.0: Funciones generales para edición y borrado de comentarios en modales de lista
+    window.editarComentarioGeneral = (index) => {
+      let data = null;
+      if (currentComMode === 'intervencion') data = intervencionesCache[currentComIntId];
+      else if (currentComMode === 'dia') data = subpreventivosCache[currentComIntId];
+      else if (currentComMode === 'preventivo') data = preventivosCache[currentComIntId];
+
+      if (!data || !data.comentarios || !data.comentarios[index]) return;
+      const c = data.comentarios[index];
+
+      editingCommIntId = currentComIntId; // Reutilizamos variables
+      editingCommIndex = index;
+
+      document.getElementById('edit-com-texto').value = c.texto || '';
+
+      let d = new Date();
+      if (c.timestamp) d = new Date(c.timestamp);
+      else if (c.fecha) {
+        const parts = c.fecha.split(/[ ,]+/);
+        if (parts.length >= 2) {
+          const fParts = parts[0].split("/");
+          const hParts = parts[1].split(":");
+          if (fParts.length >= 2) d.setDate(parseInt(fParts[0]));
+        }
+      }
+
+      document.getElementById('edit-com-date').value = d.toISOString().split('T')[0];
+      document.getElementById('edit-com-time').value = d.toTimeString().substring(0, 5);
+
+      const saveBtn = document.getElementById('btn-save-edit-com');
+      saveBtn.onclick = () => window.guardarEditComentario();
+
+      document.getElementById('overlay-edit-comentario').style.display = 'flex';
+    };
+
+    window.borrarComentarioGeneral = async (index) => {
+      let data = null;
+      let pathParts = [];
+
+      if (currentComMode === 'intervencion') {
+        data = intervencionesCache[currentComIntId];
+        pathParts = ['preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', currentComIntId];
+      } else if (currentComMode === 'dia') {
+        data = subpreventivosCache[currentComIntId];
+        pathParts = ['preventivos', currentPreventivoId, 'subpreventivos', currentComIntId];
+      } else if (currentComMode === 'preventivo') {
+        data = preventivosCache[currentComIntId];
+        pathParts = ['preventivos', currentComIntId];
+      }
+
+      if (!data || !data.comentarios || !data.comentarios[index]) return;
+      if (!confirm('¿Seguro que quieres borrar este comentario?')) return;
+
+      const newComms = (data.comentarios || []).filter((_, idx) => idx !== index);
+      try {
+        await updateDoc(doc(db, ...pathParts), {
+          comentarios: newComms,
+          actualizadoEn: serverTimestamp()
+        });
+        mostrarToast('Comentario borrado');
+        renderComentariosList(newComms);
+      } catch (e) { alert('Error: ' + e.message); }
+    };
 
     window.guardarComentarioPrev = async () => {
       const txt = document.getElementById('prev-comentario-txt').value.trim();
       if (!txt || !currentComIntId) return;
 
-      let data = (currentComMode === 'intervencion') ? intervencionesCache[currentComIntId] : subpreventivosCache[currentComIntId];
+      let data = null;
+      if (currentComMode === 'intervencion') data = intervencionesCache[currentComIntId];
+      else if (currentComMode === 'dia') data = subpreventivosCache[currentComIntId];
+      else if (currentComMode === 'preventivo') data = preventivosCache[currentComIntId];
+
       if (!data) return;
 
-      // V.12.4.1: Guard de seguridad relajado para comentarios
-      const canComment = (currentComMode === 'intervencion') ? canCommentIntervencion(data) : canCommentSubpreventivo(data);
-      if (!canComment) { mostrarToast('No tienes permiso para comentar aquí (posiblemente cerrado)'); return; }
+      // V.13.4.0: Guard de seguridad
+      let canComment = true;
+      if (currentComMode === 'intervencion') canComment = canCommentIntervencion(data);
+      else if (currentComMode === 'dia') canComment = canCommentSubpreventivo(data);
+      else if (currentComMode === 'preventivo') canComment = canEditPreventivo(data);
+
+      if (!canComment) { mostrarToast('No tienes permiso para comentar aquí'); return; }
 
       const comms = data.comentarios || [];
       const newComm = {
@@ -8772,8 +8866,10 @@ ${dataContext}
         let docRef;
         if (currentComMode === 'intervencion') {
           docRef = doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', currentComIntId);
-        } else {
+        } else if (currentComMode === 'dia') {
           docRef = doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentComIntId);
+        } else {
+          docRef = doc(db, 'preventivos', currentComIntId);
         }
 
         await updateDoc(docRef, {
@@ -9125,7 +9221,22 @@ ${dataContext}
 
       const id = editingCommIntId;
       const index = editingCommIndex;
-      const i = intervencionesCache[id];
+
+      let data = null;
+      let pathParts = [];
+      if (currentComMode === 'intervencion') {
+        data = intervencionesCache[id];
+        pathParts = ['preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id];
+      } else if (currentComMode === 'dia') {
+        data = subpreventivosCache[id];
+        pathParts = ['preventivos', currentPreventivoId, 'subpreventivos', id];
+      } else if (currentComMode === 'preventivo') {
+        data = preventivosCache[id];
+        pathParts = ['preventivos', id];
+      }
+
+      if (!data) return;
+
       const newText = document.getElementById('edit-com-texto').value.trim();
       const newDate = document.getElementById('edit-com-date').value;
       const newTime = document.getElementById('edit-com-time').value;
@@ -9135,7 +9246,7 @@ ${dataContext}
       const fullDate = new Date(`${newDate}T${newTime}`);
       const formattedFecha = formatCommentFecha(fullDate);
 
-      const newComms = [...i.comentarios];
+      const newComms = [...data.comentarios];
       newComms[index] = {
         ...newComms[index],
         texto: newText,
@@ -9146,18 +9257,15 @@ ${dataContext}
       };
 
       try {
-        await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
+        await updateDoc(doc(db, ...pathParts), {
           comentarios: newComms,
           actualizadoEn: serverTimestamp()
         });
         mostrarToast('Comentario actualizado');
-        cerrarModalEditComentario();
-        // Forzar refresco del panel si está abierto
-        if (activeIntManageId === id) abrirGestionIntervencion(id, true);
-      } catch (e) {
-        console.error(e);
-        alert('Error al guardar el comentario');
-      }
+        if (typeof window.cerrarModalEditComentario === 'function') window.cerrarModalEditComentario();
+        renderComentariosList(newComms);
+        if (currentComMode === 'intervencion' && activeIntManageId === id) abrirGestionIntervencion(id, true);
+      } catch (e) { console.error(e); alert('Error al guardar: ' + e.message); }
     };
 
     window.cerrarModalGestionInt = () => { /* No longer used in V.12.4.1 */ };
@@ -13982,7 +14090,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.3.1
+          Versión V.13.4.0
         </div>
       </div>
 
@@ -14368,7 +14476,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.3.1
+          Versión V.13.4.0
         </div>
       </div>
 
@@ -15255,7 +15363,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.3.1
+            Versión V.13.4.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
