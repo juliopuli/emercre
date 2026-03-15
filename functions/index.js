@@ -111,7 +111,7 @@ exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB'
         const socket = new WebSocket("wss://stream.aisstream.io/v0/stream");
         const ships = {};
         const startTime = Date.now();
-        const duration = 8000; // Aumentado a 8 segundos para capturar más flujo
+        const duration = 12000; // Aumentado a 12 segundos para compensar baja densidad de mensajes
         let timeout = null;
 
         const finish = () => {
@@ -135,7 +135,7 @@ exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB'
                 if (!msg.MetaData || !msg.MetaData.MMSI) return;
 
                 const mmsi = msg.MetaData.MMSI;
-                const shipName = (msg.MetaData.ShipName || "").trim();
+                const rawName = (msg.MetaData.ShipName || "").trim();
                 const lat = msg.MetaData.latitude;
                 const lng = msg.MetaData.longitude;
 
@@ -144,12 +144,11 @@ exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB'
                     shipType = msg.Message.ShipStaticData.ShipType;
                 }
 
-                // Aceptar cualquier mensaje que tenga coordenadas válidas
                 if (lat && lng) {
                     if (!ships[mmsi]) {
                         ships[mmsi] = {
                             mmsi: mmsi,
-                            name: shipName || "Buque " + mmsi,
+                            name: rawName || "Buque " + mmsi,
                             lat: lat,
                             lng: lng,
                             type: shipType || 0,
@@ -158,15 +157,16 @@ exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB'
                     } else {
                         ships[mmsi].lat = lat;
                         ships[mmsi].lng = lng;
-                        if (shipName && (!ships[mmsi].name || ships[mmsi].name.startsWith("Buque "))) {
-                            ships[mmsi].name = shipName;
+                        // Si el nombre actual es el genérico y el nuevo tiene contenido, lo actualizamos
+                        if (rawName && (!ships[mmsi].name || ships[mmsi].name.startsWith("Buque "))) {
+                            ships[mmsi].name = rawName;
                         }
                         if (shipType) ships[mmsi].type = shipType;
                         ships[mmsi].lastUpdate = Date.now();
                     }
                 }
             } catch (e) {
-                // Ignore errors
+                // Ignore
             }
         });
 
