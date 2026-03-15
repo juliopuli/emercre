@@ -230,14 +230,19 @@
       }
       reverseGeocodeThrottle = true;
       setTimeout(() => { reverseGeocodeThrottle = false; }, 1000);
-      // Redondear para mejorar hits (aprox 11m)
-      const key = latlng.lat.toFixed(4) + ',' + latlng.lng.toFixed(4);
+
+      // V.13.3.0: Normalizar coordenadas para hit de caché (soporta LatLng y Literales)
+      const lat = (typeof latlng.lat === 'function') ? latlng.lat() : latlng.lat;
+      const lng = (typeof latlng.lng === 'function') ? latlng.lng() : latlng.lng;
+      if (lat === undefined || lng === undefined) { callback(null); return; }
+
+      const key = lat.toFixed(4) + ',' + lng.toFixed(4);
       if (reverseGeocodeCache[key]) {
         callback(reverseGeocodeCache[key]);
         return;
       }
       const gc = getGeocoder(); // V.11.5.2: Instancia compartida
-      gc.geocode({ location: latlng }, (results, status) => {
+      gc.geocode({ location: { lat, lng } }, (results, status) => {
         if (status === 'OK' && results[0]) {
           reverseGeocodeCache[key] = results[0].formatted_address;
           callback(results[0].formatted_address);
@@ -439,9 +444,12 @@
         if (Object.keys(ops).length) renderMapa();
       });
 
-      mapEmergencias.addListener('click', () => {
+      mapEmergencias.addListener('click', (e) => {
         document.querySelectorAll('.custom-marker.expanded').forEach(el => el.classList.remove('expanded'));
         if (!picking && !editPickMode) window.cerrarDetalle();
+
+        // V.13.3.0: Crear pin si no estamos en otros modos
+        if (e.latLng) window.onMapClickPersistentPin(e, 'eme');
       });
 
       oystaInfoWindow = new google.maps.InfoWindow();
@@ -1098,7 +1106,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.2.0 Loaded');
+    console.log('EmerCRE V.13.3.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1807,7 +1815,7 @@
         if (navChat) navChat.style.display = accesoEmergencias ? 'flex' : 'none';
         if (mnavChat) mnavChat.style.display = accesoEmergencias ? 'flex' : 'none';
 
-        // V.13.2.0: Restaurar última sección guardada
+        // V.13.3.0: Restaurar última sección guardada
         const lastSection = localStorage.getItem('emercre_last_section');
         if (lastSection === 'preventivos' && accesoPreventivos) {
           showSection('preventivos');
@@ -4706,7 +4714,7 @@ ${dataContext}
 
       document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
 
-      // V.13.2.0: Guardar sección para persistencia
+      // V.13.3.0: Guardar sección para persistencia
       localStorage.setItem('emercre_last_section', sec);
 
       document.getElementById('section-operaciones').style.display = sec === 'operaciones' ? 'flex' : 'none';
@@ -6007,7 +6015,7 @@ ${dataContext}
         const mapDiv = document.getElementById('preventivos-map');
         if (!mapDiv) return;
 
-        // V.13.2.0: Recuperar zoom y centro guardados
+        // V.13.3.0: Recuperar zoom y centro guardados
         const savedState = localStorage.getItem('emercre_prev_map_state');
         let initialCenter = { lat: 37.3891, lng: -5.9845 };
         let initialZoom = 7;
@@ -6029,7 +6037,7 @@ ${dataContext}
           fullscreenControl: false
         });
 
-        // V.13.2.0: Guardar estado al mover el mapa
+        // V.13.3.0: Guardar estado al mover el mapa
         mapPreventivos.addListener('idle', () => {
           const center = mapPreventivos.getCenter();
           const zoom = mapPreventivos.getZoom();
@@ -6040,8 +6048,11 @@ ${dataContext}
           }));
         });
 
-        mapPreventivos.addListener('click', () => {
+        mapPreventivos.addListener('click', (e) => {
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
+
+          // V.13.3.0: Crear pin si no estamos en otros modos
+          if (e.latLng) window.onMapClickPersistentPin(e, 'prev');
         });
 
         // V.12.4.1: Asegurar script Oysta tras cargar el mapa (independientemente del permiso canSeeVehicles para ver asignados)
@@ -6121,8 +6132,8 @@ ${dataContext}
       // V.12.5.4: Ahora los pines son persistentes. Guardamos en DB
       const id = "pin_" + Date.now();
       const pinData = {
-        lat: location.lat(),
-        lng: location.lng(),
+        lat: (typeof location.lat === 'function') ? location.lat() : location.lat,
+        lng: (typeof location.lng === 'function') ? location.lng() : location.lng,
         address: address,
         mapType: mapType,
         label: "",
@@ -6134,6 +6145,28 @@ ${dataContext}
         .then(() => console.log("[Search-Pin] Pin guardado en DB"))
         .catch(e => console.error("[Search-Pin] Error guardando pin:", e));
     }
+
+    // V.13.3.0: Handler global para clicks en mapa que crean pines
+    window.onMapClickPersistentPin = function (e, mapType) {
+      // Solo actuar si no hay modales de selección de ubicación activos
+      if (picking || editPickMode || routingPickField) return;
+
+      const latLng = e.latLng;
+      if (!latLng) return;
+
+      reverseGeocodeWithCache(latLng, (address) => {
+        const map = (mapType === 'eme') ? mapEmergencias : mapPreventivos;
+        if (!map) return;
+
+        let finalAddr = address;
+        if (!finalAddr) {
+          const l = { lat: latLng.lat(), lng: latLng.lng() };
+          finalAddr = `Ubicación: ${l.lat.toFixed(5)}, ${l.lng.toFixed(5)}`;
+        }
+
+        placeSearchPin(map, latLng, finalAddr, mapType);
+      });
+    };
 
     // V.12.5.0: Sincronización de pines desde Firestore
     window.suscribirPinesMapa = () => {
@@ -7295,7 +7328,7 @@ ${dataContext}
         setTimeout(() => abrirGestionIntervencion(activeIntManageId, true), 10);
       }
 
-      /* V.13.2.0: Desactivado auto-ajuste por petición usuario
+      /* V.13.3.0: Desactivado auto-ajuste por petición usuario
       if (hasCoords && mapPreventivos) {
         mapPreventivos.fitBounds(bounds);
         if (mapPreventivos.getZoom() > 16) mapPreventivos.setZoom(16);
@@ -7447,7 +7480,7 @@ ${dataContext}
             });
           }
 
-          /* V.13.2.0: Desactivado auto-ajuste por petición usuario
+          /* V.13.3.0: Desactivado auto-ajuste por petición usuario
           if (hasCoords) {
             const isMobile = window.innerWidth < 900;
             mapPreventivos.fitBounds(bounds, isMobile ? { top: 50, bottom: 50, left: 50, right: 50 } : { top: 70, bottom: 70, left: 370, right: 70 });
@@ -7780,7 +7813,7 @@ ${dataContext}
       // Añadir listener para centrar al hacer click
       container.addEventListener('click', () => {
         mapPreventivos.panTo(i.coords);
-        // mapPreventivos.setZoom(18); // V.13.2.0: Desactivado para respetar zoom usuario
+        // mapPreventivos.setZoom(18); // V.13.3.0: Desactivado para respetar zoom usuario
         abrirGestionIntervencion(id);
       });
     }
@@ -7789,7 +7822,7 @@ ${dataContext}
       const m = markersPreventivos[id];
       if (m && mapPreventivos) {
         mapPreventivos.panTo(m.position);
-        // mapPreventivos.setZoom(17); // V.13.2.0: Desactivado para respetar zoom usuario
+        // mapPreventivos.setZoom(17); // V.13.3.0: Desactivado para respetar zoom usuario
       }
     };
 
@@ -13945,7 +13978,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.2.0
+          Versión V.13.3.0
         </div>
       </div>
 
@@ -14331,7 +14364,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.2.0
+          Versión V.13.3.0
         </div>
       </div>
 
@@ -15218,7 +15251,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.2.0
+            Versión V.13.3.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
