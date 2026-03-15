@@ -111,13 +111,15 @@ exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB'
         const socket = new WebSocket("wss://stream.aisstream.io/v0/stream");
         const ships = {};
         const startTime = Date.now();
-        const duration = 12000; // Aumentado a 12 segundos para compensar baja densidad de mensajes
+        const duration = 14000; // Aumentado a 14 segundos para maximizar captura sin exceder timeout GCF
         let timeout = null;
 
         const finish = () => {
             if (timeout) clearTimeout(timeout);
             if (socket.readyState === WebSocket.OPEN) socket.close();
-            resolve(Object.values(ships));
+            const result = Object.values(ships);
+            console.log(`[AIS Proxy] Finalizado. Capturados ${result.length} buques.`);
+            resolve(result);
         };
 
         socket.on('open', () => {
@@ -139,12 +141,14 @@ exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB'
                 const lat = msg.MetaData.latitude;
                 const lng = msg.MetaData.longitude;
 
+                // Capturar tipo si viene en el mensaje estático
                 let shipType = 0;
-                if (msg.MessageType === "ShipStaticData") {
+                if (msg.MessageType === "ShipStaticData" && msg.Message && msg.Message.ShipStaticData) {
                     shipType = msg.Message.ShipStaticData.ShipType;
                 }
 
-                if (lat && lng) {
+                // Check robusto de coordenadas (pueden ser 0)
+                if (typeof lat === 'number' && typeof lng === 'number') {
                     if (!ships[mmsi]) {
                         ships[mmsi] = {
                             mmsi: mmsi,
@@ -157,7 +161,6 @@ exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB'
                     } else {
                         ships[mmsi].lat = lat;
                         ships[mmsi].lng = lng;
-                        // Si el nombre actual es el genérico y el nuevo tiene contenido, lo actualizamos
                         if (rawName && (!ships[mmsi].name || ships[mmsi].name.startsWith("Buque "))) {
                             ships[mmsi].name = rawName;
                         }
