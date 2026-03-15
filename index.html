@@ -1098,7 +1098,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.1.0 Loaded');
+    console.log('EmerCRE V.13.2.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1807,7 +1807,7 @@
         if (navChat) navChat.style.display = accesoEmergencias ? 'flex' : 'none';
         if (mnavChat) mnavChat.style.display = accesoEmergencias ? 'flex' : 'none';
 
-        // V.13.1.0: Restaurar última sección guardada
+        // V.13.2.0: Restaurar última sección guardada
         const lastSection = localStorage.getItem('emercre_last_section');
         if (lastSection === 'preventivos' && accesoPreventivos) {
           showSection('preventivos');
@@ -4706,7 +4706,7 @@ ${dataContext}
 
       document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
 
-      // V.13.1.0: Guardar sección para persistencia
+      // V.13.2.0: Guardar sección para persistencia
       localStorage.setItem('emercre_last_section', sec);
 
       document.getElementById('section-operaciones').style.display = sec === 'operaciones' ? 'flex' : 'none';
@@ -6007,14 +6007,37 @@ ${dataContext}
         const mapDiv = document.getElementById('preventivos-map');
         if (!mapDiv) return;
 
+        // V.13.2.0: Recuperar zoom y centro guardados
+        const savedState = localStorage.getItem('emercre_prev_map_state');
+        let initialCenter = { lat: 37.3891, lng: -5.9845 };
+        let initialZoom = 7;
+        if (savedState) {
+          try {
+            const state = JSON.parse(savedState);
+            initialCenter = { lat: state.lat, lng: state.lng };
+            initialZoom = state.zoom;
+          } catch (e) { }
+        }
+
         mapPreventivos = new google.maps.Map(mapDiv, {
-          center: { lat: 37.3891, lng: -5.9845 }, // Sevilla por defecto
-          zoom: 7,
+          center: initialCenter,
+          zoom: initialZoom,
           mapId: 'bc56b7cd6850d53c',
           mapTypeId: 'roadmap',
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false
+        });
+
+        // V.13.2.0: Guardar estado al mover el mapa
+        mapPreventivos.addListener('idle', () => {
+          const center = mapPreventivos.getCenter();
+          const zoom = mapPreventivos.getZoom();
+          localStorage.setItem('emercre_prev_map_state', JSON.stringify({
+            lat: center.lat(),
+            lng: center.lng(),
+            zoom: zoom
+          }));
         });
 
         mapPreventivos.addListener('click', () => {
@@ -7272,10 +7295,12 @@ ${dataContext}
         setTimeout(() => abrirGestionIntervencion(activeIntManageId, true), 10);
       }
 
+      /* V.13.2.0: Desactivado auto-ajuste por petición usuario
       if (hasCoords && mapPreventivos) {
         mapPreventivos.fitBounds(bounds);
         if (mapPreventivos.getZoom() > 16) mapPreventivos.setZoom(16);
       }
+      */
     }
 
     window.suscribirGlobalPreventivoIntervenciones = function () {
@@ -7422,11 +7447,13 @@ ${dataContext}
             });
           }
 
+          /* V.13.2.0: Desactivado auto-ajuste por petición usuario
           if (hasCoords) {
             const isMobile = window.innerWidth < 900;
             mapPreventivos.fitBounds(bounds, isMobile ? { top: 50, bottom: 50, left: 50, right: 50 } : { top: 70, bottom: 70, left: 370, right: 70 });
             if (mapPreventivos.getZoom() > 13) mapPreventivos.setZoom(13); // Tope máximo ajustado para dar más margen
           }
+          */
           window._preventivosNeedsZoom = false;
         }, 300); // Dar margen para que carguen los AdvancedMarkerElement
       }
@@ -7753,7 +7780,7 @@ ${dataContext}
       // Añadir listener para centrar al hacer click
       container.addEventListener('click', () => {
         mapPreventivos.panTo(i.coords);
-        mapPreventivos.setZoom(18);
+        // mapPreventivos.setZoom(18); // V.13.2.0: Desactivado para respetar zoom usuario
         abrirGestionIntervencion(id);
       });
     }
@@ -7762,7 +7789,7 @@ ${dataContext}
       const m = markersPreventivos[id];
       if (m && mapPreventivos) {
         mapPreventivos.panTo(m.position);
-        mapPreventivos.setZoom(17);
+        // mapPreventivos.setZoom(17); // V.13.2.0: Desactivado para respetar zoom usuario
       }
     };
 
@@ -13918,7 +13945,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.1.0
+          Versión V.13.2.0
         </div>
       </div>
 
@@ -14304,7 +14331,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.1.0
+          Versión V.13.2.0
         </div>
       </div>
 
@@ -15191,7 +15218,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.1.0
+            Versión V.13.2.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
