@@ -136,35 +136,21 @@ exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB'
                 const shipName = (msg.MetaData.ShipName || "").trim();
 
                 // Filtrar solo barcos de salvamento conocidos o tipo 51
-                let isSalvamento = false;
-                let shipType = 0;
-
-                if (msg.MessageType === "ShipStaticData") {
-                    shipType = msg.Message.ShipStaticData.ShipType;
-                    if (shipType === 51) isSalvamento = true;
-                }
-
-                const upperName = shipName.toUpperCase();
-                if (upperName.includes("SALVAMAR") || upperName.includes("GUARDAMAR") ||
-                    upperName.includes("SAR ") || upperName.includes("HELIMER") ||
-                    upperName.includes("MARIA DE MAEZTU") || upperName.includes("CLARA CAMPOAMOR")) {
-                    isSalvamento = true;
-                }
-
-                if (isSalvamento && (msg.MessageType === "PositionReport" || msg.MessageType === "ShipStaticData")) {
+                if (msg.MessageType === "PositionReport" || msg.MessageType === "ShipStaticData") {
                     if (!ships[mmsi]) {
                         ships[mmsi] = {
                             mmsi: mmsi,
-                            name: shipName || "SAR " + mmsi,
+                            name: shipName || "Buque " + mmsi,
                             lat: msg.MetaData.latitude,
                             lng: msg.MetaData.longitude,
-                            type: shipType || 51,
+                            type: shipType || 0,
                             lastUpdate: Date.now()
                         };
                     } else {
                         if (msg.MetaData.latitude) ships[mmsi].lat = msg.MetaData.latitude;
                         if (msg.MetaData.longitude) ships[mmsi].lng = msg.MetaData.longitude;
                         if (shipName) ships[mmsi].name = shipName;
+                        if (shipType) ships[mmsi].type = shipType;
                     }
                 }
             } catch (e) {

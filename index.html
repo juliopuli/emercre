@@ -133,6 +133,8 @@
     let aisMarkers = {};
     let aisLayerEnabled = false;
     let aisRefreshInterval = null;
+    let aisShipsCache = []; // V.13.5.2: Caché para búsqueda local
+    let aisSearchQuery = ''; // V.13.5.2: Consulta de búsqueda AIS
 
 
     let autocompleteOrigin = null;
@@ -236,7 +238,7 @@
       reverseGeocodeThrottle = true;
       setTimeout(() => { reverseGeocodeThrottle = false; }, 1000);
 
-      // V.13.5.1: Normalizar coordenadas para hit de caché (soporta LatLng y Literales)
+      // V.13.6.0: Normalizar coordenadas para hit de caché (soporta LatLng y Literales)
       const lat = (typeof latlng.lat === 'function') ? latlng.lat() : latlng.lat;
       const lng = (typeof latlng.lng === 'function') ? latlng.lng() : latlng.lng;
       if (lat === undefined || lng === undefined) { callback(null); return; }
@@ -454,7 +456,7 @@
         if (!picking && !editPickMode) window.cerrarDetalle();
       });
 
-      // V.13.5.1: Crear pin solo con doble click para evitar saturación
+      // V.13.6.0: Crear pin solo con doble click para evitar saturación
       mapEmergencias.addListener('dblclick', (e) => {
         if (e.latLng) window.onMapClickPersistentPin(e, 'eme');
       });
@@ -832,7 +834,7 @@
       const statusDesc = document.getElementById('ais-status-count');
       if (statusDesc && force) statusDesc.textContent = "Sincronizando...";
 
-      console.log("[AIS] Cargando flota de salvamento...");
+      console.log("[AIS] Cargando flota...");
       try {
         const getAISVehiclesFn = httpsCallable(functions, 'getAISVehicles');
         const result = await getAISVehiclesFn();
@@ -842,14 +844,13 @@
         const shipsData = result.data;
         if (Array.isArray(shipsData)) {
           console.log(`[AIS] Recibidos ${shipsData.length} barcos`);
+          aisShipsCache = shipsData; // Guardar en caché local
 
-          // Eliminar barcos que ya no están en la respuesta (opcional, o dejar que expiren)
-          // Para simplificar, actualizamos todos los recibidos
-          shipsData.forEach(s => {
-            updateAISMarker(s.mmsi, s.lat, s.lng, s.name, s.type);
-          });
+          // Aplicar filtro actual
+          const query = document.getElementById('ais-search-input')?.value || "";
+          window.filtrarBarcosAIS(query);
 
-          if (statusDesc) statusDesc.textContent = `${shipsData.length} barcos detectados`;
+          if (statusDesc) statusDesc.textContent = `${shipsData.length} barcos en zona`;
         }
       } catch (error) {
         console.error("[AIS] Error cargando barcos:", error);
@@ -857,10 +858,53 @@
       }
     }
 
+    window.filtrarBarcosAIS = (query) => {
+      aisSearchQuery = (query || "").toLowerCase().trim();
+      const resultsInfo = document.getElementById('ais-results-info');
+
+      let count = 0;
+      aisShipsCache.forEach(s => {
+        const matches = s.name.toLowerCase().includes(aisSearchQuery);
+
+        // Si no hay búsqueda, solo mostramos los de salvamento por defecto para no saturar
+        // Pero el usuario pidió buscador por nombre y que muestre coincidencias.
+        // Si hay búsqueda, mostramos lo que coincida.
+        // Si no hay búsqueda, mostramos los que tienen nombres "clave" de salvamento.
+
+        const isSalvamento = s.name.toUpperCase().includes("SALVAMAR") ||
+          s.name.toUpperCase().includes("GUARDAMAR") ||
+          s.name.toUpperCase().includes("SAR ") ||
+          s.name.toUpperCase().includes("HELIMER");
+
+        const shouldShow = aisSearchQuery === "" ? isSalvamento : matches;
+
+        if (shouldShow) {
+          updateAISMarker(s.mmsi, s.lat, s.lng, s.name, s.type);
+          count++;
+        } else {
+          // Si estaba en el mapa y ya no debe estar, lo quitamos
+          if (aisMarkers[s.mmsi]) {
+            aisMarkers[s.mmsi].setMap(null);
+            delete aisMarkers[s.mmsi];
+          }
+        }
+      });
+
+      if (resultsInfo) {
+        resultsInfo.textContent = aisSearchQuery === "" ? "" : `${count} coincidencias encontradas`;
+      }
+    };
+
     function updateAISMarker(mmsi, lat, lng, name, type) {
       if (!mapEmergencias || !lat || !lng) return;
 
       const pos = { lat, lng };
+      const isSAR = name.toUpperCase().includes("SALVAMAR") ||
+        name.toUpperCase().includes("GUARDAMAR") ||
+        name.toUpperCase().includes("SAR ") ||
+        name.toUpperCase().includes("HELIMER") ||
+        type === 51;
+
       if (aisMarkers[mmsi]) {
         aisMarkers[mmsi].position = pos;
       } else {
@@ -872,14 +916,16 @@
         });
 
         marker.addListener('click', () => {
+          const typeLabel = isSAR ? "Buque Salvamento (SAR)" : "Buque / Mercante";
+          const color = isSAR ? "#d35400" : "#2980b9";
           const info = `
                <div style="padding:10px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; min-width: 150px;">
-                 <div style="font-weight: 700; color: #d35400; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
+                 <div style="font-weight: 700; color: ${color}; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
                     <span style="font-size:16px;">⚓</span> ${name}
                  </div>
                  <div style="font-size: 11px; color: var(--text-3);">
                     <div><b>MMSI:</b> ${mmsi}</div>
-                    <div><b>Tipo:</b> Buque Salvamento (SAR)</div>
+                    <div><b>Tipo:</b> ${typeLabel}</div>
                     <div style="margin-top: 8px; border-top: 1px solid #eee; padding-top: 4px; font-size: 9px; color: #999;">
                       Fuente: aisstream.io (Proxy)
                     </div>
@@ -895,10 +941,20 @@
     }
 
     function createAISMarkerElement(name) {
+      const isSAR = name.toUpperCase().includes("SALVAMAR") ||
+        name.toUpperCase().includes("GUARDAMAR") ||
+        name.toUpperCase().includes("SAR ") ||
+        name.toUpperCase().includes("HELIMER");
+
+      const bg = isSAR ? "#e67e22" : "#2980b9";
       const div = document.createElement('div');
+
+      let label = name.replace('SALVAMAR ', '').replace('GUARDAMAR ', '');
+      if (!isSAR && label.length > 12) label = label.substring(0, 10) + '...';
+
       div.innerHTML = `
-        <div style="background: #e67e22; color: white; padding: 3px 8px; border-radius: 12px; font-size: 10px; font-weight: 800; border: 2px solid white; box-shadow: 0 2px 6px rgba(0,0,0,0.3); white-space: nowrap; transform: translate(-50%, -50%);">
-          ⚓ ${name.replace('SALVAMAR ', '').replace('GUARDAMAR ', '')}
+        <div style="background: ${bg}; color: white; padding: 2px 6px; border-radius: 10px; font-size: 9px; font-weight: 800; border: 1.5px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); white-space: nowrap; transform: translate(-50%, -50%);">
+          ⚓ ${label}
         </div>`;
       return div;
     }
@@ -1237,7 +1293,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.5.1 Loaded');
+    console.log('EmerCRE V.13.6.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1946,7 +2002,7 @@
         if (navChat) navChat.style.display = accesoEmergencias ? 'flex' : 'none';
         if (mnavChat) mnavChat.style.display = accesoEmergencias ? 'flex' : 'none';
 
-        // V.13.5.1: Restaurar última sección guardada
+        // V.13.6.0: Restaurar última sección guardada
         const lastSection = localStorage.getItem('emercre_last_section');
         if (lastSection === 'preventivos' && accesoPreventivos) {
           showSection('preventivos');
@@ -4845,7 +4901,7 @@ ${dataContext}
 
       document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
 
-      // V.13.5.1: Guardar sección para persistencia
+      // V.13.6.0: Guardar sección para persistencia
       localStorage.setItem('emercre_last_section', sec);
 
       document.getElementById('section-operaciones').style.display = sec === 'operaciones' ? 'flex' : 'none';
@@ -6146,7 +6202,7 @@ ${dataContext}
         const mapDiv = document.getElementById('preventivos-map');
         if (!mapDiv) return;
 
-        // V.13.5.1: Recuperar zoom y centro guardados
+        // V.13.6.0: Recuperar zoom y centro guardados
         const savedState = localStorage.getItem('emercre_prev_map_state');
         let initialCenter = { lat: 37.3891, lng: -5.9845 };
         let initialZoom = 7;
@@ -6168,7 +6224,7 @@ ${dataContext}
           fullscreenControl: false
         });
 
-        // V.13.5.1: Guardar estado al mover el mapa
+        // V.13.6.0: Guardar estado al mover el mapa
         mapPreventivos.addListener('idle', () => {
           const center = mapPreventivos.getCenter();
           const zoom = mapPreventivos.getZoom();
@@ -6183,7 +6239,7 @@ ${dataContext}
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         });
 
-        // V.13.5.1: Crear pin solo con doble click para evitar saturación
+        // V.13.6.0: Crear pin solo con doble click para evitar saturación
         mapPreventivos.addListener('dblclick', (e) => {
           if (e.latLng) window.onMapClickPersistentPin(e, 'prev');
         });
@@ -6279,7 +6335,7 @@ ${dataContext}
         .catch(e => console.error("[Search-Pin] Error guardando pin:", e));
     }
 
-    // V.13.5.1: Handler global para clicks en mapa que crean pines
+    // V.13.6.0: Handler global para clicks en mapa que crean pines
     window.onMapClickPersistentPin = function (e, mapType) {
       // Solo actuar si no hay modales de selección de ubicación activos
       if (picking || editPickMode || routingPickField) return;
@@ -6287,7 +6343,7 @@ ${dataContext}
       const latLng = e.latLng;
       if (!latLng) return;
 
-      // V.13.5.1: Mostrar feedback inmediato
+      // V.13.6.0: Mostrar feedback inmediato
       mostrarToast("Obteniendo dirección...");
 
       reverseGeocodeWithCache(latLng, (address) => {
@@ -7465,7 +7521,7 @@ ${dataContext}
         setTimeout(() => abrirGestionIntervencion(activeIntManageId, true), 10);
       }
 
-      /* V.13.5.1: Desactivado auto-ajuste por petición usuario
+      /* V.13.6.0: Desactivado auto-ajuste por petición usuario
       if (hasCoords && mapPreventivos) {
         mapPreventivos.fitBounds(bounds);
         if (mapPreventivos.getZoom() > 16) mapPreventivos.setZoom(16);
@@ -7617,7 +7673,7 @@ ${dataContext}
             });
           }
 
-          /* V.13.5.1: Desactivado auto-ajuste por petición usuario
+          /* V.13.6.0: Desactivado auto-ajuste por petición usuario
           if (hasCoords) {
             const isMobile = window.innerWidth < 900;
             mapPreventivos.fitBounds(bounds, isMobile ? { top: 50, bottom: 50, left: 50, right: 50 } : { top: 70, bottom: 70, left: 370, right: 70 });
@@ -7950,7 +8006,7 @@ ${dataContext}
       // Añadir listener para centrar al hacer click
       container.addEventListener('click', () => {
         mapPreventivos.panTo(i.coords);
-        // mapPreventivos.setZoom(18); // V.13.5.1: Desactivado para respetar zoom usuario
+        // mapPreventivos.setZoom(18); // V.13.6.0: Desactivado para respetar zoom usuario
         abrirGestionIntervencion(id);
       });
     }
@@ -7959,7 +8015,7 @@ ${dataContext}
       const m = markersPreventivos[id];
       if (m && mapPreventivos) {
         mapPreventivos.panTo(m.position);
-        // mapPreventivos.setZoom(17); // V.13.5.1: Desactivado para respetar zoom usuario
+        // mapPreventivos.setZoom(17); // V.13.6.0: Desactivado para respetar zoom usuario
       }
     };
 
@@ -8856,7 +8912,7 @@ ${dataContext}
       renderComentariosList(data.comentarios || []);
       document.getElementById('prev-comentario-txt').value = '';
 
-      // V.13.5.1: Permiso para comentar
+      // V.13.6.0: Permiso para comentar
       let canComment = true;
       if (mode === 'intervencion') canComment = canCommentIntervencion(data);
       else if (mode === 'dia') canComment = canCommentSubpreventivo(data);
@@ -8881,7 +8937,7 @@ ${dataContext}
       const isElevated = currentRole === 'admin' || currentRole === 'manager' || isSuper;
 
       cont.innerHTML = list.map((c, idx) => {
-        // V.13.5.1: Reglas solicitadas - Admin/Responsable/SuperAdmin editan, solo SuperAdmin borra
+        // V.13.6.0: Reglas solicitadas - Admin/Responsable/SuperAdmin editan, solo SuperAdmin borra
         const canEdit = isElevated && (c.autorId !== 'system');
         const canDelete = isSuper;
 
@@ -8902,7 +8958,7 @@ ${dataContext}
       cont.scrollTop = cont.scrollHeight;
     }
 
-    // V.13.5.1: Funciones generales para edición y borrado de comentarios en modales de lista
+    // V.13.6.0: Funciones generales para edición y borrado de comentarios en modales de lista
     window.editarComentarioGeneral = (index) => {
       let data = null;
       if (currentComMode === 'intervencion') data = intervencionesCache[currentComIntId];
@@ -8977,7 +9033,7 @@ ${dataContext}
 
       if (!data) return;
 
-      // V.13.5.1: Guard de seguridad
+      // V.13.6.0: Guard de seguridad
       let canComment = true;
       if (currentComMode === 'intervencion') canComment = canCommentIntervencion(data);
       else if (currentComMode === 'dia') canComment = canCommentSubpreventivo(data);
@@ -14224,7 +14280,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.5.1
+          Versión V.13.6.0
         </div>
       </div>
 
@@ -14465,16 +14521,26 @@ ${dataContext}
               <button class="btn-panel-close" onclick="toggleAISPanel()">✕</button>
             </div>
             <div style="padding: 10px; display: flex; flex-direction: column; gap: 8px;">
-              <div style="font-size: 11px; color: var(--text-3); margin-bottom: 5px;">
-                Visualización en tiempo real de buques de salvamiento (AIS).
+              <div style="font-size: 11px; color: var(--text-3); margin-bottom: 2px;">
+                Visualización en tiempo real de buques (AIS).
               </div>
+
+              <!-- Buscador AIS (V.13.5.2) -->
+              <div style="position: relative; display: flex; align-items: center; margin-bottom: 5px;">
+                <input type="text" id="ais-search-input" class="f-input" placeholder="Buscar barco por nombre..."
+                  style="padding: 8px 30px 8px 10px; font-size: 11px; width: 100%;"
+                  onkeyup="filtrarBarcosAIS(this.value)">
+                <span
+                  style="position: absolute; right: 10px; opacity: 0.5; font-size: 12px; pointer-events: none;">🔍</span>
+              </div>
+
               <div class="drawer-notif-toggle"
                 style="padding: 10px; cursor: pointer; border-radius: 8px; background: rgba(0, 102, 204, 0.05);"
                 onclick="toggleAISLayer()">
                 <div class="drawer-notif-info">
                   <div class="drawer-notif-icon" style="font-size: 18px; width: 32px; height: 32px;">⚓</div>
                   <div>
-                    <div class="drawer-notif-title" style="font-size: 11px; font-weight: 700;">Barcos Salvamento</div>
+                    <div class="drawer-notif-title" style="font-size: 11px; font-weight: 700;">Seguimiento en Vivo</div>
                     <div class="drawer-notif-desc" style="font-size: 9px;" id="ais-status-count">Desconectado</div>
                   </div>
                 </div>
@@ -14483,6 +14549,10 @@ ${dataContext}
                   <span class="slider round"></span>
                 </label>
               </div>
+
+              <!-- Listado de resultados (opcional, para feedback visual) -->
+              <div id="ais-results-info"
+                style="font-size: 9px; color: var(--text-4); text-align: center; margin-top: -4px;"></div>
             </div>
           </div>
 
@@ -14639,7 +14709,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.5.1
+          Versión V.13.6.0
         </div>
       </div>
 
@@ -15526,7 +15596,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.5.1
+            Versión V.13.6.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
