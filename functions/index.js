@@ -140,6 +140,14 @@ exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB'
                 const rawName = (msg.MetaData.ShipName || "").trim();
                 const lat = msg.MetaData.latitude;
                 const lng = msg.MetaData.longitude;
+                let sog = 0;
+
+                // Capturar velocidad (SOG) según el tipo de mensaje
+                if (msg.Message && msg.Message.PositionReport) {
+                    sog = msg.Message.PositionReport.Sog;
+                } else if (msg.Message && msg.Message.StandardClassBPositionReport) {
+                    sog = msg.Message.StandardClassBPositionReport.Sog;
+                }
 
                 // Capturar tipo si viene en el mensaje estático
                 let shipType = 0;
@@ -155,12 +163,14 @@ exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB'
                             name: rawName || "Buque " + mmsi,
                             lat: lat,
                             lng: lng,
+                            speed: sog || 0,
                             type: shipType || 0,
                             lastUpdate: Date.now()
                         };
                     } else {
                         ships[mmsi].lat = lat;
                         ships[mmsi].lng = lng;
+                        if (sog !== undefined) ships[mmsi].speed = sog;
                         if (rawName && (!ships[mmsi].name || ships[mmsi].name.startsWith("Buque "))) {
                             ships[mmsi].name = rawName;
                         }

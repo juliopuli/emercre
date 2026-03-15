@@ -238,7 +238,7 @@
       reverseGeocodeThrottle = true;
       setTimeout(() => { reverseGeocodeThrottle = false; }, 1000);
 
-      // V.13.7.1: Normalizar coordenadas para hit de caché (soporta LatLng y Literales)
+      // V.13.7.2: Normalizar coordenadas para hit de caché (soporta LatLng y Literales)
       const lat = (typeof latlng.lat === 'function') ? latlng.lat() : latlng.lat;
       const lng = (typeof latlng.lng === 'function') ? latlng.lng() : latlng.lng;
       if (lat === undefined || lng === undefined) { callback(null); return; }
@@ -456,7 +456,7 @@
         if (!picking && !editPickMode) window.cerrarDetalle();
       });
 
-      // V.13.7.1: Crear pin solo con doble click para evitar saturación
+      // V.13.7.2: Crear pin solo con doble click para evitar saturación
       mapEmergencias.addListener('dblclick', (e) => {
         if (e.latLng) window.onMapClickPersistentPin(e, 'eme');
       });
@@ -859,7 +859,7 @@
       }
     }
 
-    // V.13.7.1: Normalizar strings (quitar acentos) para búsqueda y filtrado
+    // V.13.7.2: Normalizar strings (quitar acentos) para búsqueda y filtrado
     window.filtrarBarcosAIS = (query) => {
       aisSearchQuery = (query || "").toLowerCase().trim();
       const resultsInfo = document.getElementById('ais-results-info');
@@ -887,7 +887,7 @@
         const shouldShow = aisSearchQuery === "" ? isSalvamento : matches;
 
         if (shouldShow) {
-          updateAISMarker(s.mmsi, s.lat, s.lng, nameRaw, s.type);
+          updateAISMarker(s.mmsi, s.lat, s.lng, nameRaw, s.type, s.speed);
           count++;
         } else {
           if (aisMarkers[s.mmsi]) {
@@ -906,7 +906,7 @@
       }
     };
 
-    function updateAISMarker(mmsi, lat, lng, name, type) {
+    function updateAISMarker(mmsi, lat, lng, name, type, speed) {
       if (!mapEmergencias || !lat || !lng) return;
 
       const pos = { lat, lng };
@@ -932,6 +932,7 @@
         marker.addListener('click', () => {
           const typeLabel = isSAR ? "Buque Salvamento (SAR)" : "Buque / Mercante";
           const color = isSAR ? "#d35400" : "#2980b9";
+          const speedDisplay = (speed !== undefined) ? `${speed} kts` : "---";
           const info = `
                <div style="padding:10px; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; min-width: 150px;">
                  <div style="font-weight: 700; color: ${color}; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
@@ -940,6 +941,7 @@
                  <div style="font-size: 11px; color: var(--text-3);">
                     <div><b>MMSI:</b> ${mmsi}</div>
                     <div><b>Tipo:</b> ${typeLabel}</div>
+                    <div><b>Velocidad:</b> ${speedDisplay}</div>
                     <div style="margin-top: 8px; border-top: 1px solid #eee; padding-top: 4px; font-size: 9px; color: #999;">
                       Fuente: aisstream.io (Global)
                     </div>
@@ -1317,7 +1319,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.7.1 Loaded');
+    console.log('EmerCRE V.13.7.2 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2026,7 +2028,7 @@
         if (navChat) navChat.style.display = accesoEmergencias ? 'flex' : 'none';
         if (mnavChat) mnavChat.style.display = accesoEmergencias ? 'flex' : 'none';
 
-        // V.13.7.1: Restaurar última sección guardada
+        // V.13.7.2: Restaurar última sección guardada
         const lastSection = localStorage.getItem('emercre_last_section');
         if (lastSection === 'preventivos' && accesoPreventivos) {
           showSection('preventivos');
@@ -4925,7 +4927,7 @@ ${dataContext}
 
       document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
 
-      // V.13.7.1: Guardar sección para persistencia
+      // V.13.7.2: Guardar sección para persistencia
       localStorage.setItem('emercre_last_section', sec);
 
       document.getElementById('section-operaciones').style.display = sec === 'operaciones' ? 'flex' : 'none';
@@ -6226,7 +6228,7 @@ ${dataContext}
         const mapDiv = document.getElementById('preventivos-map');
         if (!mapDiv) return;
 
-        // V.13.7.1: Recuperar zoom y centro guardados
+        // V.13.7.2: Recuperar zoom y centro guardados
         const savedState = localStorage.getItem('emercre_prev_map_state');
         let initialCenter = { lat: 37.3891, lng: -5.9845 };
         let initialZoom = 7;
@@ -6248,7 +6250,7 @@ ${dataContext}
           fullscreenControl: false
         });
 
-        // V.13.7.1: Guardar estado al mover el mapa
+        // V.13.7.2: Guardar estado al mover el mapa
         mapPreventivos.addListener('idle', () => {
           const center = mapPreventivos.getCenter();
           const zoom = mapPreventivos.getZoom();
@@ -6263,7 +6265,7 @@ ${dataContext}
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         });
 
-        // V.13.7.1: Crear pin solo con doble click para evitar saturación
+        // V.13.7.2: Crear pin solo con doble click para evitar saturación
         mapPreventivos.addListener('dblclick', (e) => {
           if (e.latLng) window.onMapClickPersistentPin(e, 'prev');
         });
@@ -6359,7 +6361,7 @@ ${dataContext}
         .catch(e => console.error("[Search-Pin] Error guardando pin:", e));
     }
 
-    // V.13.7.1: Handler global para clicks en mapa que crean pines
+    // V.13.7.2: Handler global para clicks en mapa que crean pines
     window.onMapClickPersistentPin = function (e, mapType) {
       // Solo actuar si no hay modales de selección de ubicación activos
       if (picking || editPickMode || routingPickField) return;
@@ -6367,7 +6369,7 @@ ${dataContext}
       const latLng = e.latLng;
       if (!latLng) return;
 
-      // V.13.7.1: Mostrar feedback inmediato
+      // V.13.7.2: Mostrar feedback inmediato
       mostrarToast("Obteniendo dirección...");
 
       reverseGeocodeWithCache(latLng, (address) => {
@@ -7545,7 +7547,7 @@ ${dataContext}
         setTimeout(() => abrirGestionIntervencion(activeIntManageId, true), 10);
       }
 
-      /* V.13.7.1: Desactivado auto-ajuste por petición usuario
+      /* V.13.7.2: Desactivado auto-ajuste por petición usuario
       if (hasCoords && mapPreventivos) {
         mapPreventivos.fitBounds(bounds);
         if (mapPreventivos.getZoom() > 16) mapPreventivos.setZoom(16);
@@ -7697,7 +7699,7 @@ ${dataContext}
             });
           }
 
-          /* V.13.7.1: Desactivado auto-ajuste por petición usuario
+          /* V.13.7.2: Desactivado auto-ajuste por petición usuario
           if (hasCoords) {
             const isMobile = window.innerWidth < 900;
             mapPreventivos.fitBounds(bounds, isMobile ? { top: 50, bottom: 50, left: 50, right: 50 } : { top: 70, bottom: 70, left: 370, right: 70 });
@@ -8030,7 +8032,7 @@ ${dataContext}
       // Añadir listener para centrar al hacer click
       container.addEventListener('click', () => {
         mapPreventivos.panTo(i.coords);
-        // mapPreventivos.setZoom(18); // V.13.7.1: Desactivado para respetar zoom usuario
+        // mapPreventivos.setZoom(18); // V.13.7.2: Desactivado para respetar zoom usuario
         abrirGestionIntervencion(id);
       });
     }
@@ -8039,7 +8041,7 @@ ${dataContext}
       const m = markersPreventivos[id];
       if (m && mapPreventivos) {
         mapPreventivos.panTo(m.position);
-        // mapPreventivos.setZoom(17); // V.13.7.1: Desactivado para respetar zoom usuario
+        // mapPreventivos.setZoom(17); // V.13.7.2: Desactivado para respetar zoom usuario
       }
     };
 
@@ -8936,7 +8938,7 @@ ${dataContext}
       renderComentariosList(data.comentarios || []);
       document.getElementById('prev-comentario-txt').value = '';
 
-      // V.13.7.1: Permiso para comentar
+      // V.13.7.2: Permiso para comentar
       let canComment = true;
       if (mode === 'intervencion') canComment = canCommentIntervencion(data);
       else if (mode === 'dia') canComment = canCommentSubpreventivo(data);
@@ -8961,7 +8963,7 @@ ${dataContext}
       const isElevated = currentRole === 'admin' || currentRole === 'manager' || isSuper;
 
       cont.innerHTML = list.map((c, idx) => {
-        // V.13.7.1: Reglas solicitadas - Admin/Responsable/SuperAdmin editan, solo SuperAdmin borra
+        // V.13.7.2: Reglas solicitadas - Admin/Responsable/SuperAdmin editan, solo SuperAdmin borra
         const canEdit = isElevated && (c.autorId !== 'system');
         const canDelete = isSuper;
 
@@ -8982,7 +8984,7 @@ ${dataContext}
       cont.scrollTop = cont.scrollHeight;
     }
 
-    // V.13.7.1: Funciones generales para edición y borrado de comentarios en modales de lista
+    // V.13.7.2: Funciones generales para edición y borrado de comentarios en modales de lista
     window.editarComentarioGeneral = (index) => {
       let data = null;
       if (currentComMode === 'intervencion') data = intervencionesCache[currentComIntId];
@@ -9057,7 +9059,7 @@ ${dataContext}
 
       if (!data) return;
 
-      // V.13.7.1: Guard de seguridad
+      // V.13.7.2: Guard de seguridad
       let canComment = true;
       if (currentComMode === 'intervencion') canComment = canCommentIntervencion(data);
       else if (currentComMode === 'dia') canComment = canCommentSubpreventivo(data);
@@ -14304,7 +14306,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.7.1
+          Versión V.13.7.2
         </div>
       </div>
 
@@ -14733,7 +14735,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.7.1
+          Versión V.13.7.2
         </div>
       </div>
 
@@ -15620,7 +15622,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.7.1
+            Versión V.13.7.2
           </div>
         </div>
         <div class="field" id="j-prov-row">
