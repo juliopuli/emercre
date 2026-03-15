@@ -100,6 +100,89 @@ exports.getRenfeLargoRecorrido = functions.https.onCall(async (data, context) =>
     }
 });
 
+// 0.7. AIS Salvamento Marítimo Proxy (V.13.5.1)
+const WebSocket = require("ws");
+exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB' }).https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "Debe estar autenticado.");
+    }
+
+    return new Promise((resolve, reject) => {
+        const socket = new WebSocket("wss://stream.aisstream.io/v0/stream");
+        const ships = {};
+        const startTime = Date.now();
+        const duration = 5000; // Recolectar durante 5 segundos
+        let timeout = null;
+
+        const finish = () => {
+            if (timeout) clearTimeout(timeout);
+            if (socket.readyState === WebSocket.OPEN) socket.close();
+            resolve(Object.values(ships));
+        };
+
+        socket.on('open', () => {
+            const subscription = {
+                APIKey: "3c918bc8196c217b9a40cbc618a39f8cd618b787",
+                BoundingBoxes: [[[33.0, -18.0], [45.0, 5.0]]],
+            };
+            socket.send(JSON.stringify(subscription));
+            timeout = setTimeout(finish, duration);
+        });
+
+        socket.on('message', (event) => {
+            try {
+                const msg = JSON.parse(event.toString());
+                const mmsi = msg.MetaData.MMSI;
+                const shipName = (msg.MetaData.ShipName || "").trim();
+
+                // Filtrar solo barcos de salvamento conocidos o tipo 51
+                let isSalvamento = false;
+                let shipType = 0;
+
+                if (msg.MessageType === "ShipStaticData") {
+                    shipType = msg.Message.ShipStaticData.ShipType;
+                    if (shipType === 51) isSalvamento = true;
+                }
+
+                const upperName = shipName.toUpperCase();
+                if (upperName.includes("SALVAMAR") || upperName.includes("GUARDAMAR") ||
+                    upperName.includes("SAR ") || upperName.includes("HELIMER") ||
+                    upperName.includes("MARIA DE MAEZTU") || upperName.includes("CLARA CAMPOAMOR")) {
+                    isSalvamento = true;
+                }
+
+                if (isSalvamento && (msg.MessageType === "PositionReport" || msg.MessageType === "ShipStaticData")) {
+                    if (!ships[mmsi]) {
+                        ships[mmsi] = {
+                            mmsi: mmsi,
+                            name: shipName || "SAR " + mmsi,
+                            lat: msg.MetaData.latitude,
+                            lng: msg.MetaData.longitude,
+                            type: shipType || 51,
+                            lastUpdate: Date.now()
+                        };
+                    } else {
+                        if (msg.MetaData.latitude) ships[mmsi].lat = msg.MetaData.latitude;
+                        if (msg.MetaData.longitude) ships[mmsi].lng = msg.MetaData.longitude;
+                        if (shipName) ships[mmsi].name = shipName;
+                    }
+                }
+            } catch (e) {
+                // Ignore parse errors
+            }
+        });
+
+        socket.on('error', (err) => {
+            console.error("[AIS Proxy] Socket error:", err);
+            finish();
+        });
+
+        socket.on('close', () => {
+            finish();
+        });
+    });
+});
+
 // 1. Gemini Content Generator Function (V.6.2.0)
 exports.generateGeminiContent = functions.https.onCall(async (data, context) => {
     if (!context.auth) {

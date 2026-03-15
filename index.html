@@ -130,11 +130,10 @@
     let renfeAVERefreshInterval = null; // V.12.4.1
     let directionsService = null;
     let directionsRenderer = null;
-    let aisSocket = null;
     let aisMarkers = {};
-    let aisShipMetadata = {}; // MMSI -> {name: '...', type: 51, ...}
     let aisLayerEnabled = false;
-    let aisSubscriptionTimer = null;
+    let aisRefreshInterval = null;
+
 
     let autocompleteOrigin = null;
     let autocompleteDest = null;
@@ -237,7 +236,7 @@
       reverseGeocodeThrottle = true;
       setTimeout(() => { reverseGeocodeThrottle = false; }, 1000);
 
-      // V.13.5.0: Normalizar coordenadas para hit de caché (soporta LatLng y Literales)
+      // V.13.5.1: Normalizar coordenadas para hit de caché (soporta LatLng y Literales)
       const lat = (typeof latlng.lat === 'function') ? latlng.lat() : latlng.lat;
       const lng = (typeof latlng.lng === 'function') ? latlng.lng() : latlng.lng;
       if (lat === undefined || lng === undefined) { callback(null); return; }
@@ -455,7 +454,7 @@
         if (!picking && !editPickMode) window.cerrarDetalle();
       });
 
-      // V.13.5.0: Crear pin solo con doble click para evitar saturación
+      // V.13.5.1: Crear pin solo con doble click para evitar saturación
       mapEmergencias.addListener('dblclick', (e) => {
         if (e.latLng) window.onMapClickPersistentPin(e, 'eme');
       });
@@ -806,118 +805,55 @@
       aisLayerEnabled = chk.checked;
 
       if (aisLayerEnabled) {
-        connectAISStream();
+        cargarVehiculosAIS(true);
+        if (!aisRefreshInterval) {
+          aisRefreshInterval = setInterval(() => cargarVehiculosAIS(), 60000); // Refrescar cada 60s
+        }
         mostrarToast('Seguimiento AIS de salvamento activado');
       } else {
-        disconnectAISStream();
+        if (aisRefreshInterval) {
+          clearInterval(aisRefreshInterval);
+          aisRefreshInterval = null;
+        }
+        // Limpiar marcadores
+        Object.values(aisMarkers).forEach(m => m.setMap(null));
+        aisMarkers = {};
+        const statusDesc = document.getElementById('ais-status-count');
+        if (statusDesc) statusDesc.textContent = "Desconectado";
         mostrarToast('Seguimiento AIS desactivado');
       }
     };
 
-    function connectAISStream() {
-      if (aisSocket || !aisLayerEnabled) return;
+    async function cargarVehiculosAIS(force = false) {
+      if (!mapEmergencias || !mapReady) return;
+      const chk = document.getElementById('chk-ais-layer');
+      if (!chk || (!chk.checked && !force)) return;
 
       const statusDesc = document.getElementById('ais-status-count');
-      if (statusDesc) statusDesc.textContent = "Conectando...";
+      if (statusDesc && force) statusDesc.textContent = "Sincronizando...";
 
-      aisSocket = new WebSocket("wss://stream.aisstream.io/v0/stream");
+      console.log("[AIS] Cargando flota de salvamento...");
+      try {
+        const getAISVehiclesFn = httpsCallable(functions, 'getAISVehicles');
+        const result = await getAISVehiclesFn();
 
-      aisSocket.onopen = () => {
-        console.log("[AIS] WebSocket connected.");
-        if (statusDesc) statusDesc.textContent = "Suscrito (Buscando...)";
-        sendAISSubscription();
-      };
+        if (!chk || (!chk.checked && !force)) return;
 
-      aisSocket.onmessage = (event) => {
-        try {
-          const msg = JSON.parse(event.data);
-          handleAISMessage(msg);
-        } catch (e) {
-          console.error("[AIS] Error parsing message:", e);
+        const shipsData = result.data;
+        if (Array.isArray(shipsData)) {
+          console.log(`[AIS] Recibidos ${shipsData.length} barcos`);
+
+          // Eliminar barcos que ya no están en la respuesta (opcional, o dejar que expiren)
+          // Para simplificar, actualizamos todos los recibidos
+          shipsData.forEach(s => {
+            updateAISMarker(s.mmsi, s.lat, s.lng, s.name, s.type);
+          });
+
+          if (statusDesc) statusDesc.textContent = `${shipsData.length} barcos detectados`;
         }
-      };
-
-      aisSocket.onclose = () => {
-        console.warn("[AIS] WebSocket closed.");
-        if (aisLayerEnabled) {
-          if (statusDesc) statusDesc.textContent = "Reconectando...";
-          setTimeout(connectAISStream, 5000);
-        } else {
-          if (statusDesc) statusDesc.textContent = "Desconectado";
-        }
-        aisSocket = null;
-      };
-
-      aisSocket.onerror = (err) => {
-        console.error("[AIS] WebSocket error:", err);
-      };
-    }
-
-    function disconnectAISStream() {
-      if (aisSocket) {
-        aisSocket.close();
-        aisSocket = null;
-      }
-      // Limpiar marcadores
-      Object.values(aisMarkers).forEach(m => m.setMap(null));
-      aisMarkers = {};
-      aisShipMetadata = {};
-      const statusDesc = document.getElementById('ais-status-count');
-      if (statusDesc) statusDesc.textContent = "Desconectado";
-    }
-
-    function sendAISSubscription() {
-      if (!aisSocket || aisSocket.readyState !== WebSocket.OPEN) return;
-
-      // Suscribirse a un área amplia que cubra la costa española y alrededores
-      const subscriptionMessage = {
-        APIKey: "3c918bc8196c217b9a40cbc618a39f8cd618b787",
-        BoundingBoxes: [[[33.0, -18.0], [45.0, 5.0]]],
-      };
-      aisSocket.send(JSON.stringify(subscriptionMessage));
-    }
-
-    function handleAISMessage(msg) {
-      if (!aisLayerEnabled) return;
-
-      const mmsi = msg.MetaData.MMSI;
-      const shipName = (msg.MetaData.ShipName || "").trim();
-
-      // Guardar metadatos si vienen en el reporte estático
-      if (msg.MessageType === "ShipStaticData") {
-        const type = msg.Message.ShipStaticData.ShipType;
-        if (!aisShipMetadata[mmsi]) aisShipMetadata[mmsi] = {};
-        aisShipMetadata[mmsi].type = type;
-        if (shipName) aisShipMetadata[mmsi].name = shipName;
-      }
-
-      // Procesar posición si es reporte de posición
-      if (msg.MessageType === "PositionReport") {
-        const lat = msg.MetaData.latitude;
-        const lng = msg.MetaData.longitude;
-
-        if (!lat || !lng) return;
-
-        // FILTRADO (Solo Salvamento)
-        // Tipo 51 = Search and Rescue vessel
-        let isSalvamento = false;
-        const meta = aisShipMetadata[mmsi];
-        if (meta && meta.type === 51) isSalvamento = true;
-
-        const name = shipName || (meta ? meta.name : "");
-        const upperName = name.toUpperCase();
-        if (upperName.includes("SALVAMAR") ||
-          upperName.includes("GUARDAMAR") ||
-          upperName.includes("SAR ") ||
-          upperName.includes("HELIMER") ||
-          upperName.includes("MARIA DE MAEZTU") ||
-          upperName.includes("CLARA CAMPOAMOR")) {
-          isSalvamento = true;
-        }
-
-        if (isSalvamento) {
-          updateAISMarker(mmsi, lat, lng, name || `SAR ${mmsi}`, meta ? meta.type : 51);
-        }
+      } catch (error) {
+        console.error("[AIS] Error cargando barcos:", error);
+        if (statusDesc) statusDesc.textContent = "Error de conexión";
       }
     }
 
@@ -928,7 +864,6 @@
       if (aisMarkers[mmsi]) {
         aisMarkers[mmsi].position = pos;
       } else {
-        // Crear marcador avanzado para Google Maps
         const marker = new google.maps.marker.AdvancedMarkerElement({
           position: pos,
           map: mapEmergencias,
@@ -946,7 +881,7 @@
                     <div><b>MMSI:</b> ${mmsi}</div>
                     <div><b>Tipo:</b> Buque Salvamento (SAR)</div>
                     <div style="margin-top: 8px; border-top: 1px solid #eee; padding-top: 4px; font-size: 9px; color: #999;">
-                      Fuente: aisstream.io
+                      Fuente: aisstream.io (Proxy)
                     </div>
                  </div>
                </div>
@@ -956,11 +891,6 @@
         });
 
         aisMarkers[mmsi] = marker;
-
-        // Actualizar contador en la UI
-        const count = Object.keys(aisMarkers).length;
-        const statusDesc = document.getElementById('ais-status-count');
-        if (statusDesc) statusDesc.textContent = `${count} barcos detectados`;
       }
     }
 
@@ -1307,7 +1237,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.5.0 Loaded');
+    console.log('EmerCRE V.13.5.1 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2016,7 +1946,7 @@
         if (navChat) navChat.style.display = accesoEmergencias ? 'flex' : 'none';
         if (mnavChat) mnavChat.style.display = accesoEmergencias ? 'flex' : 'none';
 
-        // V.13.5.0: Restaurar última sección guardada
+        // V.13.5.1: Restaurar última sección guardada
         const lastSection = localStorage.getItem('emercre_last_section');
         if (lastSection === 'preventivos' && accesoPreventivos) {
           showSection('preventivos');
@@ -4915,7 +4845,7 @@ ${dataContext}
 
       document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
 
-      // V.13.5.0: Guardar sección para persistencia
+      // V.13.5.1: Guardar sección para persistencia
       localStorage.setItem('emercre_last_section', sec);
 
       document.getElementById('section-operaciones').style.display = sec === 'operaciones' ? 'flex' : 'none';
@@ -6216,7 +6146,7 @@ ${dataContext}
         const mapDiv = document.getElementById('preventivos-map');
         if (!mapDiv) return;
 
-        // V.13.5.0: Recuperar zoom y centro guardados
+        // V.13.5.1: Recuperar zoom y centro guardados
         const savedState = localStorage.getItem('emercre_prev_map_state');
         let initialCenter = { lat: 37.3891, lng: -5.9845 };
         let initialZoom = 7;
@@ -6238,7 +6168,7 @@ ${dataContext}
           fullscreenControl: false
         });
 
-        // V.13.5.0: Guardar estado al mover el mapa
+        // V.13.5.1: Guardar estado al mover el mapa
         mapPreventivos.addListener('idle', () => {
           const center = mapPreventivos.getCenter();
           const zoom = mapPreventivos.getZoom();
@@ -6253,7 +6183,7 @@ ${dataContext}
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         });
 
-        // V.13.5.0: Crear pin solo con doble click para evitar saturación
+        // V.13.5.1: Crear pin solo con doble click para evitar saturación
         mapPreventivos.addListener('dblclick', (e) => {
           if (e.latLng) window.onMapClickPersistentPin(e, 'prev');
         });
@@ -6349,7 +6279,7 @@ ${dataContext}
         .catch(e => console.error("[Search-Pin] Error guardando pin:", e));
     }
 
-    // V.13.5.0: Handler global para clicks en mapa que crean pines
+    // V.13.5.1: Handler global para clicks en mapa que crean pines
     window.onMapClickPersistentPin = function (e, mapType) {
       // Solo actuar si no hay modales de selección de ubicación activos
       if (picking || editPickMode || routingPickField) return;
@@ -6357,7 +6287,7 @@ ${dataContext}
       const latLng = e.latLng;
       if (!latLng) return;
 
-      // V.13.5.0: Mostrar feedback inmediato
+      // V.13.5.1: Mostrar feedback inmediato
       mostrarToast("Obteniendo dirección...");
 
       reverseGeocodeWithCache(latLng, (address) => {
@@ -7535,7 +7465,7 @@ ${dataContext}
         setTimeout(() => abrirGestionIntervencion(activeIntManageId, true), 10);
       }
 
-      /* V.13.5.0: Desactivado auto-ajuste por petición usuario
+      /* V.13.5.1: Desactivado auto-ajuste por petición usuario
       if (hasCoords && mapPreventivos) {
         mapPreventivos.fitBounds(bounds);
         if (mapPreventivos.getZoom() > 16) mapPreventivos.setZoom(16);
@@ -7687,7 +7617,7 @@ ${dataContext}
             });
           }
 
-          /* V.13.5.0: Desactivado auto-ajuste por petición usuario
+          /* V.13.5.1: Desactivado auto-ajuste por petición usuario
           if (hasCoords) {
             const isMobile = window.innerWidth < 900;
             mapPreventivos.fitBounds(bounds, isMobile ? { top: 50, bottom: 50, left: 50, right: 50 } : { top: 70, bottom: 70, left: 370, right: 70 });
@@ -8020,7 +7950,7 @@ ${dataContext}
       // Añadir listener para centrar al hacer click
       container.addEventListener('click', () => {
         mapPreventivos.panTo(i.coords);
-        // mapPreventivos.setZoom(18); // V.13.5.0: Desactivado para respetar zoom usuario
+        // mapPreventivos.setZoom(18); // V.13.5.1: Desactivado para respetar zoom usuario
         abrirGestionIntervencion(id);
       });
     }
@@ -8029,7 +7959,7 @@ ${dataContext}
       const m = markersPreventivos[id];
       if (m && mapPreventivos) {
         mapPreventivos.panTo(m.position);
-        // mapPreventivos.setZoom(17); // V.13.5.0: Desactivado para respetar zoom usuario
+        // mapPreventivos.setZoom(17); // V.13.5.1: Desactivado para respetar zoom usuario
       }
     };
 
@@ -8926,7 +8856,7 @@ ${dataContext}
       renderComentariosList(data.comentarios || []);
       document.getElementById('prev-comentario-txt').value = '';
 
-      // V.13.5.0: Permiso para comentar
+      // V.13.5.1: Permiso para comentar
       let canComment = true;
       if (mode === 'intervencion') canComment = canCommentIntervencion(data);
       else if (mode === 'dia') canComment = canCommentSubpreventivo(data);
@@ -8951,7 +8881,7 @@ ${dataContext}
       const isElevated = currentRole === 'admin' || currentRole === 'manager' || isSuper;
 
       cont.innerHTML = list.map((c, idx) => {
-        // V.13.5.0: Reglas solicitadas - Admin/Responsable/SuperAdmin editan, solo SuperAdmin borra
+        // V.13.5.1: Reglas solicitadas - Admin/Responsable/SuperAdmin editan, solo SuperAdmin borra
         const canEdit = isElevated && (c.autorId !== 'system');
         const canDelete = isSuper;
 
@@ -8972,7 +8902,7 @@ ${dataContext}
       cont.scrollTop = cont.scrollHeight;
     }
 
-    // V.13.5.0: Funciones generales para edición y borrado de comentarios en modales de lista
+    // V.13.5.1: Funciones generales para edición y borrado de comentarios en modales de lista
     window.editarComentarioGeneral = (index) => {
       let data = null;
       if (currentComMode === 'intervencion') data = intervencionesCache[currentComIntId];
@@ -9047,7 +8977,7 @@ ${dataContext}
 
       if (!data) return;
 
-      // V.13.5.0: Guard de seguridad
+      // V.13.5.1: Guard de seguridad
       let canComment = true;
       if (currentComMode === 'intervencion') canComment = canCommentIntervencion(data);
       else if (currentComMode === 'dia') canComment = canCommentSubpreventivo(data);
@@ -14294,7 +14224,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.5.0
+          Versión V.13.5.1
         </div>
       </div>
 
@@ -14709,7 +14639,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.5.0
+          Versión V.13.5.1
         </div>
       </div>
 
@@ -15596,7 +15526,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.5.0
+            Versión V.13.5.1
           </div>
         </div>
         <div class="field" id="j-prov-row">
