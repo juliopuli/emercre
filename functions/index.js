@@ -125,7 +125,7 @@ exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB'
         socket.on('open', () => {
             const subscription = {
                 APIKey: "3c918bc8196c217b9a40cbc618a39f8cd618b787",
-                BoundingBoxes: [[[33.0, -18.0], [45.0, 5.0]]],
+                BoundingBoxes: [[[-90, -180], [90, 180]]], // Cobertura Global (Mundo entero)
             };
             socket.send(JSON.stringify(subscription));
             timeout = setTimeout(finish, duration);
