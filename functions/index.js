@@ -111,7 +111,7 @@ exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB'
         const socket = new WebSocket("wss://stream.aisstream.io/v0/stream");
         const ships = {};
         const startTime = Date.now();
-        const duration = 5000; // Recolectar durante 5 segundos
+        const duration = 8000; // Aumentado a 8 segundos para capturar más flujo
         let timeout = null;
 
         const finish = () => {
@@ -132,29 +132,41 @@ exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB'
         socket.on('message', (event) => {
             try {
                 const msg = JSON.parse(event.toString());
+                if (!msg.MetaData || !msg.MetaData.MMSI) return;
+
                 const mmsi = msg.MetaData.MMSI;
                 const shipName = (msg.MetaData.ShipName || "").trim();
+                const lat = msg.MetaData.latitude;
+                const lng = msg.MetaData.longitude;
 
-                // Filtrar solo barcos de salvamento conocidos o tipo 51
-                if (msg.MessageType === "PositionReport" || msg.MessageType === "ShipStaticData") {
+                let shipType = 0;
+                if (msg.MessageType === "ShipStaticData") {
+                    shipType = msg.Message.ShipStaticData.ShipType;
+                }
+
+                // Aceptar cualquier mensaje que tenga coordenadas válidas
+                if (lat && lng) {
                     if (!ships[mmsi]) {
                         ships[mmsi] = {
                             mmsi: mmsi,
                             name: shipName || "Buque " + mmsi,
-                            lat: msg.MetaData.latitude,
-                            lng: msg.MetaData.longitude,
+                            lat: lat,
+                            lng: lng,
                             type: shipType || 0,
                             lastUpdate: Date.now()
                         };
                     } else {
-                        if (msg.MetaData.latitude) ships[mmsi].lat = msg.MetaData.latitude;
-                        if (msg.MetaData.longitude) ships[mmsi].lng = msg.MetaData.longitude;
-                        if (shipName) ships[mmsi].name = shipName;
+                        ships[mmsi].lat = lat;
+                        ships[mmsi].lng = lng;
+                        if (shipName && (!ships[mmsi].name || ships[mmsi].name.startsWith("Buque "))) {
+                            ships[mmsi].name = shipName;
+                        }
                         if (shipType) ships[mmsi].type = shipType;
+                        ships[mmsi].lastUpdate = Date.now();
                     }
                 }
             } catch (e) {
-                // Ignore parse errors
+                // Ignore errors
             }
         });
 
