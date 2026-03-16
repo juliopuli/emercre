@@ -238,7 +238,7 @@
       reverseGeocodeThrottle = true;
       setTimeout(() => { reverseGeocodeThrottle = false; }, 1000);
 
-      // V.13.7.2: Normalizar coordenadas para hit de caché (soporta LatLng y Literales)
+      // V.13.8.0: Normalizar coordenadas para hit de caché (soporta LatLng y Literales)
       const lat = (typeof latlng.lat === 'function') ? latlng.lat() : latlng.lat;
       const lng = (typeof latlng.lng === 'function') ? latlng.lng() : latlng.lng;
       if (lat === undefined || lng === undefined) { callback(null); return; }
@@ -456,7 +456,7 @@
         if (!picking && !editPickMode) window.cerrarDetalle();
       });
 
-      // V.13.7.2: Crear pin solo con doble click para evitar saturación
+      // V.13.8.0: Crear pin solo con doble click para evitar saturación
       mapEmergencias.addListener('dblclick', (e) => {
         if (e.latLng) window.onMapClickPersistentPin(e, 'eme');
       });
@@ -859,7 +859,7 @@
       }
     }
 
-    // V.13.7.2: Normalizar strings (quitar acentos) para búsqueda y filtrado
+    // V.13.8.0: Normalizar strings (quitar acentos) para búsqueda y filtrado
     window.filtrarBarcosAIS = (query) => {
       aisSearchQuery = (query || "").toLowerCase().trim();
       const resultsInfo = document.getElementById('ais-results-info');
@@ -1319,7 +1319,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.7.2 Loaded');
+    console.log('EmerCRE V.13.8.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2028,7 +2028,7 @@
         if (navChat) navChat.style.display = accesoEmergencias ? 'flex' : 'none';
         if (mnavChat) mnavChat.style.display = accesoEmergencias ? 'flex' : 'none';
 
-        // V.13.7.2: Restaurar última sección guardada
+        // V.13.8.0: Restaurar última sección guardada
         const lastSection = localStorage.getItem('emercre_last_section');
         if (lastSection === 'preventivos' && accesoPreventivos) {
           showSection('preventivos');
@@ -2974,45 +2974,18 @@
               }
             }
 
-            // Pintar ruta en Emergencias (Lógica persistente V.12.4.1)
-            if (isMovingNow && !vs.hasArrived) {
-              const routeKey = `${opId}_${mid}`;
-              if (!window._emeRoutesMap[routeKey] && directionsService) {
-                const initialPos = assignedOp.recursosPosicionesIniciales?.[localVeh.id];
-                if (initialPos) {
-                  calculateRouteWithCache(initialPos, pos, null, (result, status) => {
-                    if (status === 'OK' && !window._emeRoutesMap[routeKey]) {
-                      window._emeRoutesMap[routeKey] = new google.maps.DirectionsRenderer({
-                        map: mapEmergencias, suppressMarkers: true, preserveViewport: true,
-                        polylineOptions: { strokeColor: '#e20613', strokeOpacity: 0.6, strokeWeight: 4 }
-                      });
-                      window._emeRoutesMap[routeKey].setDirections(result);
-                    }
-                  });
-                }
-              }
-            }
+
           }
         });
 
-        // V.12.4.1: Limpiar rutas de Emergencias obsoletas
-        Object.keys(window._emeRoutesMap).forEach(k => {
-          const parts = k.split('_');
-          if (parts.length === 2) {
-            const opId = parts[0];
-            const mid = parts[1];
-            const assignedOp = ops[opId];
-            const localVeh = localVehiclesByOystaId[mid];
-            const stillAssigned = assignedOp && assignedOp.estado === 'activa' &&
-              localVeh && assignedOp.recursosAsignadosIds?.includes(localVeh.id);
-
-            if (!stillAssigned) {
-              const r = window._emeRoutesMap[k];
-              if (r && typeof r.setMap === 'function') r.setMap(null);
-              delete window._emeRoutesMap[k];
-            }
-          }
-        });
+        // V.13.8.0: Limpiar restos de rutas de Emergencias si existieran
+        if (window._emeRoutesMap) {
+          Object.keys(window._emeRoutesMap).forEach(k => {
+            const r = window._emeRoutesMap[k];
+            if (r && typeof r.setMap === 'function') r.setMap(null);
+            delete window._emeRoutesMap[k];
+          });
+        }
       } catch (err) {
         console.error("Error crítico cargando vehículos Oysta:", err);
       }
@@ -4927,7 +4900,7 @@ ${dataContext}
 
       document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
 
-      // V.13.7.2: Guardar sección para persistencia
+      // V.13.8.0: Guardar sección para persistencia
       localStorage.setItem('emercre_last_section', sec);
 
       document.getElementById('section-operaciones').style.display = sec === 'operaciones' ? 'flex' : 'none';
@@ -6228,7 +6201,7 @@ ${dataContext}
         const mapDiv = document.getElementById('preventivos-map');
         if (!mapDiv) return;
 
-        // V.13.7.2: Recuperar zoom y centro guardados
+        // V.13.8.0: Recuperar zoom y centro guardados
         const savedState = localStorage.getItem('emercre_prev_map_state');
         let initialCenter = { lat: 37.3891, lng: -5.9845 };
         let initialZoom = 7;
@@ -6250,7 +6223,7 @@ ${dataContext}
           fullscreenControl: false
         });
 
-        // V.13.7.2: Guardar estado al mover el mapa
+        // V.13.8.0: Guardar estado al mover el mapa
         mapPreventivos.addListener('idle', () => {
           const center = mapPreventivos.getCenter();
           const zoom = mapPreventivos.getZoom();
@@ -6265,7 +6238,7 @@ ${dataContext}
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         });
 
-        // V.13.7.2: Crear pin solo con doble click para evitar saturación
+        // V.13.8.0: Crear pin solo con doble click para evitar saturación
         mapPreventivos.addListener('dblclick', (e) => {
           if (e.latLng) window.onMapClickPersistentPin(e, 'prev');
         });
@@ -6361,7 +6334,7 @@ ${dataContext}
         .catch(e => console.error("[Search-Pin] Error guardando pin:", e));
     }
 
-    // V.13.7.2: Handler global para clicks en mapa que crean pines
+    // V.13.8.0: Handler global para clicks en mapa que crean pines
     window.onMapClickPersistentPin = function (e, mapType) {
       // Solo actuar si no hay modales de selección de ubicación activos
       if (picking || editPickMode || routingPickField) return;
@@ -6369,7 +6342,7 @@ ${dataContext}
       const latLng = e.latLng;
       if (!latLng) return;
 
-      // V.13.7.2: Mostrar feedback inmediato
+      // V.13.8.0: Mostrar feedback inmediato
       mostrarToast("Obteniendo dirección...");
 
       reverseGeocodeWithCache(latLng, (address) => {
@@ -7547,7 +7520,7 @@ ${dataContext}
         setTimeout(() => abrirGestionIntervencion(activeIntManageId, true), 10);
       }
 
-      /* V.13.7.2: Desactivado auto-ajuste por petición usuario
+      /* V.13.8.0: Desactivado auto-ajuste por petición usuario
       if (hasCoords && mapPreventivos) {
         mapPreventivos.fitBounds(bounds);
         if (mapPreventivos.getZoom() > 16) mapPreventivos.setZoom(16);
@@ -7699,7 +7672,7 @@ ${dataContext}
             });
           }
 
-          /* V.13.7.2: Desactivado auto-ajuste por petición usuario
+          /* V.13.8.0: Desactivado auto-ajuste por petición usuario
           if (hasCoords) {
             const isMobile = window.innerWidth < 900;
             mapPreventivos.fitBounds(bounds, isMobile ? { top: 50, bottom: 50, left: 50, right: 50 } : { top: 70, bottom: 70, left: 370, right: 70 });
@@ -7713,283 +7686,187 @@ ${dataContext}
 
 
     // V.12.4.1: Renderiar en el mapa los vehículos Oysta, e incluir RUTA DINÁMICA hacia su intervención asignada
+    // V.13.8.0: Renderiar en el mapa los vehículos Oysta y monitorizar estados (Sin rutas por API cost)
     async function renderPreventivoAssignedVehicles(interventionDocs, allAssignedIds) {
       if (!mapPreventivos) return;
       if (!allAssignedIds) allAssignedIds = new Set();
 
       if (!window._prevIntVehicleMarkers) window._prevIntVehicleMarkers = {};
       const activeVehicleIds = new Set();
-      const activeRouteKeys = new Set();
 
-      // 1. Relaciones Vehículo -> Intervención Destino (Plana para soportar múltiples si existen)
-      const routeRequests = [];
+      // 1. Relaciones Vehículo -> Intervención Destino
+      const resourceMap = {}; // vehicleIdString -> { snap, data }
       const iDocsArr = interventionDocs || [];
-      console.log(`[Oysta] Procesando rutas. Intervenciones: ${iDocsArr.length}, Recursos Oysta: ${oystaVehiclesCache?.length || 0}`);
-
-      if (iDocsArr.length > 0) {
-        iDocsArr.forEach(doc => {
-          const i = doc.data();
-          if (!i.coords) return;
-          (i.recursosAsignados || []).forEach(vid => {
-            if (vid) routeRequests.push({ vehicleId: String(vid), coords: i.coords, id: doc.id, interventionId: doc.id, isUrgente: i.prioridad === 'rojo' });
-          });
+      iDocsArr.forEach(snap => {
+        const i = snap.data();
+        if (!i.coords) return;
+        (i.recursosAsignados || []).forEach(vid => {
+          resourceMap[String(vid)] = { snap, data: i };
         });
-      }
-
-      // Asegurar DirectionsService
-      if (!directionsService && typeof google !== 'undefined' && google.maps && google.maps.DirectionsService) {
-        directionsService = new google.maps.DirectionsService();
-      }
+      });
 
       // 2. Procesar vehículos
       if (oystaVehiclesCache && oystaVehiclesCache.length > 0) {
-        routeRequests.forEach(async (renderData) => {
-          const vehicleId = renderData.vehicleId;
-          const localVeh = localVehiclesById[vehicleId];
-          if (!localVeh || !localVeh.oystaId) return;
-
-          const oystaVeh = oystaVehiclesCache.find(v => String(v.id) === String(localVeh.oystaId));
-          if (!oystaVeh) return;
+        for (const oystaVeh of oystaVehiclesCache) {
+          const mid = String(oystaVeh.id);
+          const localVeh = localVehiclesByOystaId[mid];
+          if (!localVeh) continue;
+          const assigned = resourceMap[localVeh.id];
+          if (!assigned) continue;
 
           const pos = { lat: parseFloat(oystaVeh.lat), lng: parseFloat(oystaVeh.lng) };
-          if (isNaN(pos.lat) || isNaN(pos.lng)) return;
+          if (isNaN(pos.lat) || isNaN(pos.lng)) continue;
 
-          activeVehicleIds.add(vehicleId);
-          const routeKey = `${vehicleId}_${renderData.id}`;
-          const stateKey = `prev_${renderData.interventionId}_${vehicleId}`;
-
+          activeVehicleIds.add(localVeh.id);
+          const stateKey = `prev_${assigned.snap.id}_${localVeh.id}`;
           if (!window._oystaVehicleState) window._oystaVehicleState = {};
           if (!window._oystaVehicleState[stateKey]) {
             window._oystaVehicleState[stateKey] = {
               moving: parseFloat(oystaVeh.speed) > 5,
-              lastStopAddr: "",
               hasDeparted: false,
               hasArrived: false,
-              lastArrivedCoords: null
+              initialPos: pos,
+              assignmentTime: Date.now(),
+              lastStationaryPos: pos
             };
           }
           const vs = window._oystaVehicleState[stateKey];
+          const speed = parseFloat(oystaVeh.speed);
+          const isMovingNow = speed > 5;
+          const indicativo = localVeh.alias || localVeh.indicativo || oystaVeh.name;
+          const iData = assigned.data;
+          const iRef = assigned.snap.ref;
 
-          // A. Marcador de Vehículo
-          const statusClass = parseFloat(oystaVeh.speed) > 5 ? 'moving' : 'stopped';
-          let content;
-          if (typeof window.createOystaMarkerContent === 'function') {
-            content = window.createOystaMarkerContent(oystaVeh, localVeh, statusClass);
-          } else {
-            content = document.createElement('div');
-            content.className = 'oysta-marker';
-            content.innerHTML = localVeh.alias || localVeh.indicativo || oystaVeh.name;
-          }
-
-          if (window._prevIntVehicleMarkers[vehicleId]) {
-            const m = window._prevIntVehicleMarkers[vehicleId];
+          // A. Marcador
+          const statusClass = isMovingNow ? 'moving' : 'stopped';
+          let content = window.createOystaMarkerContent(oystaVeh, localVeh, statusClass);
+          if (window._prevIntVehicleMarkers[localVeh.id]) {
+            const m = window._prevIntVehicleMarkers[localVeh.id];
             m.position = pos;
             m.content = content;
             if (!m.map) m.map = mapPreventivos;
           } else {
             const marker = new google.maps.marker.AdvancedMarkerElement({
               position: pos, map: mapPreventivos, content: content,
-              title: `${localVeh.alias || localVeh.indicativo || oystaVeh.name} — asignado`,
+              title: `${indicativo} — asignado`,
               zIndex: 900, gmpClickable: true
             });
             marker.addListener('gmp-click', () => {
               if (content && typeof content.click === 'function') content.click();
             });
-            window._prevIntVehicleMarkers[vehicleId] = marker;
+            window._prevIntVehicleMarkers[localVeh.id] = marker;
           }
 
-          // B. Monitoreo de Estados (Lógica de comentarios con paradas intermedias V.12.4.1)
-          const iDoc = iDocsArr.find(d => d.id === renderData.interventionId);
-          if (iDoc) {
-            const iData = iDoc.data();
-            const indicativo = localVeh.alias || localVeh.indicativo || oystaVeh.name;
-            const comments = iData.comentarios || [];
-            const speed = parseFloat(oystaVeh.speed);
-            const isMovingNow = speed > 5;
-            const distToDest = calculateHaversineDist(pos, iData.coords);
+          // B. Monitoreo de Estados
+          const distToDest = calculateHaversineDist(pos, iData.coords);
+          const THRESHOLD_ARRIVE = 0.05; // 50m
+          const THRESHOLD_DEPART = 0.05; // 50m
+          const THRESHOLD_OFFSITE = 0.20; // 200m
 
-            // V.12.4.2: RESET arrival if destination changed
-            if (vs.hasArrived && vs.lastArrivedCoords) {
-              const dDest = calculateHaversineDist(iData.coords, vs.lastArrivedCoords);
-              if (dDest > 0.05) { // 50m threshold for "new address"
-                console.log(`[Oysta-Rules] Dirección cambiada para ${stateKey}. Reseteando estado de llegada.`);
-                vs.hasArrived = false;
-                vs.lastArrivedCoords = null;
-              }
+          // V.13.8.0: Reset arrival logic if destination changes drastically
+          if (vs.hasArrived && vs.lastArrivedCoords) {
+            const dMove = calculateHaversineDist(iData.coords, vs.lastArrivedCoords);
+            if (dMove > 0.05) {
+              vs.hasArrived = false;
+              vs.lastArrivedCoords = null;
             }
+          }
 
-            // 1. Salida Inicial / Salida de Parada Intermedia
-            // V.13.0.4: Permitir trigger si es el primer movimiento detectado aunque ya estuviera moviéndose
-            if (isMovingNow && (!vs.moving || !vs.hasDeparted)) {
-              vs.moving = true;
-              const depKey = `dep_prev_${renderData.interventionId}_${vehicleId}`;
-              if (!window._oystaSentPreventivos) window._oystaSentPreventivos = new Set();
+          // 1. Llegada
+          if (distToDest < THRESHOLD_ARRIVE && !vs.hasArrived) {
+            const text = `✅ ${indicativo} llega al lugar (${iData.direccion || 'sin dirección'}).`;
+            const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
+            try {
+              await updateDoc(iRef, { comentarios: arrayUnion(newComment) });
+              vs.hasArrived = true;
+              vs.lastArrivedCoords = { ...iData.coords };
+            } catch (e) { console.error("[Oysta] Error llegada:", e); }
+          }
 
-              const hasDepartedLog = comments.some(c => c.texto?.includes("sale hacia el lugar") && c.texto?.includes(indicativo));
-              if (!hasDepartedLog && !window._oystaSentPreventivos.has(depKey)) {
-                window._oystaSentPreventivos.add(depKey);
-
-                let originText = `hacia el lugar (${iData.direccion || 'sin dirección'})`;
-                const globalLast = window._oystaGlobalLastStop[vehicleId];
-                let delayStr = "";
-                if (globalLast) {
-                  if (globalLast.addr) originText = `desde ${globalLast.addr} ${originText}`;
-                  const diffMin = Math.round((Date.now() - globalLast.timestamp) / 60000);
-                  if (diffMin > 1) delayStr = ` [Decalaje: Hace ${diffMin} min]`;
-                }
-                const text = `⚡️ ${indicativo} sale ${originText}.${delayStr}`;
-
-                const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
-                try {
-                  await updateDoc(iDoc.ref, { comentarios: arrayUnion(newComment) });
-                  console.log(`[Oysta-Auto] Comentario de salida guardado para ${indicativo}`);
-                } catch (e) {
-                  console.error(`[Oysta-Auto] Error guardando salida para ${indicativo}:`, e);
-                }
-                vs.hasDeparted = true;
-              }
-            } else if (vs.lastStopAddr && distToDest > 0.1) {
-              const text = `⚡️ ${indicativo} sale de ${vs.lastStopAddr} hacia el lugar.`;
-
+          // 2. Salida Inicial / Decalaje
+          if (isMovingNow && !vs.hasDeparted) {
+            const distFromStart = calculateHaversineDist(pos, vs.initialPos);
+            if (distFromStart < THRESHOLD_DEPART && !vs.loggedStartAtOrigin) {
+              const text = `⚡️ ${indicativo} en movimiento en lugar de inicio a las ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}.`;
               const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
               try {
-                await updateDoc(iDoc.ref, { comentarios: arrayUnion(newComment) });
-                console.log(`[Oysta-Auto] Comentario de salida de parada guardado para ${indicativo}`);
-              } catch (e) {
-                console.error(`[Oysta-Auto] Error guardando salida de parada para ${indicativo}:`, e);
-              }
-              vs.lastStopAddr = "";
+                await updateDoc(iRef, { comentarios: arrayUnion(newComment) });
+                vs.loggedStartAtOrigin = true;
+              } catch (e) { console.error("[Oysta] Error mov.inicio:", e); }
+            } else if (distFromStart >= THRESHOLD_DEPART) {
+              const decalaje = Math.round((Date.now() - vs.assignmentTime) / 60000);
+              const text = `⚡️ ${indicativo} sale hacia ${iData.direccion || 'dirección de destino'}. [Decalaje: Hace ${decalaje} min]`;
+              const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
+              try {
+                await updateDoc(iRef, { comentarios: arrayUnion(newComment) });
+                vs.hasDeparted = true;
+              } catch (e) { console.error("[Oysta] Error salida:", e); }
             }
-            // 2. Parada / Llegada Final / Parada Intermedia
-            else if (!isMovingNow && vs.moving) {
-              vs.moving = false;
-              const arrKey = `arr_prev_${renderData.interventionId}_${vehicleId}`;
-              const hasArrivedLog = comments.some(c => c.texto?.includes("llega al lugar del aviso") && c.texto?.includes(indicativo));
+          }
 
-              if (distToDest < 0.1 && !hasArrivedLog && !window._oystaSentPreventivos.has(arrKey)) {
-                window._oystaSentPreventivos.add(arrKey);
-                const text = `✅ ${indicativo} llega al lugar del aviso (${iData.direccion || 'sin dirección'}).`;
-                const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
+          // 3. Seguimiento Paradas Intermedias
+          if (!isMovingNow) {
+            if (vs.isMovingOffsite) {
+              reverseGeocodeWithCache(pos, async (addr) => {
+                const newAddr = addr || 'posición desconocida';
+                const arrivalText = `✅ ${indicativo} llega a ${newAddr}.`;
+                const arrivalTS = Date.now();
+                const newArrComment = { texto: arrivalText, autor: 'Sist. Oysta', autorId: 'system', timestamp: arrivalTS, fecha: formatCommentFecha(new Date()) };
+
                 try {
-                  await updateDoc(iDoc.ref, { comentarios: arrayUnion(newComment) });
-                  console.log(`[Oysta-Auto] Comentario de llegada guardado para ${indicativo}`);
-                } catch (e) {
-                  console.error(`[Oysta-Auto] Error guardando llegada para ${indicativo}:`, e);
-                }
-                vs.hasArrived = true;
-                vs.lastArrivedCoords = { ...iData.coords }; // V.12.4.2: Record where we arrived
-                reverseGeocodeWithCache(pos, async (addr) => {
-                  vs.lastStopAddr = addr || 'posición desconocida';
-                  const text = `✅ ${indicativo} llega a ${vs.lastStopAddr}.`;
-                  const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
-                  try {
-                    await updateDoc(iDoc.ref, { comentarios: arrayUnion(newComment) });
-                    console.log(`[Oysta-Auto] Comentario de parada intermedia guardado para ${indicativo}`);
-                  } catch (e) {
-                    console.error(`[Oysta-Auto] Error guardando parada intermedia para ${indicativo}:`, e);
+                  const snap = await getDoc(iRef);
+                  if (snap.exists()) {
+                    const comms = snap.data().comentarios || [];
+                    const oldTxt = `⚡️ ${indicativo} sale de ${vs.lastStopAddr}`;
+                    const newTxt = `⚡️ ${indicativo} sale a ${newAddr}`;
+                    const updatedComms = comms.map(c => {
+                      if (c.timestamp === vs.lastSaleDeTS && c.texto === oldTxt) return { ...c, texto: newTxt, editado: true };
+                      return c;
+                    });
+                    updatedComms.push(newArrComment);
+                    await updateDoc(iRef, { comentarios: updatedComms, actualizadoEn: serverTimestamp() });
                   }
-                });
-              }
-            }
-          }
-
-          // D. Control de llegada (Arrival Rule V.12.4.2)
-          const distToIntervention = calculateHaversineDist(pos, renderData.coords);
-          const hasArrivedIntervention = (distToIntervention < 0.1) || (vs && vs.hasArrived);
-
-          if (!hasArrivedIntervention) {
-            activeRouteKeys.add(routeKey);
-          } else {
-            console.log(`[Oysta] Recurso ${vehicleId} ha llegado a la intervención ${renderData.id}. Omitiendo ruta.`);
-          }
-
-          // C. Ruta Dinámica (REVERTIDO A DirectionsRenderer V.12.4.1)
-          if (directionsService && !hasArrivedIntervention) {
-            if (!window._prevRoutesMap[routeKey]) {
-              console.log(`[Oysta] Inicializando DirectionsRenderer para ${routeKey}`);
-              window._prevRoutesMap[routeKey] = {
-                renderer: new google.maps.DirectionsRenderer({
-                  map: mapPreventivos,
-                  suppressMarkers: true,
-                  preserveViewport: true,
-                  polylineOptions: {
-                    strokeColor: renderData.isUrgente ? '#e74c3c' : '#1a3a6e',
-                    strokeOpacity: 0.8,
-                    strokeWeight: 6,
-                    zIndex: 800
-                  }
-                }),
-                isCalculating: false, lastPos: null, lastDest: null
-              };
-            }
-            const routeObj = window._prevRoutesMap[routeKey];
-            const dest = renderData.coords;
-
-            // Umbral de movimiento reducido a 20m para mayor reactividad
-            const pChanged = !routeObj.lastPos || calculateHaversineDist(pos, routeObj.lastPos) > 0.02;
-            const dChanged = !routeObj.lastDest || calculateHaversineDist(dest, routeObj.lastDest) > 0.02;
-
-            if ((pChanged || dChanged) && !routeObj.isCalculating) {
-              routeObj.isCalculating = true;
-              routeObj.lastPos = pos;
-              routeObj.lastDest = dest;
-
-              calculateRouteWithCache(pos, dest, null, (result, status) => {
-                if (!window._prevRoutesMap[routeKey] || window._prevRoutesMap[routeKey] !== routeObj) return;
-                routeObj.isCalculating = false;
-
-                if (status === 'OK' && result.routes && result.routes[0]) {
-                  if (routeObj.renderer) routeObj.renderer.setDirections(result);
-
-                  const leg = result.routes[0].legs[0];
-                  if (leg) {
-                    if (!window._prevLabelsMap[routeKey]) {
-                      const div = document.createElement('div');
-                      div.style.cssText = 'background:rgba(26,58,110,0.95); color:white; padding:4px 8px; border-radius:12px; font-size:11px; font-weight:700; box-shadow:0 3px 6px rgba(0,0,0,0.4); pointer-events:none; white-space:nowrap; border:1px solid rgba(255,255,255,0.25); display:flex; align-items:center; gap:6px; transform:translate(35px, -55px);';
-                      window._prevLabelsMap[routeKey] = new google.maps.marker.AdvancedMarkerElement({ map: mapPreventivos, content: div, zIndex: 950 });
-                    }
-                    const lbl = window._prevLabelsMap[routeKey];
-                    lbl.position = pos; lbl.map = mapPreventivos;
-                    lbl.content.innerHTML = `<span style="opacity:0.8; font-size:10px;">🚩</span> ${leg.distance.text} <span style="opacity:0.4; margin:0 2px;">|</span> <span style="opacity:0.8; font-size:10px;">⏱️</span> ${leg.duration.text}`;
-                  }
-                }
+                } catch (e) { console.error("[Oysta] Error retro-modificación:", e); }
+                vs.isMovingOffsite = false;
+                vs.lastStopAddr = newAddr;
               });
-            } else {
-              // Asegurar que siga visible
-              if (routeObj.renderer && !routeObj.renderer.getMap()) routeObj.renderer.setMap(mapPreventivos);
-              if (window._prevLabelsMap[routeKey]) {
-                window._prevLabelsMap[routeKey].position = pos;
-                window._prevLabelsMap[routeKey].map = mapPreventivos;
-              }
+            }
+            vs.lastStationaryPos = pos;
+            vs.moving = false;
+          } else {
+            if (!vs.moving) vs.moving = true;
+            const distOff = vs.lastStationaryPos ? calculateHaversineDist(pos, vs.lastStationaryPos) : 0;
+            if (distOff > THRESHOLD_OFFSITE && !vs.isMovingOffsite && vs.hasDeparted && !vs.hasArrived) {
+              vs.isMovingOffsite = true;
+              reverseGeocodeWithCache(vs.lastStationaryPos, async (addr) => {
+                vs.lastStopAddr = addr || 'posición conocida';
+                vs.lastSaleDeTS = Date.now();
+                const text = `⚡️ ${indicativo} sale de ${vs.lastStopAddr}`;
+                const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: vs.lastSaleDeTS, fecha: formatCommentFecha(new Date()) };
+                try {
+                  await updateDoc(iRef, { comentarios: arrayUnion(newComment) });
+                } catch (e) { console.error("[Oysta] Error sale-de:", e); }
+              });
             }
           }
+        }
+      }
+
+      // Cleanup restos de rutas si existieran
+      if (window._prevRoutesMap) {
+        Object.keys(window._prevRoutesMap).forEach(k => {
+          const r = window._prevRoutesMap[k];
+          if (r.renderer) r.renderer.setMap(null);
+          delete window._prevRoutesMap[k];
+        });
+      }
+      if (window._prevLabelsMap) {
+        Object.keys(window._prevLabelsMap).forEach(k => {
+          window._prevLabelsMap[k].map = null;
+          delete window._prevLabelsMap[k];
         });
       }
 
-      // 3. Limpieza de obsoletos
-      Object.keys(window._prevRoutesMap || {}).forEach(k => {
-        const r = window._prevRoutesMap[k];
-        if (!activeRouteKeys.has(k)) {
-          console.log(`[Oysta] Limpiando ruta obsoleta: ${k}`);
-          if (r.line) { r.line.setMap(null); }
-          if (r.fallbackLine) { r.fallbackLine.setMap(null); }
-          if (r.renderer) { r.renderer.setMap(null); }
-          delete window._prevRoutesMap[k];
-        } else {
-          // Asegurar visibilidad
-          if (r.renderer && !r.renderer.getMap()) r.renderer.setMap(mapPreventivos);
-          if (r.line && !r.line.getMap()) r.line.setMap(mapPreventivos);
-        }
-      });
-      Object.keys(window._prevLabelsMap || {}).forEach(k => {
-        if (!activeRouteKeys.has(k)) {
-          console.log(`[Oysta] Eliminando etiqueta obsoleta: ${k}`);
-          if (window._prevLabelsMap[k]) {
-            window._prevLabelsMap[k].map = null;
-            delete window._prevLabelsMap[k];
-          }
-        }
-      });
       Object.keys(window._prevIntVehicleMarkers).forEach(vid => {
         if (!activeVehicleIds.has(vid)) {
           window._prevIntVehicleMarkers[vid].map = null;
@@ -8032,7 +7909,7 @@ ${dataContext}
       // Añadir listener para centrar al hacer click
       container.addEventListener('click', () => {
         mapPreventivos.panTo(i.coords);
-        // mapPreventivos.setZoom(18); // V.13.7.2: Desactivado para respetar zoom usuario
+        // mapPreventivos.setZoom(18); // V.13.8.0: Desactivado para respetar zoom usuario
         abrirGestionIntervencion(id);
       });
     }
@@ -8041,7 +7918,7 @@ ${dataContext}
       const m = markersPreventivos[id];
       if (m && mapPreventivos) {
         mapPreventivos.panTo(m.position);
-        // mapPreventivos.setZoom(17); // V.13.7.2: Desactivado para respetar zoom usuario
+        // mapPreventivos.setZoom(17); // V.13.8.0: Desactivado para respetar zoom usuario
       }
     };
 
@@ -8938,7 +8815,7 @@ ${dataContext}
       renderComentariosList(data.comentarios || []);
       document.getElementById('prev-comentario-txt').value = '';
 
-      // V.13.7.2: Permiso para comentar
+      // V.13.8.0: Permiso para comentar
       let canComment = true;
       if (mode === 'intervencion') canComment = canCommentIntervencion(data);
       else if (mode === 'dia') canComment = canCommentSubpreventivo(data);
@@ -8963,7 +8840,7 @@ ${dataContext}
       const isElevated = currentRole === 'admin' || currentRole === 'manager' || isSuper;
 
       cont.innerHTML = list.map((c, idx) => {
-        // V.13.7.2: Reglas solicitadas - Admin/Responsable/SuperAdmin editan, solo SuperAdmin borra
+        // V.13.8.0: Reglas solicitadas - Admin/Responsable/SuperAdmin editan, solo SuperAdmin borra
         const canEdit = isElevated && (c.autorId !== 'system');
         const canDelete = isSuper;
 
@@ -8984,7 +8861,7 @@ ${dataContext}
       cont.scrollTop = cont.scrollHeight;
     }
 
-    // V.13.7.2: Funciones generales para edición y borrado de comentarios en modales de lista
+    // V.13.8.0: Funciones generales para edición y borrado de comentarios en modales de lista
     window.editarComentarioGeneral = (index) => {
       let data = null;
       if (currentComMode === 'intervencion') data = intervencionesCache[currentComIntId];
@@ -9059,7 +8936,7 @@ ${dataContext}
 
       if (!data) return;
 
-      // V.13.7.2: Guard de seguridad
+      // V.13.8.0: Guard de seguridad
       let canComment = true;
       if (currentComMode === 'intervencion') canComment = canCommentIntervencion(data);
       else if (currentComMode === 'dia') canComment = canCommentSubpreventivo(data);
@@ -14306,7 +14183,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.7.2
+          Versión V.13.8.0
         </div>
       </div>
 
@@ -14735,7 +14612,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.7.2
+          Versión V.13.8.0
         </div>
       </div>
 
@@ -15622,7 +15499,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.7.2
+            Versión V.13.8.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
