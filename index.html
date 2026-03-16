@@ -50,28 +50,28 @@
     const functions = getFunctions(fbApp);
     let messaging = null;
 
-      window.incrementApiUsage = async (type, amount = 1) => {
-        const now = new Date();
-        const monthId = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-        const dayId = `${monthId}-${String(now.getDate()).padStart(2, '0')}`;
+    window.incrementApiUsage = async (type, amount = 1) => {
+      const now = new Date();
+      const monthId = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+      const dayId = `${monthId}-${String(now.getDate()).padStart(2, '0')}`;
 
-        try {
-          // Guardamos por mes (para Maps) y por día (Gemini/Firestore)
-          const monthRef = doc(db, 'api_usage', monthId);
-          const dayRef = doc(db, 'api_usage', dayId);
+      try {
+        // Guardamos por mes (para Maps) y por día (Gemini/Firestore)
+        const monthRef = doc(db, 'api_usage', monthId);
+        const dayRef = doc(db, 'api_usage', dayId);
 
-          const updates = {};
-          updates[type] = increment(amount);
+        const updates = {};
+        updates[type] = increment(amount);
 
-          // Actualizar ambos (si falla alguno no importa demasiado, es para estadística)
-          await Promise.all([
-            setDoc(monthRef, updates, { merge: true }),
-            setDoc(dayRef, updates, { merge: true })
-          ]);
-        } catch (e) {
-          console.warn("Error incrementando uso API:", e);
-        }
-      };
+        // Actualizar ambos (si falla alguno no importa demasiado, es para estadística)
+        await Promise.all([
+          setDoc(monthRef, updates, { merge: true }),
+          setDoc(dayRef, updates, { merge: true })
+        ]);
+      } catch (e) {
+        console.warn("Error incrementando uso API:", e);
+      }
+    };
 
     async function initMessaging() {
       try {
@@ -195,6 +195,7 @@
     let prevMarkerInt = null; // Marcador temporal para nueva intervención en preventivos
     let lastIntervencionesSnap = null; // V.12.4.1: Cache de snapshot para re-render reactivo
     let lastPreventivosSnap = null; // V.12.4.1
+    let pickedCoordsPrev = null;
     let lastSubpreventivosSnap = null; // V.12.4.1
     let currentChatId = null; // userId
     let unreadMessages = {}; // id -> count
@@ -1342,7 +1343,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.9.0 Loaded');
+    console.log('EmerCRE V.13.9.1 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2949,7 +2950,7 @@
               if (!vs.hasDeparted && !window._oystaLogCache.has(depKey)) {
                 // Primera salida
                 window._oystaLogCache.add(depKey);
-                // V.13.9.0: Check prevent duplicados antes de insertar (idempotencia con backend)
+                // V.13.9.1: Check prevent duplicados antes de insertar (idempotencia con backend)
                 getDocs(query(collection(db, 'operaciones', opId, 'acciones'), where('texto', '>=', `⚡️ ${indicativo}`)))
                   .then(snap => {
                     if (!snap.docs.some(d => d.data().texto?.includes(indicativo) && d.data().texto?.includes("sale hacia"))) {
@@ -2977,7 +2978,7 @@
                 const arrKey = `arr_${opId}_${mid}`;
                 if (!window._oystaLogCache.has(arrKey)) {
                   window._oystaLogCache.add(arrKey);
-                  // V.13.9.0: Check prevent duplicados
+                  // V.13.9.1: Check prevent duplicados
                   getDocs(query(collection(db, 'operaciones', opId, 'acciones'), where('texto', '>=', `✅ ${indicativo}`)))
                     .then(snap => {
                       if (!snap.docs.some(d => d.data().texto?.includes(indicativo) && d.data().texto?.includes("llega al lugar"))) {
@@ -7762,7 +7763,7 @@ ${dataContext}
           if (!window._oystaVehicleState[stateKey]) {
             const speedInit = parseFloat(oystaVeh.speed);
             const indicativo = localVeh.alias || localVeh.indicativo || oystaVeh.name;
-            // V.13.9.0: Detección profunda de estado tras recarga
+            // V.13.9.1: Detección profunda de estado tras recarga
             const comms = iData.comentarios || [];
             const alreadyDeparted = comms.some(c => c.texto && (c.texto.includes(`⚡️ ${indicativo} sale hacia`) || c.texto.includes(`⚡️ ${indicativo} en movimiento`)));
             const alreadyArrivedPlace = comms.some(c => c.texto && c.texto.includes(`✅ ${indicativo} llega al lugar`));
@@ -7838,7 +7839,7 @@ ${dataContext}
 
           // 1. Llegada (Solo si hay coordenadas de destino)
           if (distToDest !== null && distToDest < THRESHOLD_ARRIVE && !vs.hasArrived) {
-            // V.13.9.0: Check prevent duplicados
+            // V.13.9.1: Check prevent duplicados
             const comms = iData.comentarios || [];
             const alreadyLogged = comms.some(c => c.texto && c.texto.includes(indicativo) && c.texto.includes("llega al lugar"));
             if (!alreadyLogged) {
@@ -7866,7 +7867,7 @@ ${dataContext}
                 vs.loggedStartAtOrigin = false;
               });
             } else if (distFromStart >= THRESHOLD_DEPART) {
-              // V.13.9.0: Check prevent duplicados
+              // V.13.9.1: Check prevent duplicados
               const comms = iData.comentarios || [];
               const alreadyLogged = comms.some(c => c.texto && c.texto.includes(indicativo) && (c.texto.includes("sale hacia") || c.texto.includes("en movimiento")));
               if (!alreadyLogged) {
@@ -7949,7 +7950,7 @@ ${dataContext}
                 reverseGeocodeWithCache(stationaryPos, async (addr) => {
                   const originAddr = addr || 'posición conocida';
                   vs.lastStopAddr = originAddr;
-                  // V.13.9.0: Cálculo de decalaje para tramos intermedios
+                  // V.13.9.1: Cálculo de decalaje para tramos intermedios
                   // Si sabemos cuándo empezó a moverse, usamos ese tiempo. Si no (reload), estimamos.
                   let estMoveStart = vs.movingSince || (Date.now() - 60000); // fallback last min
                   if (speed > 5) {
@@ -8285,7 +8286,7 @@ ${dataContext}
         }
       };
 
-      let pickedCoordsPrev = null;
+      pickedCoordsPrev = null;
       window.prepararPinIntervencion = () => {
         if (!mapPreventivos) return;
         window.cerrarModalPreventivoIntervencion();
@@ -14296,7 +14297,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.9.0
+          Versión V.13.9.1
         </div>
       </div>
 
@@ -14725,7 +14726,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.9.0
+          Versión V.13.9.1
         </div>
       </div>
 
@@ -15612,7 +15613,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.9.0
+            Versión V.13.9.1
           </div>
         </div>
         <div class="field" id="j-prov-row">
@@ -16116,21 +16117,21 @@ ${dataContext}
   <div id="toast"></div>
 
   <script>
-      setInterval(() => {
-        const now = new Date();
-        const elClock = document.getElementById('clock');
-        if (elClock) elClock.textContent = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        const elDate = document.getElementById('date');
-        if (elDate) {
-          const weekday = now.toLocaleDateString('es-ES', { weekday: 'long' });
-          const capitalizedWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
-          const day = String(now.getDate()).padStart(2, '0');
-          const month = String(now.getMonth() + 1).padStart(2, '0');
-          const year = now.getFullYear();
-          elDate.textContent = `${capitalizedWeekday}, ${day}/${month}/${year}`;
-        }
-      }, 1000);
-    
+    setInterval(() => {
+      const now = new Date();
+      const elClock = document.getElementById('clock');
+      if (elClock) elClock.textContent = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const elDate = document.getElementById('date');
+      if (elDate) {
+        const weekday = now.toLocaleDateString('es-ES', { weekday: 'long' });
+        const capitalizedWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+        const day = String(now.getDate()).padStart(2, '0');
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const year = now.getFullYear();
+        elDate.textContent = `${capitalizedWeekday}, ${day}/${month}/${year}`;
+      }
+    }, 1000);
+
   </script>
 </body>
 
