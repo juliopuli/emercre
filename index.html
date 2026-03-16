@@ -1319,7 +1319,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.8.7 Loaded');
+    console.log('EmerCRE V.13.8.8 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7728,15 +7728,24 @@ ${dataContext}
           if (isNaN(pos.lat) || isNaN(pos.lng)) continue;
 
           activeVehicleIds.add(localVeh.id);
+          const iData = assigned.data;
+          const iRef = assigned.snap.ref;
           const stateKey = `prev_${assigned.snap.id}_${localVeh.id}`;
           if (!window._oystaVehicleState) window._oystaVehicleState = {};
           if (!window._oystaVehicleState[stateKey]) {
+            const speedInit = parseFloat(oystaVeh.speed);
+            const indicativo = localVeh.alias || localVeh.indicativo || oystaVeh.name;
+            // V.13.8.8: Mirar en comentarios existentes para no repetir logs tras F5
+            const comms = iData.comentarios || [];
+            const alreadyDeparted = comms.some(c => c.texto && (c.texto.includes(`⚡️ ${indicativo} sale`) || c.texto.includes(`⚡️ ${indicativo} en movimiento`)));
+            const alreadyArrived = comms.some(c => c.texto && c.texto.includes(`✅ ${indicativo} llega`));
+
             window._oystaVehicleState[stateKey] = {
-              moving: parseFloat(oystaVeh.speed) > 5,
-              hasDeparted: false,
-              hasArrived: false,
-              initialPos: pos,
-              assignmentTime: Date.now(),
+              moving: speedInit > 5,
+              hasDeparted: alreadyDeparted,
+              hasArrived: alreadyArrived,
+              initialPos: (iData.recursosPosicionesIniciales && iData.recursosPosicionesIniciales[localVeh.id]) ? { lat: iData.recursosPosicionesIniciales[localVeh.id].lat, lng: iData.recursosPosicionesIniciales[localVeh.id].lng } : pos,
+              assignmentTime: (iData.timestamp?.toDate ? iData.timestamp.toDate().getTime() : (typeof iData.timestamp === 'number' ? iData.timestamp : Date.now())),
               lastStationaryPos: pos
             };
           }
@@ -7744,8 +7753,6 @@ ${dataContext}
           const speed = parseFloat(oystaVeh.speed);
           const isMovingNow = speed > 5;
           const indicativo = localVeh.alias || localVeh.indicativo || oystaVeh.name;
-          const iData = assigned.data;
-          const iRef = assigned.snap.ref;
 
           // A. Marcador
           const statusClass = isMovingNow ? 'moving' : 'stopped';
@@ -14240,7 +14247,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.8.6
+          Versión V.13.8.8
         </div>
       </div>
 
@@ -14669,7 +14676,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.8.6
+          Versión V.13.8.8
         </div>
       </div>
 
@@ -15556,7 +15563,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.8.7
+            Versión V.13.8.8
           </div>
         </div>
         <div class="field" id="j-prov-row">
