@@ -4912,7 +4912,7 @@ ${dataContext}
         document.getElementById('section-preventivos').style.display = sec === 'preventivos' ? 'flex' : 'none';
         if (sec !== 'preventivos') {
           // V.12.4.1: Cerrar panel si salimos de preventivos
-          if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
+          if (typeof window.cerrarDetallePreventivo === 'function') window.cerrarDetallePreventivo();
         }
         if (sec === 'preventivos') {
           currentPreventivoId = null; // V.12.4.1: Reset para vista global por defecto
@@ -7243,7 +7243,7 @@ ${dataContext}
     window.cerrarDetallePreventivo = () => {
       currentPreventivoDiaId = null;
       activeIntManageId = null;
-      window.clearPreventivoMapEffects(); // V.12.4.1: Limpiar mapa al salir del día
+      if (typeof window.clearPreventivoMapEffects === 'function') window.clearPreventivoMapEffects();
       document.getElementById('preventivos-detail-panel').classList.remove('open');
       // Refrescar acordeón para quitar resaltado
       if (currentPreventivoId) cargarSubpreventivos(currentPreventivoId);
