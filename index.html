@@ -5388,7 +5388,7 @@ ${dataContext}
       if (typeof window.refreshGlobalPreventivoMarkers === 'function') {
         window.refreshGlobalPreventivoMarkers();
       }
-      if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
+      if (typeof window.cerrarDetallePreventivo === 'function') window.cerrarDetallePreventivo();
 
       actualizarContadores();
       suscribirGuardia();
@@ -6239,7 +6239,7 @@ ${dataContext}
         });
 
         mapPreventivos.addListener('click', () => {
-          if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
+          if (typeof window.cerrarDetallePreventivo === 'function') window.cerrarDetallePreventivo();
         });
 
         // V.13.8.1: Crear pin solo con doble click para evitar saturación
@@ -7243,7 +7243,7 @@ ${dataContext}
     window.cerrarDetallePreventivo = () => {
       currentPreventivoDiaId = null;
       activeIntManageId = null;
-      if (typeof window.clearPreventivoMapEffects === 'function') window.clearPreventivoMapEffects();
+      if (typeof window.clearPreventivoMapEffects === 'function') window.clearPreventivoMapEffects(); // V.12.4.1: Limpiar mapa al salir del día
       document.getElementById('preventivos-detail-panel').classList.remove('open');
       // Refrescar acordeón para quitar resaltado
       if (currentPreventivoId) cargarSubpreventivos(currentPreventivoId);
@@ -7350,7 +7350,7 @@ ${dataContext}
 
       if (side && side.classList.contains('open') && currentPreventivoDiaId === id) {
         // V.12.4.1: Si ya estaba abierto este día y clicamos sobre él, lo cerramos
-        cerrarDetallePreventivo();
+        window.cerrarDetallePreventivo();
         return;
       }
 
@@ -7410,7 +7410,7 @@ ${dataContext}
 
     window.backToPreventivoDias = () => {
       // V.12.4.1: Esto ahora solo cierra el detalle ya que el acordeón es permanente
-      cerrarDetallePreventivo();
+      window.cerrarDetallePreventivo();
     };
 
     function cargarIntervenciones(pId, dId) {
@@ -8877,7 +8877,7 @@ ${dataContext}
           }
           await deleteDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', id));
           window.clearPreventivoMapEffects(); // V.12.4.1
-          if (currentPreventivoDiaId === id) cerrarDetallePreventivo();
+          if (currentPreventivoDiaId === id) window.cerrarDetallePreventivo();
           mostrarToast('Día e intervenciones eliminadas');
         } catch (e) { alert('Error al borrar: ' + e.message); }
       };
