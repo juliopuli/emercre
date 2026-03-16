@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="es">
 
@@ -1320,7 +1319,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.8.9 Loaded');
+    console.log('EmerCRE V.13.9.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2915,6 +2914,8 @@
             const vs = window._oystaVehicleState[stateKey];
             const isMovingNow = speed > 5;
             const distToDest = opCoords ? calculateHaversineDist(pos, opCoords) : 999;
+            const oystaTsStr = v.last_pos ? v.last_pos.replace(' ', 'T') : null;
+            const oystaTime = oystaTsStr ? new Date(oystaTsStr).getTime() : Date.now();
 
             // 1. Detección de Salida Inicial / Salida de Parada Intermedia
             if (isMovingNow && !vs.moving) {
@@ -2925,12 +2926,13 @@
               if (!vs.hasDeparted && !window._oystaLogCache.has(depKey)) {
                 // Primera salida
                 window._oystaLogCache.add(depKey);
-                getDocs(query(collection(db, 'operaciones', opId, 'acciones'), where('texto', '>=', `⚡️ ${indicativo} sale hacia`)))
+                // V.13.9.0: Check prevent duplicados antes de insertar (idempotencia con backend)
+                getDocs(query(collection(db, 'operaciones', opId, 'acciones'), where('texto', '>=', `⚡️ ${indicativo}`)))
                   .then(snap => {
-                    if (!snap.docs.some(d => d.data().texto?.includes(indicativo))) {
+                    if (!snap.docs.some(d => d.data().texto?.includes(indicativo) && d.data().texto?.includes("sale hacia"))) {
                       const text = `⚡️ ${indicativo} sale hacia el lugar (${assignedOp.dir || 'sin dirección'}).`;
                       addDoc(collection(db, 'operaciones', opId, 'acciones'), {
-                        texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), prioridad: 'Baja'
+                        texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
                       });
                     }
                   });
@@ -2939,7 +2941,7 @@
                 // Salida después de una parada intermedia
                 const text = `⚡️ ${indicativo} sale de ${vs.lastStopAddr} hacia el lugar del aviso.`;
                 addDoc(collection(db, 'operaciones', opId, 'acciones'), {
-                  texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), prioridad: 'Baja'
+                  texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
                 });
                 vs.lastStopAddr = "";
               }
@@ -2952,12 +2954,13 @@
                 const arrKey = `arr_${opId}_${mid}`;
                 if (!window._oystaLogCache.has(arrKey)) {
                   window._oystaLogCache.add(arrKey);
-                  getDocs(query(collection(db, 'operaciones', opId, 'acciones'), where('texto', '>=', `✅ ${indicativo} llega al lugar`)))
+                  // V.13.9.0: Check prevent duplicados
+                  getDocs(query(collection(db, 'operaciones', opId, 'acciones'), where('texto', '>=', `✅ ${indicativo}`)))
                     .then(snap => {
-                      if (!snap.docs.some(d => d.data().texto?.includes(indicativo))) {
+                      if (!snap.docs.some(d => d.data().texto?.includes(indicativo) && d.data().texto?.includes("llega al lugar"))) {
                         const text = `✅ ${indicativo} llega al lugar del aviso (${assignedOp.dir || 'sin dirección'}).`;
                         addDoc(collection(db, 'operaciones', opId, 'acciones'), {
-                          texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), prioridad: 'Baja'
+                          texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
                         });
                       }
                     });
@@ -2969,7 +2972,7 @@
                   vs.lastStopAddr = addr || 'posición desconocida';
                   const text = `✅ ${indicativo} llega a ${vs.lastStopAddr}.`;
                   addDoc(collection(db, 'operaciones', opId, 'acciones'), {
-                    texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), prioridad: 'Baja'
+                    texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
                   });
                 });
               }
@@ -7736,7 +7739,7 @@ ${dataContext}
           if (!window._oystaVehicleState[stateKey]) {
             const speedInit = parseFloat(oystaVeh.speed);
             const indicativo = localVeh.alias || localVeh.indicativo || oystaVeh.name;
-            // V.13.8.9: Detección profunda de estado tras recarga
+            // V.13.9.0: Detección profunda de estado tras recarga
             const comms = iData.comentarios || [];
             const alreadyDeparted = comms.some(c => c.texto && (c.texto.includes(`⚡️ ${indicativo} sale hacia`) || c.texto.includes(`⚡️ ${indicativo} en movimiento`)));
             const alreadyArrivedPlace = comms.some(c => c.texto && c.texto.includes(`✅ ${indicativo} llega al lugar`));
@@ -7772,6 +7775,8 @@ ${dataContext}
           const speed = parseFloat(oystaVeh.speed);
           const isMovingNow = speed > 5;
           const indicativo = localVeh.alias || localVeh.indicativo || oystaVeh.name;
+          const oystaTsStr = oystaVeh.last_pos ? oystaVeh.last_pos.replace(' ', 'T') : null;
+          const oystaTime = oystaTsStr ? new Date(oystaTsStr).getTime() : Date.now();
 
           // A. Marcador
           const statusClass = isMovingNow ? 'moving' : 'stopped';
@@ -7810,13 +7815,20 @@ ${dataContext}
 
           // 1. Llegada (Solo si hay coordenadas de destino)
           if (distToDest !== null && distToDest < THRESHOLD_ARRIVE && !vs.hasArrived) {
-            const text = `✅ ${indicativo} llega al lugar (${iData.direccion || 'sin dirección'}).`;
-            const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
-            try {
-              await updateDoc(iRef, { comentarios: arrayUnion(newComment) });
+            // V.13.9.0: Check prevent duplicados
+            const comms = iData.comentarios || [];
+            const alreadyLogged = comms.some(c => c.texto && c.texto.includes(indicativo) && c.texto.includes("llega al lugar"));
+            if (!alreadyLogged) {
+              const text = `✅ ${indicativo} llega al lugar (${iData.direccion || 'sin dirección'}).`;
+              const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime)) };
+              try {
+                await updateDoc(iRef, { comentarios: arrayUnion(newComment) });
+                vs.hasArrived = true;
+                vs.lastArrivedCoords = { ...iData.coords };
+              } catch (e) { console.error("[Oysta] Error llegada:", e); }
+            } else {
               vs.hasArrived = true;
-              vs.lastArrivedCoords = { ...iData.coords };
-            } catch (e) { console.error("[Oysta] Error llegada:", e); }
+            }
           }
 
           // 2. Salida Inicial / Decalaje
@@ -7824,290 +7836,292 @@ ${dataContext}
             const distFromStart = calculateHaversineDist(pos, vs.initialPos);
             if (distFromStart < THRESHOLD_DEPART && !vs.loggedStartAtOrigin) {
               vs.loggedStartAtOrigin = true; // Sync flag BEFORE await to prevent loop
-              const actualTS = Date.now(); // Mov. en origen es tiempo real
-              const text = `⚡️ ${indicativo} en movimiento en lugar de inicio a las ${new Date(actualTS).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}.`;
-              const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: actualTS, fecha: formatCommentFecha(new Date(actualTS)) };
+              const text = `⚡️ ${indicativo} en movimiento en lugar de inicio a las ${new Date(oystaTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}.`;
+              const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime)) };
               updateDoc(iRef, { comentarios: arrayUnion(newComment) }).catch(e => {
                 console.error("[Oysta] Error mov.inicio:", e);
                 vs.loggedStartAtOrigin = false;
               });
             } else if (distFromStart >= THRESHOLD_DEPART) {
-              vs.hasDeparted = true; // Sync flag BEFORE await
-              if (iData.direccion) {
-                // Con dirección: Salida normal
-                const decalaje = Math.round((Date.now() - vs.assignmentTime) / 60000);
-                const actualTS = Date.now() - (decalaje * 60000);
-                const text = `⚡️ ${indicativo} sale hacia ${iData.direccion}. [Decalaje: Hace ${decalaje} min]`;
-                const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: actualTS, fecha: formatCommentFecha(new Date(actualTS)) };
-                updateDoc(iRef, { comentarios: arrayUnion(newComment) }).catch(e => {
-                  console.error("[Oysta] Error salida:", e);
-                  vs.hasDeparted = false;
+              // V.13.9.0: Check prevent duplicados
+              const comms = iData.comentarios || [];
+              const alreadyLogged = comms.some(c => c.texto && c.texto.includes(indicativo) && (c.texto.includes("sale hacia") || c.texto.includes("en movimiento")));
+              if (!alreadyLogged) {
+                vs.hasDeparted = true; // Sync flag BEFORE await
+                if (iData.direccion) {
+                  // Con dirección: Salida normal
+                  const decalaje = Math.round((Date.now() - vs.assignmentTime) / 60000);
+                  const text = `⚡️ ${indicativo} sale hacia ${iData.direccion}.`;
+                  const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime)) };
+                  updateDoc(iRef, { comentarios: arrayUnion(newComment) }).catch(e => {
+                    console.error("[Oysta] Error salida:", e);
+                    vs.hasDeparted = false;
+                  });
+                } else {
+                  // Sin dirección: Seguimiento "Sale de..."
+                  reverseGeocodeWithCache(vs.initialPos, (addr) => {
+                    const originAddr = addr || 'posición de inicio';
+                    vs.lastStopAddr = originAddr;
+                    const decalajeMs = Math.round((Date.now() - vs.assignmentTime));
+                    vs.lastSaleDeTS = Date.now() - decalajeMs;
+                    vs.isMovingOffsite = true;
+                    const saleTime = new Date(vs.lastSaleDeTS).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                    const text = `⚡️ ${indicativo} sale de ${originAddr} a las ${saleTime}.`;
+                    const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: vs.lastSaleDeTS, fecha: formatCommentFecha(new Date(vs.lastSaleDeTS)) };
+                    updateDoc(iRef, { comentarios: arrayUnion(newComment) }).catch(e => {
+                      console.error("[Oysta] Error salida-de-inicio:", e);
+                      vs.hasDeparted = false;
+                    });
+                  });
+                }
+              }
+            }
+
+            // 3. Seguimiento Paradas Intermedias (Seguimiento para casos sin dirección o cambios de ruta)
+            if (!isMovingNow) {
+              if (vs.isMovingOffsite) {
+                const currentPosStop = { ...pos };
+                vs.isMovingOffsite = false; // Sync flag BEFORE await
+                reverseGeocodeWithCache(currentPosStop, async (addr) => {
+                  const newAddr = addr || 'posición desconocida';
+                  const arrivalText = `✅ ${indicativo} llega a ${newAddr}.`;
+                  const arrivalTS = Date.now();
+                  const newArrComment = { texto: arrivalText, autor: 'Sist. Oysta', autorId: 'system', timestamp: arrivalTS, fecha: formatCommentFecha(new Date(arrivalTS)) };
+
+                  try {
+                    const snap = await getDoc(iRef);
+                    if (snap.exists()) {
+                      const comms = snap.data().comentarios || [];
+                      const updatedComms = comms.map(c => {
+                        if (c.timestamp === vs.lastSaleDeTS && c.texto.includes(`⚡️ ${indicativo} sale de`)) {
+                          // Modificar el comentario anterior para incluir el "hacia"
+                          let base = c.texto.split(' hacia ')[0]; // Quitar destino anterior si existiera
+                          if (base.endsWith('.')) base = base.slice(0, -1);
+                          return { ...c, texto: `${base} hacia ${newAddr}.`, editado: true };
+                        }
+                        return c;
+                      });
+                      updatedComms.push(newArrComment);
+                      await updateDoc(iRef, { comentarios: updatedComms, actualizadoEn: serverTimestamp() });
+                    }
+                  } catch (e) {
+                    console.error("[Oysta] Error retro-modificación:", e);
+                    vs.isMovingOffsite = true;
+                  }
+                  vs.lastStopAddr = newAddr;
                 });
-              } else {
-                // Sin dirección: Seguimiento "Sale de..."
-                reverseGeocodeWithCache(vs.initialPos, (addr) => {
-                  const originAddr = addr || 'posición de inicio';
+              }
+              vs.lastStationaryPos = pos;
+              vs.moving = false;
+            } else {
+              if (!vs.moving) {
+                vs.moving = true;
+                vs.movingSince = Date.now();
+              }
+              const distOff = vs.lastStationaryPos ? calculateHaversineDist(pos, vs.lastStationaryPos) : 0;
+              // Solo activar "Sale de..." si ya ha salido del origen y no estamos ya en un tramo offsite
+              if (distOff > THRESHOLD_OFFSITE && !vs.isMovingOffsite && vs.hasDeparted && !vs.hasArrived) {
+                vs.isMovingOffsite = true; // Sync flag BEFORE await
+                const stationaryPos = { ...vs.lastStationaryPos };
+                reverseGeocodeWithCache(stationaryPos, async (addr) => {
+                  const originAddr = addr || 'posición conocida';
                   vs.lastStopAddr = originAddr;
-                  const decalajeMs = Math.round((Date.now() - vs.assignmentTime));
-                  vs.lastSaleDeTS = Date.now() - decalajeMs;
-                  vs.isMovingOffsite = true;
+                  // V.13.9.0: Cálculo de decalaje para tramos intermedios
+                  // Si sabemos cuándo empezó a moverse, usamos ese tiempo. Si no (reload), estimamos.
+                  let estMoveStart = vs.movingSince || (Date.now() - 60000); // fallback last min
+                  if (speed > 5) {
+                    const hoursAgo = (distOff / speed); // D=V*T -> T=D/V
+                    const estTS = Date.now() - (hoursAgo * 3600000);
+                    if (estTS > estMoveStart) estMoveStart = estTS;
+                  }
+                  vs.lastSaleDeTS = Math.round(estMoveStart);
                   const saleTime = new Date(vs.lastSaleDeTS).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
                   const text = `⚡️ ${indicativo} sale de ${originAddr} a las ${saleTime}.`;
                   const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: vs.lastSaleDeTS, fecha: formatCommentFecha(new Date(vs.lastSaleDeTS)) };
-                  updateDoc(iRef, { comentarios: arrayUnion(newComment) }).catch(e => {
-                    console.error("[Oysta] Error salida-de-inicio:", e);
-                    vs.hasDeparted = false;
-                  });
+                  try {
+                    await updateDoc(iRef, { comentarios: arrayUnion(newComment) });
+                  } catch (e) {
+                    console.error("[Oysta] Error sale-de:", e);
+                    vs.isMovingOffsite = false;
+                  }
                 });
               }
             }
           }
+        }
 
-          // 3. Seguimiento Paradas Intermedias (Seguimiento para casos sin dirección o cambios de ruta)
-          if (!isMovingNow) {
-            if (vs.isMovingOffsite) {
-              const currentPosStop = { ...pos };
-              vs.isMovingOffsite = false; // Sync flag BEFORE await
-              reverseGeocodeWithCache(currentPosStop, async (addr) => {
-                const newAddr = addr || 'posición desconocida';
-                const arrivalText = `✅ ${indicativo} llega a ${newAddr}.`;
-                const arrivalTS = Date.now();
-                const newArrComment = { texto: arrivalText, autor: 'Sist. Oysta', autorId: 'system', timestamp: arrivalTS, fecha: formatCommentFecha(new Date(arrivalTS)) };
+        // Cleanup restos de rutas si existieran
+        if (window._prevRoutesMap) {
+          Object.keys(window._prevRoutesMap).forEach(k => {
+            const r = window._prevRoutesMap[k];
+            if (r.renderer) r.renderer.setMap(null);
+            delete window._prevRoutesMap[k];
+          });
+        }
+        if (window._prevLabelsMap) {
+          Object.keys(window._prevLabelsMap).forEach(k => {
+            window._prevLabelsMap[k].map = null;
+            delete window._prevLabelsMap[k];
+          });
+        }
 
-                try {
-                  const snap = await getDoc(iRef);
-                  if (snap.exists()) {
-                    const comms = snap.data().comentarios || [];
-                    const updatedComms = comms.map(c => {
-                      if (c.timestamp === vs.lastSaleDeTS && c.texto.includes(`⚡️ ${indicativo} sale de`)) {
-                        // Modificar el comentario anterior para incluir el "hacia"
-                        let base = c.texto.split(' hacia ')[0]; // Quitar destino anterior si existiera
-                        if (base.endsWith('.')) base = base.slice(0, -1);
-                        return { ...c, texto: `${base} hacia ${newAddr}.`, editado: true };
-                      }
-                      return c;
-                    });
-                    updatedComms.push(newArrComment);
-                    await updateDoc(iRef, { comentarios: updatedComms, actualizadoEn: serverTimestamp() });
-                  }
-                } catch (e) {
-                  console.error("[Oysta] Error retro-modificación:", e);
-                  vs.isMovingOffsite = true;
-                }
-                vs.lastStopAddr = newAddr;
-              });
-            }
-            vs.lastStationaryPos = pos;
-            vs.moving = false;
-          } else {
-            if (!vs.moving) {
-              vs.moving = true;
-              vs.movingSince = Date.now();
-            }
-            const distOff = vs.lastStationaryPos ? calculateHaversineDist(pos, vs.lastStationaryPos) : 0;
-            // Solo activar "Sale de..." si ya ha salido del origen y no estamos ya en un tramo offsite
-            if (distOff > THRESHOLD_OFFSITE && !vs.isMovingOffsite && vs.hasDeparted && !vs.hasArrived) {
-              vs.isMovingOffsite = true; // Sync flag BEFORE await
-              const stationaryPos = { ...vs.lastStationaryPos };
-              reverseGeocodeWithCache(stationaryPos, async (addr) => {
-                const originAddr = addr || 'posición conocida';
-                vs.lastStopAddr = originAddr;
-                // V.13.8.9: Cálculo de decalaje para tramos intermedios
-                // Si sabemos cuándo empezó a moverse, usamos ese tiempo. Si no (reload), estimamos.
-                let estMoveStart = vs.movingSince || (Date.now() - 60000); // fallback last min
-                if (speed > 5) {
-                  const hoursAgo = (distOff / speed); // D=V*T -> T=D/V
-                  const estTS = Date.now() - (hoursAgo * 3600000);
-                  if (estTS > estMoveStart) estMoveStart = estTS;
-                }
-                vs.lastSaleDeTS = Math.round(estMoveStart);
-                const saleTime = new Date(vs.lastSaleDeTS).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-                const text = `⚡️ ${indicativo} sale de ${originAddr} a las ${saleTime}.`;
-                const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: vs.lastSaleDeTS, fecha: formatCommentFecha(new Date(vs.lastSaleDeTS)) };
-                try {
-                  await updateDoc(iRef, { comentarios: arrayUnion(newComment) });
-                } catch (e) {
-                  console.error("[Oysta] Error sale-de:", e);
-                  vs.isMovingOffsite = false;
-                }
-              });
-            }
+        Object.keys(window._prevIntVehicleMarkers).forEach(vid => {
+          if (!activeVehicleIds.has(vid)) {
+            window._prevIntVehicleMarkers[vid].map = null;
+            delete window._prevIntVehicleMarkers[vid];
           }
-        }
-      }
-
-      // Cleanup restos de rutas si existieran
-      if (window._prevRoutesMap) {
-        Object.keys(window._prevRoutesMap).forEach(k => {
-          const r = window._prevRoutesMap[k];
-          if (r.renderer) r.renderer.setMap(null);
-          delete window._prevRoutesMap[k];
-        });
-      }
-      if (window._prevLabelsMap) {
-        Object.keys(window._prevLabelsMap).forEach(k => {
-          window._prevLabelsMap[k].map = null;
-          delete window._prevLabelsMap[k];
         });
       }
 
-      Object.keys(window._prevIntVehicleMarkers).forEach(vid => {
-        if (!activeVehicleIds.has(vid)) {
-          window._prevIntVehicleMarkers[vid].map = null;
-          delete window._prevIntVehicleMarkers[vid];
-        }
-      });
-    }
+      function clearPreventivoMarkers() {
+        Object.values(markersPreventivos).forEach(m => m.map = null);
+        markersPreventivos = {};
+      }
 
-    function clearPreventivoMarkers() {
-      Object.values(markersPreventivos).forEach(m => m.map = null);
-      markersPreventivos = {};
-    }
+      function addInterventionMarker(id, i) {
+        if (!mapPreventivos || !i.coords) return;
 
-    function addInterventionMarker(id, i) {
-      if (!mapPreventivos || !i.coords) return;
+        const iconMap = {
+          rojo: '🚨',
+          amarillo: '📦',
+          negro: '⚫',
+          azul: '🔵'
+        };
+        const icon = iconMap[i.prioridad] || '📍';
 
-      const iconMap = {
-        rojo: '🚨',
-        amarillo: '📦',
-        negro: '⚫',
-        azul: '🔵'
-      };
-      const icon = iconMap[i.prioridad] || '📍';
-
-      const container = document.createElement('div');
-      container.className = 'prev-int-marker';
-      container.innerHTML = `
+        const container = document.createElement('div');
+        container.className = 'prev-int-marker';
+        container.innerHTML = `
         <div class="prev-int-marker-icon">${icon}</div>
         <div class="prev-int-label">${i.descripcion}</div>
       `;
 
-      markersPreventivos[id] = new google.maps.marker.AdvancedMarkerElement({
-        position: i.coords,
-        map: mapPreventivos,
-        content: container,
-        title: i.descripcion,
-        gmpDraggable: false
-      });
-
-      // Añadir listener para centrar al hacer click
-      container.addEventListener('click', () => {
-        mapPreventivos.panTo(i.coords);
-        // mapPreventivos.setZoom(18); // V.13.8.1: Desactivado para respetar zoom usuario
-        abrirGestionIntervencion(id);
-      });
-    }
-
-    window.panToPreventivoMarker = (id) => {
-      const m = markersPreventivos[id];
-      if (m && mapPreventivos) {
-        mapPreventivos.panTo(m.position);
-        // mapPreventivos.setZoom(17); // V.13.8.1: Desactivado para respetar zoom usuario
-      }
-    };
-
-    window.abrirModalPreventivoIntervencion = function (isEdit) {
-      window.ensureAutocompletePrevInt();
-      // editIntervencionId se resetea solo si no venimos de abrirEditarIntervencion
-      if (isEdit !== true) {
-        editIntervencionId = null;
-        document.querySelector('#overlay-preventivo-intervencion .modal-title').innerText = 'Nueva Intervención';
-        document.getElementById('btn-save-prev-int').innerText = 'Registrar Intervención';
-      }
-
-      const d = subpreventivosCache[currentPreventivoDiaId];
-      const iEdit = editIntervencionId ? (intervencionesCache[editIntervencionId] || {}) : {};
-
-      // Reset fields if not edit
-      if (isEdit) {
-        document.getElementById('prev-int-desc').value = iEdit.descripcion || '';
-        document.getElementById('prev-int-dir').value = iEdit.direccion || '';
-        document.getElementById('prev-int-prio').value = iEdit.prioridad || 'rojo';
-        if (iEdit.coords) {
-          pickedCoordsPrev = iEdit.coords;
-          document.getElementById('prev-int-coords').innerText = `Ubicación: ${pickedCoordsPrev.lat.toFixed(5)}, ${pickedCoordsPrev.lng.toFixed(5)}`;
-        }
-      } else {
-        document.getElementById('prev-int-desc').value = '';
-        document.getElementById('prev-int-dir').value = '';
-        document.getElementById('prev-int-prio').value = 'rojo';
-        document.getElementById('prev-int-org').value = '';
-        document.getElementById('prev-int-org-sub').style.display = 'none';
-        if (document.getElementById('prev-int-org-sub-input')) document.getElementById('prev-int-org-sub-input').value = '';
-
-        if (!pickedCoordsPrev) {
-          if (prevMarkerInt) prevMarkerInt.setMap(null);
-          document.getElementById('prev-int-coords').innerText = 'Sin coordenadas fijadas.';
-        } else {
-          // Si venimos de búsqueda, ya tenemos coordenadas y dirección
-          if (typeof fastAssignAddress !== 'undefined' && fastAssignAddress) {
-            document.getElementById('prev-int-dir').value = fastAssignAddress;
-          }
-          document.getElementById('prev-int-coords').innerText = `Ubicación: ${pickedCoordsPrev.lat.toFixed(5)}, ${pickedCoordsPrev.lng.toFixed(5)}`;
-          if (prevMarkerInt) {
-            prevMarkerInt.position = pickedCoordsPrev;
-            prevMarkerInt.setMap(mapPreventivos);
-          }
-        }
-      }
-
-      const recList = document.getElementById('prev-int-recursos-list');
-      if (!d || !d.recursos || d.recursos.length === 0) {
-        recList.innerHTML = '<div style="font-size:11px; color:var(--text-4);">No hay recursos asignados a este día.</div>';
-      } else {
-        // Recursos ocupados en otras intervenciones ABIERTAS
-        const occupiedResources = new Set();
-        // 1. De la cache del día actual
-        Object.keys(intervencionesCache).forEach(k => {
-          const other = intervencionesCache[k];
-          if (k !== editIntervencionId && other.abierta !== false && !other.oculta) {
-            (other.recursosAsignados || []).forEach(r => occupiedResources.add(String(r)));
-          }
+        markersPreventivos[id] = new google.maps.marker.AdvancedMarkerElement({
+          position: i.coords,
+          map: mapPreventivos,
+          content: container,
+          title: i.descripcion,
+          gmpDraggable: false
         });
-        // 2. De las intervenciones globales (por si están en otro preventivo/día)
-        if (typeof lastGlobalInterventionDocs !== 'undefined' && lastGlobalInterventionDocs) {
-          lastGlobalInterventionDocs.forEach(doc => {
-            if (doc.id === editIntervencionId) return;
-            const other = doc.data();
-            if (other.abierta !== false && !other.oculta) {
+
+        // Añadir listener para centrar al hacer click
+        container.addEventListener('click', () => {
+          mapPreventivos.panTo(i.coords);
+          // mapPreventivos.setZoom(18); // V.13.8.1: Desactivado para respetar zoom usuario
+          abrirGestionIntervencion(id);
+        });
+      }
+
+      window.panToPreventivoMarker = (id) => {
+        const m = markersPreventivos[id];
+        if (m && mapPreventivos) {
+          mapPreventivos.panTo(m.position);
+          // mapPreventivos.setZoom(17); // V.13.8.1: Desactivado para respetar zoom usuario
+        }
+      };
+
+      window.abrirModalPreventivoIntervencion = function (isEdit) {
+        window.ensureAutocompletePrevInt();
+        // editIntervencionId se resetea solo si no venimos de abrirEditarIntervencion
+        if (isEdit !== true) {
+          editIntervencionId = null;
+          document.querySelector('#overlay-preventivo-intervencion .modal-title').innerText = 'Nueva Intervención';
+          document.getElementById('btn-save-prev-int').innerText = 'Registrar Intervención';
+        }
+
+        const d = subpreventivosCache[currentPreventivoDiaId];
+        const iEdit = editIntervencionId ? (intervencionesCache[editIntervencionId] || {}) : {};
+
+        // Reset fields if not edit
+        if (isEdit) {
+          document.getElementById('prev-int-desc').value = iEdit.descripcion || '';
+          document.getElementById('prev-int-dir').value = iEdit.direccion || '';
+          document.getElementById('prev-int-prio').value = iEdit.prioridad || 'rojo';
+          if (iEdit.coords) {
+            pickedCoordsPrev = iEdit.coords;
+            document.getElementById('prev-int-coords').innerText = `Ubicación: ${pickedCoordsPrev.lat.toFixed(5)}, ${pickedCoordsPrev.lng.toFixed(5)}`;
+          }
+        } else {
+          document.getElementById('prev-int-desc').value = '';
+          document.getElementById('prev-int-dir').value = '';
+          document.getElementById('prev-int-prio').value = 'rojo';
+          document.getElementById('prev-int-org').value = '';
+          document.getElementById('prev-int-org-sub').style.display = 'none';
+          if (document.getElementById('prev-int-org-sub-input')) document.getElementById('prev-int-org-sub-input').value = '';
+
+          if (!pickedCoordsPrev) {
+            if (prevMarkerInt) prevMarkerInt.setMap(null);
+            document.getElementById('prev-int-coords').innerText = 'Sin coordenadas fijadas.';
+          } else {
+            // Si venimos de búsqueda, ya tenemos coordenadas y dirección
+            if (typeof fastAssignAddress !== 'undefined' && fastAssignAddress) {
+              document.getElementById('prev-int-dir').value = fastAssignAddress;
+            }
+            document.getElementById('prev-int-coords').innerText = `Ubicación: ${pickedCoordsPrev.lat.toFixed(5)}, ${pickedCoordsPrev.lng.toFixed(5)}`;
+            if (prevMarkerInt) {
+              prevMarkerInt.position = pickedCoordsPrev;
+              prevMarkerInt.setMap(mapPreventivos);
+            }
+          }
+        }
+
+        const recList = document.getElementById('prev-int-recursos-list');
+        if (!d || !d.recursos || d.recursos.length === 0) {
+          recList.innerHTML = '<div style="font-size:11px; color:var(--text-4);">No hay recursos asignados a este día.</div>';
+        } else {
+          // Recursos ocupados en otras intervenciones ABIERTAS
+          const occupiedResources = new Set();
+          // 1. De la cache del día actual
+          Object.keys(intervencionesCache).forEach(k => {
+            const other = intervencionesCache[k];
+            if (k !== editIntervencionId && other.abierta !== false && !other.oculta) {
               (other.recursosAsignados || []).forEach(r => occupiedResources.add(String(r)));
             }
           });
-        }
+          // 2. De las intervenciones globales (por si están en otro preventivo/día)
+          if (typeof lastGlobalInterventionDocs !== 'undefined' && lastGlobalInterventionDocs) {
+            lastGlobalInterventionDocs.forEach(doc => {
+              if (doc.id === editIntervencionId) return;
+              const other = doc.data();
+              if (other.abierta !== false && !other.oculta) {
+                (other.recursosAsignados || []).forEach(r => occupiedResources.add(String(r)));
+              }
+            });
+          }
 
-        recList.innerHTML = `
+          recList.innerHTML = `
         <div style="display:flex; flex-wrap:wrap; gap:6px;">
           ${d.recursos
-            .filter(rvId => !occupiedResources.has(rvId) || (iEdit?.recursosAsignados || []).includes(rvId))
-            .sort((a, b) => {
-              const va = localVehiclesById[a];
-              const vb = localVehiclesById[b];
+              .filter(rvId => !occupiedResources.has(rvId) || (iEdit?.recursosAsignados || []).includes(rvId))
+              .sort((a, b) => {
+                const va = localVehiclesById[a];
+                const vb = localVehiclesById[b];
 
-              // V.12.4.1: Priorizar por ranking de cercanía si existe
-              const rankA = va?.oystaId ? (window._ambulanceRanks[String(va.oystaId)]?.rank || 999) : 999;
-              const rankB = vb?.oystaId ? (window._ambulanceRanks[String(vb.oystaId)]?.rank || 999) : 999;
+                // V.12.4.1: Priorizar por ranking de cercanía si existe
+                const rankA = va?.oystaId ? (window._ambulanceRanks[String(va.oystaId)]?.rank || 999) : 999;
+                const rankB = vb?.oystaId ? (window._ambulanceRanks[String(vb.oystaId)]?.rank || 999) : 999;
 
-              if (rankA !== rankB) return rankA - rankB;
+                if (rankA !== rankB) return rankA - rankB;
 
-              // Fallback a prioridad por tipo
-              return getVehiclePriority(va?.tipo) - getVehiclePriority(vb?.tipo);
-            })
-            .map(rvId => {
-              const v = localVehiclesById[rvId];
-              const isSelected = (iEdit?.recursosAsignados || []).includes(rvId);
+                // Fallback a prioridad por tipo
+                return getVehiclePriority(va?.tipo) - getVehiclePriority(vb?.tipo);
+              })
+              .map(rvId => {
+                const v = localVehiclesById[rvId];
+                const isSelected = (iEdit?.recursosAsignados || []).includes(rvId);
 
-              let iconUrl = 'assets/icons/icon_transp_personal.png';
-              if (v?.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
-              else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
-              else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
-              else if (v?.tipo?.includes('Turismo')) iconUrl = 'assets/icons/icon_turismo.png';
-              else if (v?.tipo?.includes('mixto')) iconUrl = 'assets/icons/icon_transp_mixto.png';
+                let iconUrl = 'assets/icons/icon_transp_personal.png';
+                if (v?.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
+                else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
+                else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
+                else if (v?.tipo?.includes('Turismo')) iconUrl = 'assets/icons/icon_turismo.png';
+                else if (v?.tipo?.includes('mixto')) iconUrl = 'assets/icons/icon_transp_mixto.png';
 
-              // V.12.4.1: Obtener ranking si existe
-              const oystaId = v?.oystaId;
-              const rankInfo = oystaId && window._ambulanceRanks && window._ambulanceRanks[String(oystaId)];
+                // V.12.4.1: Obtener ranking si existe
+                const oystaId = v?.oystaId;
+                const rankInfo = oystaId && window._ambulanceRanks && window._ambulanceRanks[String(oystaId)];
 
-              return `
+                return `
                   <div class="prev-int-res-card" data-id="${rvId}" data-selected="${isSelected}"
                        style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:${isSelected ? 'var(--accent)' : 'var(--bg-1)'}; color:${isSelected ? '#fff' : 'var(--text-1)'}; border:1px solid ${isSelected ? 'var(--accent)' : 'var(--border-mid)'}; border-radius:6px; cursor:pointer; transition:all 0.2s; position:relative;"
                        onclick="this.dataset.selected=(this.dataset.selected==='true'?'false':'true'); this.style.background=(this.dataset.selected==='true'?'var(--accent)':'var(--bg-1)'); this.style.color=(this.dataset.selected==='true'?'#fff':'var(--text-1)'); this.style.borderColor=(this.dataset.selected==='true'?'var(--accent)':'var(--border-mid)');">
@@ -8116,834 +8130,834 @@ ${dataContext}
                     ${rankInfo ? `<div class="ranking-badge ranking-badge-small" title="Aproximadamente ${rankInfo.duration}">${rankInfo.rank}</div>` : ''}
                   </div>
                 `;
-            }).join('')
-          }
+              }).join('')
+            }
           </div>
         `;
-      }
+        }
 
-      document.getElementById('overlay-preventivo-intervencion').style.display = 'flex';
-      // V.12.4.1: Si ya hay coordenadas al abrir, calculamos ranking
-      if (pickedCoordsPrev && typeof window.calcularAmbulanciasCercanasPrev === 'function') {
-        window.calcularAmbulanciasCercanasPrev(pickedCoordsPrev);
-      }
-    };
+        document.getElementById('overlay-preventivo-intervencion').style.display = 'flex';
+        // V.12.4.1: Si ya hay coordenadas al abrir, calculamos ranking
+        if (pickedCoordsPrev && typeof window.calcularAmbulanciasCercanasPrev === 'function') {
+          window.calcularAmbulanciasCercanasPrev(pickedCoordsPrev);
+        }
+      };
 
-    let lastDistanceMatrixCoords = null;
-    let lastDistanceMatrixTime = 0;
+      let lastDistanceMatrixCoords = null;
+      let lastDistanceMatrixTime = 0;
 
-    window.calcularAmbulanciasCercanasPrev = function (destCoords) {
-      if (!destCoords || !window.google || !google.maps.DistanceMatrixService) return;
-      const d = subpreventivosCache[currentPreventivoDiaId];
-      if (!d || !d.recursos) return;
+      window.calcularAmbulanciasCercanasPrev = function (destCoords) {
+        if (!destCoords || !window.google || !google.maps.DistanceMatrixService) return;
+        const d = subpreventivosCache[currentPreventivoDiaId];
+        if (!d || !d.recursos) return;
 
-      const targetResources = d.recursos.filter(rvId => {
-        const v = localVehiclesById[rvId];
-        const t = v?.tipo || '';
-        return v && (t === 'Ambulancia' || t === 'Vehículo Todo terreno') && v.oystaId;
-      }).map(rvId => {
-        const v = localVehiclesById[rvId];
-        const oystaPos = oystaVehiclesCache.find(ov => String(ov.id) === String(v.oystaId));
-        return {
-          id: rvId,
-          oystaId: String(v.oystaId),
-          pos: oystaPos ? { lat: parseFloat(oystaPos.lat), lng: parseFloat(oystaPos.lng) } : null
-        };
-      }).filter(a => a.pos && !isNaN(a.pos.lat));
+        const targetResources = d.recursos.filter(rvId => {
+          const v = localVehiclesById[rvId];
+          const t = v?.tipo || '';
+          return v && (t === 'Ambulancia' || t === 'Vehículo Todo terreno') && v.oystaId;
+        }).map(rvId => {
+          const v = localVehiclesById[rvId];
+          const oystaPos = oystaVehiclesCache.find(ov => String(ov.id) === String(v.oystaId));
+          return {
+            id: rvId,
+            oystaId: String(v.oystaId),
+            pos: oystaPos ? { lat: parseFloat(oystaPos.lat), lng: parseFloat(oystaPos.lng) } : null
+          };
+        }).filter(a => a.pos && !isNaN(a.pos.lat));
 
-      if (targetResources.length === 0) return;
+        if (targetResources.length === 0) return;
 
-      console.log("[Oysta] Calculating clinical proximity via Google Distance Matrix...");
-      const matrix = new google.maps.DistanceMatrixService();
-      matrix.getDistanceMatrix({
-        origins: targetResources.map(a => a.pos),
-        destinations: [destCoords],
-        travelMode: google.maps.TravelMode.DRIVING
-      }, (response, status) => {
-        if (status === 'OK' && response.rows[0]) {
-          const results = response.rows.map((row, i) => ({
-            oystaId: targetResources[i].oystaId,
-            duration: row.elements[0]?.duration
-          })).filter(r => r.duration);
+        console.log("[Oysta] Calculating clinical proximity via Google Distance Matrix...");
+        const matrix = new google.maps.DistanceMatrixService();
+        matrix.getDistanceMatrix({
+          origins: targetResources.map(a => a.pos),
+          destinations: [destCoords],
+          travelMode: google.maps.TravelMode.DRIVING
+        }, (response, status) => {
+          if (status === 'OK' && response.rows[0]) {
+            const results = response.rows.map((row, i) => ({
+              oystaId: targetResources[i].oystaId,
+              duration: row.elements[0]?.duration
+            })).filter(r => r.duration);
+            results.sort((a, b) => a.duration.value - b.duration.value);
+            applyRanks(results);
+          } else {
+            console.warn("[Oysta] DistanceMatrix failed, using haversine fallback.");
+            fallbackRanking();
+          }
+        });
+
+        function fallbackRanking() {
+          const results = targetResources.map(a => {
+            const distKm = calculateHaversineDist(a.pos, destCoords);
+            const min = Math.round(distKm * 1.2); // ~50km/h
+            return {
+              oystaId: a.oystaId,
+              duration: { value: min * 60, text: `${min} min` }
+            };
+          });
           results.sort((a, b) => a.duration.value - b.duration.value);
           applyRanks(results);
-        } else {
-          console.warn("[Oysta] DistanceMatrix failed, using haversine fallback.");
-          fallbackRanking();
         }
+
+        function applyRanks(sortedResults) {
+          window._ambulanceRanks = {};
+          sortedResults.forEach((r, idx) => {
+            window._ambulanceRanks[r.oystaId] = { rank: idx + 1, duration: r.duration.text };
+          });
+
+          // V.12.5.4: Refrescar marcadores en ambos mapas para ver los globos (ranking-badge)
+          if (oystaMarkersPrev) {
+            Object.keys(oystaMarkersPrev).forEach(mid => {
+              const v = oystaVehiclesCache.find(ov => String(ov.id) === mid);
+              if (v) window.syncOystaMarkerPrev(v);
+            });
+          }
+          if (oystaMarkers) {
+            Object.keys(oystaMarkers).forEach(mid => {
+              const v = oystaVehiclesCache.find(ov => String(ov.id) === mid);
+              if (v && typeof syncOystaMarkerGlobal === 'function') syncOystaMarkerGlobal(v);
+            });
+          }
+
+          // V.12.4.1: Re-ordenar las tarjetas en el modal si está abierto
+          const recList = document.getElementById('prev-int-recursos-list');
+          if (recList) {
+            const container = recList.querySelector('div');
+            if (container) {
+              const cards = Array.from(container.querySelectorAll('.prev-int-res-card'));
+              cards.sort((a, b) => {
+                const idA = a.dataset.id;
+                const idB = b.dataset.id;
+                const va = localVehiclesById[idA];
+                const vb = localVehiclesById[idB];
+
+                const rankA = va?.oystaId ? (window._ambulanceRanks[String(va.oystaId)]?.rank || 999) : 999;
+                const rankB = vb?.oystaId ? (window._ambulanceRanks[String(vb.oystaId)]?.rank || 999) : 999;
+
+                if (rankA !== rankB) return rankA - rankB;
+                return getVehiclePriority(va?.tipo) - getVehiclePriority(vb?.tipo);
+              });
+
+              cards.forEach(card => {
+                container.appendChild(card); // Re-insertar en orden
+                const resId = card.dataset.id;
+                const v = localVehiclesById[resId];
+                const rankInfo = v?.oystaId && window._ambulanceRanks[String(v.oystaId)];
+                let b = card.querySelector('.ranking-badge');
+                if (rankInfo) {
+                  if (!b) {
+                    b = document.createElement('div');
+                    b.className = 'ranking-badge ranking-badge-small';
+                    card.appendChild(b);
+                  }
+                  b.innerText = rankInfo.rank;
+                  b.title = `Aproximadamente ${rankInfo.duration}`;
+                } else if (b) {
+                  b.remove();
+                }
+              });
+            }
+          }
+        }
+      };
+
+      let pickedCoordsPrev = null;
+      window.prepararPinIntervencion = () => {
+        if (!mapPreventivos) return;
+        cerrarModalPreventivoIntervencion();
+        mostrarToast('Haz clic en el mapa de preventivos para situar la intervención');
+        mapPreventivos.getDiv().style.cursor = 'crosshair';
+
+        const listener = mapPreventivos.addListener('click', e => {
+          pickedCoordsPrev = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+          google.maps.event.removeListener(listener);
+          mapPreventivos.getDiv().style.cursor = '';
+
+          document.getElementById('overlay-preventivo-intervencion').style.display = 'flex';
+          document.getElementById('prev-int-coords').innerText = `Ubicación fijada: ${pickedCoordsPrev.lat.toFixed(5)}, ${pickedCoordsPrev.lng.toFixed(5)}`;
+
+          if (prevMarkerInt) prevMarkerInt.setMap(null);
+          prevMarkerInt = new google.maps.marker.AdvancedMarkerElement({
+            position: pickedCoordsPrev,
+            map: mapPreventivos,
+            title: "Intervención (Pin)"
+          });
+
+          // V.12.4.1: Calcular cercanía de ambulancias al situar pin
+          if (typeof window.calcularAmbulanciasCercanasPrev === 'function') {
+            window.calcularAmbulanciasCercanasPrev(pickedCoordsPrev);
+          }
+        });
+      };
+
+
+      let lastModalMousedownTarget = null;
+      document.addEventListener('mousedown', (e) => {
+        lastModalMousedownTarget = e.target;
       });
 
-      function fallbackRanking() {
-        const results = targetResources.map(a => {
-          const distKm = calculateHaversineDist(a.pos, destCoords);
-          const min = Math.round(distKm * 1.2); // ~50km/h
-          return {
-            oystaId: a.oystaId,
-            duration: { value: min * 60, text: `${min} min` }
-          };
-        });
-        results.sort((a, b) => a.duration.value - b.duration.value);
-        applyRanks(results);
-      }
+      window.clickOutsidePrevMain = (e) => {
+        if (e.target.id === 'overlay-preventivo-main' && lastModalMousedownTarget === e.target) {
+          window.cerrarModalPreventivoMain();
+        }
+      };
 
-      function applyRanks(sortedResults) {
+      window.clickOutsidePrevDia = (e) => {
+        if (e.target.id === 'overlay-preventivo-dia' && lastModalMousedownTarget === e.target) {
+          window.cerrarModalPreventivoDia();
+        }
+      };
+
+      window.clickOutsidePrevInt = (e) => {
+        if (e.target.id === 'overlay-preventivo-intervencion' && lastModalMousedownTarget === e.target) {
+          window.cerrarModalPreventivoIntervencion();
+        }
+      };
+
+      window.clearPreventivoMapEffects = () => {
+        // 1. Limpiar Marcadores de Intervención (Iconos)
+        clearPreventivoMarkers();
+
+        // V.12.4.1: Limpieza TOTAL de artefactos de asignación
+        if (window._prevRoutesMap) {
+          Object.keys(window._prevRoutesMap).forEach(k => {
+            const r = window._prevRoutesMap[k];
+            if (r.line) r.line.setMap(null);
+            if (r.fallbackLine) r.fallbackLine.setMap(null);
+            if (r.renderer) r.renderer.setMap(null); // Defensa contra obsoletos
+          });
+          window._prevRoutesMap = {};
+        }
+        if (window._prevLabelsMap) {
+          Object.keys(window._prevLabelsMap).forEach(k => {
+            if (window._prevLabelsMap[k]) window._prevLabelsMap[k].map = null;
+          });
+          window._prevLabelsMap = {};
+        }
+        if (window._prevIntVehicleMarkers) {
+          Object.keys(window._prevIntVehicleMarkers).forEach(vid => {
+            if (window._prevIntVehicleMarkers[vid]) window._prevIntVehicleMarkers[vid].map = null;
+          });
+          window._prevIntVehicleMarkers = {};
+        }
+
+        window.clearAmbulanceRanking();
+        console.log("[Preventivos] Local map effects cleared.");
+
+        // V.12.4.1: Restaurar instantáneamente marcadores y rutas permanentes
+        if (typeof window.refreshGlobalPreventivoMarkers === 'function') {
+          window.refreshGlobalPreventivoMarkers();
+        }
+      };
+
+      window.clearAmbulanceRanking = () => {
         window._ambulanceRanks = {};
-        sortedResults.forEach((r, idx) => {
-          window._ambulanceRanks[r.oystaId] = { rank: idx + 1, duration: r.duration.text };
-        });
-
-        // V.12.5.4: Refrescar marcadores en ambos mapas para ver los globos (ranking-badge)
+        // 1. Refrescar Mapa de Preventivos
         if (oystaMarkersPrev) {
           Object.keys(oystaMarkersPrev).forEach(mid => {
             const v = oystaVehiclesCache.find(ov => String(ov.id) === mid);
             if (v) window.syncOystaMarkerPrev(v);
           });
         }
+        // 2. Refrescar Mapa Principal (Emergencias)
         if (oystaMarkers) {
           Object.keys(oystaMarkers).forEach(mid => {
             const v = oystaVehiclesCache.find(ov => String(ov.id) === mid);
-            if (v && typeof syncOystaMarkerGlobal === 'function') syncOystaMarkerGlobal(v);
+            if (v) {
+              const statusClass = (parseFloat(v.speed) > 5) ? 'moving' : 'stopped';
+              const localVeh = localVehiclesByOystaId[mid];
+              const isVisible = visibleVehicles[mid] !== false;
+              if (typeof window.createOystaMarkerContent === 'function') {
+                oystaMarkers[mid].content = window.createOystaMarkerContent(v, localVeh, statusClass);
+              }
+              if (mapEmergencias) oystaMarkers[mid].setMap((isVisible && currentUserDoc?.canSeeVehicles) ? mapEmergencias : null);
+            }
+          });
+        }
+      };
+
+      window.cerrarModalPreventivoIntervencion = () => {
+        document.getElementById('overlay-preventivo-intervencion').style.display = 'none';
+        if (prevMarkerInt) prevMarkerInt.setMap(null);
+        prevMarkerInt = null;
+
+        // V.13.8.4: Limpiar coordenadas y dirección para evitar polución entre intervenciones
+        pickedCoordsPrev = null;
+        if (typeof fastAssignAddress !== 'undefined') fastAssignAddress = "";
+
+        // V.12.4.1: Limpiar ranking al cerrar el modal (reutilizando helper)
+        window.clearAmbulanceRanking();
+      };
+
+      window.guardarPreventivoIntervencion = async () => {
+        const desc = document.getElementById('prev-int-desc').value.trim();
+        if (!desc) return alert('La descripción es obligatoria');
+
+        const org = document.getElementById('prev-int-org').value;
+        if (!org) {
+          alert('El campo "Solicitado por" es obligatorio.');
+          document.getElementById('prev-int-org').focus();
+          return;
+        }
+
+        const prio = document.getElementById('prev-int-prio').value;
+        const dir = document.getElementById('prev-int-dir').value;
+
+        const orgFinal = parseSolicitadoData('prev-int');
+
+        const recs = Array.from(document.querySelectorAll('.prev-int-res-card'))
+          .filter(c => c.dataset.selected === 'true')
+          .map(c => c.dataset.id);
+
+        const isEdit = !!editIntervencionId;
+        const iEdit = editIntervencionId ? (intervencionesCache[editIntervencionId] || {}) : {};
+
+        try {
+          const posIniciales = (isEdit && iEdit.recursosPosicionesIniciales) ? { ...iEdit.recursosPosicionesIniciales } : {};
+          recs.forEach(rvId => {
+            if (!posIniciales[rvId]) {
+              const v = localVehiclesById[rvId];
+              if (v && v.oystaId) {
+                const ov = oystaVehiclesCache.find(x => String(x.id) === String(v.oystaId));
+                if (ov) posIniciales[rvId] = { lat: parseFloat(ov.lat), lng: parseFloat(ov.lng) };
+              }
+            }
+          });
+
+          const data = {
+            descripcion: desc,
+            prioridad: prio,
+            direccion: dir,
+            solicitadoPor: orgFinal,
+            recursosAsignados: recs,
+            recursosPosicionesIniciales: posIniciales,
+            coords: pickedCoordsPrev,
+            provincia: preventivosCache[currentPreventivoId]?.provincia || 'Andalucía',
+            actualizadoEn: serverTimestamp()
+          };
+
+          if (isEdit) {
+            await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', editIntervencionId), data);
+            mostrarToast('Intervención actualizada.');
+          } else {
+            data.abierta = true;
+            data.oculta = false;
+            data.timestamp = serverTimestamp();
+
+            // V.13.0.4: Log inicial de recursos con detección de movimiento inmediato
+            let initialComms = [];
+            if (recs && recs.length > 0) {
+              const logEntries = await Promise.all(recs.map(async rvId => {
+                const v = localVehiclesById[rvId];
+                const indicativo = v?.alias || v?.indicativo || rvId;
+                let icon = '🚐';
+                if (v?.tipo === 'Camión') icon = '🚒';
+                else if (v?.tipo === 'Ambulancia') icon = '🚑';
+                else if (v?.tipo?.includes('Terreno')) icon = '🛻';
+
+                let baseMsg = `${icon} Asignado: ${indicativo}`;
+
+                // Verificación Oysta inmediata
+                if (v && v.oystaId) {
+                  const ov = oystaVehiclesCache.find(x => String(x.id) === String(v.oystaId));
+                  if (ov && parseFloat(ov.speed) > 5) {
+                    const globalLast = window._oystaGlobalLastStop[String(v.oystaId)];
+                    let origin = "";
+                    let delayStr = "";
+
+                    // V.13.8.4: Verificación más robusta de dirección (evitar fechas/horas tipo Oysta)
+                    const containsDate = (s) => (s && (s.includes(':') || /\d{4}-\d{2}-\d{2}/.test(s)));
+
+                    if (globalLast && globalLast.addr && !containsDate(globalLast.addr)) {
+                      origin = ` desde ${globalLast.addr}`;
+                      const diffMin = Math.round((Date.now() - globalLast.timestamp) / 60000);
+                      const saleTime = new Date(Date.now() - (diffMin * 60000)).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                      if (diffMin > 1) delayStr = ` [Decalaje: Hace ${diffMin} min]`;
+                      const speed = parseFloat(ov.speed);
+                      baseMsg += ` y ⚡️ SALE${origin} a las ${saleTime} hacia el lugar (${speed} km/h)${delayStr}`;
+                    } else {
+                      // Si no hay parada previa clara o el addr es basura (ej: fecha), intentamos geocodificar pos actual
+                      const currentPos = { lat: parseFloat(ov.lat), lng: parseFloat(ov.lng) };
+                      const addr = await new Promise(res => reverseGeocodeWithCache(currentPos, res));
+                      if (addr) origin = ` desde ${addr}`;
+                      const speed = parseFloat(ov.speed);
+                      baseMsg += ` y ⚡️ SALE${origin} hacia el lugar (${speed} km/h)`;
+                    }
+
+                    const speed = parseFloat(ov.speed);
+                    baseMsg += ` y ⚡️ SALE${origin} hacia el lugar (${speed} km/h)${delayStr}`;
+                  }
+                }
+                return baseMsg;
+              }));
+
+              initialComms.push({
+                texto: `🚀 INTERVENCIÓN INICIADA\n${logEntries.join('\n')} `,
+                autor: 'Sist. Oysta',
+                autorId: 'system',
+                timestamp: Date.now(), // El timestamp real de los SALE se ajusta individualmente en el loop si fuera necesario, pero aquí lo dejamos como tiempo de registro base
+                fecha: formatCommentFecha(new Date())
+              });
+            }
+
+            data.comentarios = initialComms;
+
+            await addDoc(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones'), data);
+            mostrarToast('Intervención registrada.');
+          }
+          cerrarModalPreventivoIntervencion();
+
+          // V.12.5.0: Borrar pin si venimos de búsqueda
+          if (window._pinPendingToDelete) {
+            await deleteDoc(doc(db, 'pines_mapa', window._pinPendingToDelete));
+            window._pinPendingToDelete = null;
+          }
+
+          // Forzar refresco rutas/marcadores
+          if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
+        } catch (e) {
+          alert('Error: ' + e.message);
+        }
+      };
+
+      let editIntervencionId = null;
+      window.abrirEditarIntervencion = (id) => {
+        const i = intervencionesCache[id];
+        if (!i) return;
+
+        // Llamamos con true para indicar que es edición y no resetee el ID
+        window.abrirModalPreventivoIntervencion(true);
+        editIntervencionId = id;
+
+        document.querySelector('#overlay-preventivo-intervencion .modal-title').innerText = 'Editar Intervención';
+        document.getElementById('btn-save-prev-int').innerText = 'Modificar Intervención';
+
+        document.getElementById('prev-int-desc').value = i.descripcion || '';
+        document.getElementById('prev-int-dir').value = i.direccion || '';
+        document.getElementById('prev-int-prio').value = i.prioridad || 'rojo';
+
+        // Restore Solicitado Por
+        const prevOrgRaw = i.solicitadoPor || '';
+        const orgSelect = document.getElementById('prev-int-org');
+        const orgSubInput = document.getElementById('prev-int-org-sub-input');
+        const orgSubSelect = document.getElementById('prev-int-org-sub-select');
+
+        orgSelect.value = '';
+        if (prevOrgRaw.startsWith('Jefe de Operaciones - ')) {
+          orgSelect.value = 'Jefe de Operaciones';
+          handleSolicitadoChange('prev-int');
+          orgSubSelect.value = prevOrgRaw.replace('Jefe de Operaciones - ', '');
+        } else if (prevOrgRaw.startsWith('Otro - ')) {
+          orgSelect.value = 'Otro';
+          handleSolicitadoChange('prev-int');
+          orgSubInput.value = prevOrgRaw.replace('Otro - ', '');
+        } else {
+          const parts = prevOrgRaw.split(' - ');
+          const mainP = parts[0];
+          const subP = parts.slice(1).join(' - ');
+
+          let found = false;
+          Array.from(orgSelect.options).forEach(opt => {
+            if (opt.value === mainP) found = true;
+          });
+
+          if (found) {
+            orgSelect.value = mainP;
+            handleSolicitadoChange('prev-int');
+            if (subP) orgSubInput.value = subP;
+          } else {
+            // As fallback
+            orgSelect.value = 'Otro';
+            handleSolicitadoChange('prev-int');
+            orgSubInput.value = prevOrgRaw;
+          }
+        }
+
+        if (i.coords) {
+          pickedCoordsPrev = i.coords;
+          document.getElementById('prev-int-coords').innerText = `Ubicación fijada: ${i.coords.lat.toFixed(5)}, ${i.coords.lng.toFixed(5)}`;
+
+          if (prevMarkerInt) prevMarkerInt.setMap(null);
+          prevMarkerInt = new google.maps.marker.AdvancedMarkerElement({
+            position: i.coords,
+            map: mapPreventivos,
+            title: "Intervención (Editable)"
           });
         }
 
-        // V.12.4.1: Re-ordenar las tarjetas en el modal si está abierto
-        const recList = document.getElementById('prev-int-recursos-list');
-        if (recList) {
-          const container = recList.querySelector('div');
-          if (container) {
-            const cards = Array.from(container.querySelectorAll('.prev-int-res-card'));
-            cards.sort((a, b) => {
-              const idA = a.dataset.id;
-              const idB = b.dataset.id;
-              const va = localVehiclesById[idA];
-              const vb = localVehiclesById[idB];
+        // Checkboxes de recursos
+        const checks = document.querySelectorAll('input[name="prev-int-recurso-v"]');
+        checks.forEach(c => c.checked = (i.recursosAsignados || []).includes(c.value));
+      };
 
-              const rankA = va?.oystaId ? (window._ambulanceRanks[String(va.oystaId)]?.rank || 999) : 999;
-              const rankB = vb?.oystaId ? (window._ambulanceRanks[String(vb.oystaId)]?.rank || 999) : 999;
+      window.toggleSubpreventivoStatus = async (id) => {
+        const d = subpreventivosCache[id];
+        const p = preventivosCache[currentPreventivoId];
+        if (!d || !p) return;
 
-              if (rankA !== rankB) return rankA - rankB;
-              return getVehiclePriority(va?.tipo) - getVehiclePriority(vb?.tipo);
-            });
+        const currentlyOpen = d.abierta !== false;
+        const newStatus = !currentlyOpen;
 
-            cards.forEach(card => {
-              container.appendChild(card); // Re-insertar en orden
-              const resId = card.dataset.id;
-              const v = localVehiclesById[resId];
-              const rankInfo = v?.oystaId && window._ambulanceRanks[String(v.oystaId)];
-              let b = card.querySelector('.ranking-badge');
-              if (rankInfo) {
-                if (!b) {
-                  b = document.createElement('div');
-                  b.className = 'ranking-badge ranking-badge-small';
-                  card.appendChild(b);
-                }
-                b.innerText = rankInfo.rank;
-                b.title = `Aproximadamente ${rankInfo.duration}`;
-              } else if (b) {
-                b.remove();
-              }
-            });
-          }
-        }
-      }
-    };
-
-    let pickedCoordsPrev = null;
-    window.prepararPinIntervencion = () => {
-      if (!mapPreventivos) return;
-      cerrarModalPreventivoIntervencion();
-      mostrarToast('Haz clic en el mapa de preventivos para situar la intervención');
-      mapPreventivos.getDiv().style.cursor = 'crosshair';
-
-      const listener = mapPreventivos.addListener('click', e => {
-        pickedCoordsPrev = { lat: e.latLng.lat(), lng: e.latLng.lng() };
-        google.maps.event.removeListener(listener);
-        mapPreventivos.getDiv().style.cursor = '';
-
-        document.getElementById('overlay-preventivo-intervencion').style.display = 'flex';
-        document.getElementById('prev-int-coords').innerText = `Ubicación fijada: ${pickedCoordsPrev.lat.toFixed(5)}, ${pickedCoordsPrev.lng.toFixed(5)}`;
-
-        if (prevMarkerInt) prevMarkerInt.setMap(null);
-        prevMarkerInt = new google.maps.marker.AdvancedMarkerElement({
-          position: pickedCoordsPrev,
-          map: mapPreventivos,
-          title: "Intervención (Pin)"
-        });
-
-        // V.12.4.1: Calcular cercanía de ambulancias al situar pin
-        if (typeof window.calcularAmbulanciasCercanasPrev === 'function') {
-          window.calcularAmbulanciasCercanasPrev(pickedCoordsPrev);
-        }
-      });
-    };
-
-
-    let lastModalMousedownTarget = null;
-    document.addEventListener('mousedown', (e) => {
-      lastModalMousedownTarget = e.target;
-    });
-
-    window.clickOutsidePrevMain = (e) => {
-      if (e.target.id === 'overlay-preventivo-main' && lastModalMousedownTarget === e.target) {
-        window.cerrarModalPreventivoMain();
-      }
-    };
-
-    window.clickOutsidePrevDia = (e) => {
-      if (e.target.id === 'overlay-preventivo-dia' && lastModalMousedownTarget === e.target) {
-        window.cerrarModalPreventivoDia();
-      }
-    };
-
-    window.clickOutsidePrevInt = (e) => {
-      if (e.target.id === 'overlay-preventivo-intervencion' && lastModalMousedownTarget === e.target) {
-        window.cerrarModalPreventivoIntervencion();
-      }
-    };
-
-    window.clearPreventivoMapEffects = () => {
-      // 1. Limpiar Marcadores de Intervención (Iconos)
-      clearPreventivoMarkers();
-
-      // V.12.4.1: Limpieza TOTAL de artefactos de asignación
-      if (window._prevRoutesMap) {
-        Object.keys(window._prevRoutesMap).forEach(k => {
-          const r = window._prevRoutesMap[k];
-          if (r.line) r.line.setMap(null);
-          if (r.fallbackLine) r.fallbackLine.setMap(null);
-          if (r.renderer) r.renderer.setMap(null); // Defensa contra obsoletos
-        });
-        window._prevRoutesMap = {};
-      }
-      if (window._prevLabelsMap) {
-        Object.keys(window._prevLabelsMap).forEach(k => {
-          if (window._prevLabelsMap[k]) window._prevLabelsMap[k].map = null;
-        });
-        window._prevLabelsMap = {};
-      }
-      if (window._prevIntVehicleMarkers) {
-        Object.keys(window._prevIntVehicleMarkers).forEach(vid => {
-          if (window._prevIntVehicleMarkers[vid]) window._prevIntVehicleMarkers[vid].map = null;
-        });
-        window._prevIntVehicleMarkers = {};
-      }
-
-      window.clearAmbulanceRanking();
-      console.log("[Preventivos] Local map effects cleared.");
-
-      // V.12.4.1: Restaurar instantáneamente marcadores y rutas permanentes
-      if (typeof window.refreshGlobalPreventivoMarkers === 'function') {
-        window.refreshGlobalPreventivoMarkers();
-      }
-    };
-
-    window.clearAmbulanceRanking = () => {
-      window._ambulanceRanks = {};
-      // 1. Refrescar Mapa de Preventivos
-      if (oystaMarkersPrev) {
-        Object.keys(oystaMarkersPrev).forEach(mid => {
-          const v = oystaVehiclesCache.find(ov => String(ov.id) === mid);
-          if (v) window.syncOystaMarkerPrev(v);
-        });
-      }
-      // 2. Refrescar Mapa Principal (Emergencias)
-      if (oystaMarkers) {
-        Object.keys(oystaMarkers).forEach(mid => {
-          const v = oystaVehiclesCache.find(ov => String(ov.id) === mid);
-          if (v) {
-            const statusClass = (parseFloat(v.speed) > 5) ? 'moving' : 'stopped';
-            const localVeh = localVehiclesByOystaId[mid];
-            const isVisible = visibleVehicles[mid] !== false;
-            if (typeof window.createOystaMarkerContent === 'function') {
-              oystaMarkers[mid].content = window.createOystaMarkerContent(v, localVeh, statusClass);
+        try {
+          if (newStatus === false) {
+            const motivo = prompt('Por favor, indica un motivo o resumen del cierre de este día de preventivo:');
+            if (motivo === null) return;
+            if (!motivo.trim()) {
+              alert('El motivo de cierre es obligatorio.');
+              return;
             }
-            if (mapEmergencias) oystaMarkers[mid].setMap((isVisible && currentUserDoc?.canSeeVehicles) ? mapEmergencias : null);
-          }
-        });
-      }
-    };
-
-    window.cerrarModalPreventivoIntervencion = () => {
-      document.getElementById('overlay-preventivo-intervencion').style.display = 'none';
-      if (prevMarkerInt) prevMarkerInt.setMap(null);
-      prevMarkerInt = null;
-
-      // V.13.8.4: Limpiar coordenadas y dirección para evitar polución entre intervenciones
-      pickedCoordsPrev = null;
-      if (typeof fastAssignAddress !== 'undefined') fastAssignAddress = "";
-
-      // V.12.4.1: Limpiar ranking al cerrar el modal (reutilizando helper)
-      window.clearAmbulanceRanking();
-    };
-
-    window.guardarPreventivoIntervencion = async () => {
-      const desc = document.getElementById('prev-int-desc').value.trim();
-      if (!desc) return alert('La descripción es obligatoria');
-
-      const org = document.getElementById('prev-int-org').value;
-      if (!org) {
-        alert('El campo "Solicitado por" es obligatorio.');
-        document.getElementById('prev-int-org').focus();
-        return;
-      }
-
-      const prio = document.getElementById('prev-int-prio').value;
-      const dir = document.getElementById('prev-int-dir').value;
-
-      const orgFinal = parseSolicitadoData('prev-int');
-
-      const recs = Array.from(document.querySelectorAll('.prev-int-res-card'))
-        .filter(c => c.dataset.selected === 'true')
-        .map(c => c.dataset.id);
-
-      const isEdit = !!editIntervencionId;
-      const iEdit = editIntervencionId ? (intervencionesCache[editIntervencionId] || {}) : {};
-
-      try {
-        const posIniciales = (isEdit && iEdit.recursosPosicionesIniciales) ? { ...iEdit.recursosPosicionesIniciales } : {};
-        recs.forEach(rvId => {
-          if (!posIniciales[rvId]) {
-            const v = localVehiclesById[rvId];
-            if (v && v.oystaId) {
-              const ov = oystaVehiclesCache.find(x => String(x.id) === String(v.oystaId));
-              if (ov) posIniciales[rvId] = { lat: parseFloat(ov.lat), lng: parseFloat(ov.lng) };
-            }
-          }
-        });
-
-        const data = {
-          descripcion: desc,
-          prioridad: prio,
-          direccion: dir,
-          solicitadoPor: orgFinal,
-          recursosAsignados: recs,
-          recursosPosicionesIniciales: posIniciales,
-          coords: pickedCoordsPrev,
-          provincia: preventivosCache[currentPreventivoId]?.provincia || 'Andalucía',
-          actualizadoEn: serverTimestamp()
-        };
-
-        if (isEdit) {
-          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', editIntervencionId), data);
-          mostrarToast('Intervención actualizada.');
-        } else {
-          data.abierta = true;
-          data.oculta = false;
-          data.timestamp = serverTimestamp();
-
-          // V.13.0.4: Log inicial de recursos con detección de movimiento inmediato
-          let initialComms = [];
-          if (recs && recs.length > 0) {
-            const logEntries = await Promise.all(recs.map(async rvId => {
-              const v = localVehiclesById[rvId];
-              const indicativo = v?.alias || v?.indicativo || rvId;
-              let icon = '🚐';
-              if (v?.tipo === 'Camión') icon = '🚒';
-              else if (v?.tipo === 'Ambulancia') icon = '🚑';
-              else if (v?.tipo?.includes('Terreno')) icon = '🛻';
-
-              let baseMsg = `${icon} Asignado: ${indicativo}`;
-
-              // Verificación Oysta inmediata
-              if (v && v.oystaId) {
-                const ov = oystaVehiclesCache.find(x => String(x.id) === String(v.oystaId));
-                if (ov && parseFloat(ov.speed) > 5) {
-                  const globalLast = window._oystaGlobalLastStop[String(v.oystaId)];
-                  let origin = "";
-                  let delayStr = "";
-
-                  // V.13.8.4: Verificación más robusta de dirección (evitar fechas/horas tipo Oysta)
-                  const containsDate = (s) => (s && (s.includes(':') || /\d{4}-\d{2}-\d{2}/.test(s)));
-
-                  if (globalLast && globalLast.addr && !containsDate(globalLast.addr)) {
-                    origin = ` desde ${globalLast.addr}`;
-                    const diffMin = Math.round((Date.now() - globalLast.timestamp) / 60000);
-                    const saleTime = new Date(Date.now() - (diffMin * 60000)).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-                    if (diffMin > 1) delayStr = ` [Decalaje: Hace ${diffMin} min]`;
-                    const speed = parseFloat(ov.speed);
-                    baseMsg += ` y ⚡️ SALE${origin} a las ${saleTime} hacia el lugar (${speed} km/h)${delayStr}`;
-                  } else {
-                    // Si no hay parada previa clara o el addr es basura (ej: fecha), intentamos geocodificar pos actual
-                    const currentPos = { lat: parseFloat(ov.lat), lng: parseFloat(ov.lng) };
-                    const addr = await new Promise(res => reverseGeocodeWithCache(currentPos, res));
-                    if (addr) origin = ` desde ${addr}`;
-                    const speed = parseFloat(ov.speed);
-                    baseMsg += ` y ⚡️ SALE${origin} hacia el lugar (${speed} km/h)`;
-                  }
-
-                  const speed = parseFloat(ov.speed);
-                  baseMsg += ` y ⚡️ SALE${origin} hacia el lugar (${speed} km/h)${delayStr}`;
-                }
-              }
-              return baseMsg;
-            }));
-
-            initialComms.push({
-              texto: `🚀 INTERVENCIÓN INICIADA\n${logEntries.join('\n')} `,
-              autor: 'Sist. Oysta',
+            const autoLog = {
+              texto: `🚨 Preventivo cerrado el día ${new Date().toLocaleDateString('es-ES')} a las ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`,
+              autor: 'Sistema',
               autorId: 'system',
-              timestamp: Date.now(), // El timestamp real de los SALE se ajusta individualmente en el loop si fuera necesario, pero aquí lo dejamos como tiempo de registro base
+              timestamp: Date.now(),
               fecha: formatCommentFecha(new Date())
+            };
+            const closureComm = {
+              texto: `🔒 DÍA CERRADO: ${motivo.trim()}`,
+              autor: currentUserDoc.nombre || 'Usuario',
+              autorId: currentUser.uid,
+              timestamp: Date.now(),
+              fecha: formatCommentFecha(new Date())
+            };
+
+            const isSingleDay = (p.dias || 1) === 1;
+
+            // Cerrar todas las intervenciones de este día y liberar recursos
+            const intSnap = await getDocs(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos', id, 'intervenciones'));
+            for (const intDoc of intSnap.docs) {
+              const intData = intDoc.data();
+              if (intData.abierta !== false) {
+                const releases = (intData.recursosAsignados || []).map(rvId => {
+                  const v = window.globalVehiculos && window.globalVehiculos[rvId];
+                  const indicativo = v?.alias || v?.indicativo || rvId;
+                  return {
+                    texto: `📤 Recurso liberado por cierre del día: ${indicativo}`,
+                    autor: 'Sistema', autorId: 'system', timestamp: Date.now(),
+                    fecha: formatCommentFecha(new Date())
+                  };
+                });
+                await updateDoc(intDoc.ref, {
+                  abierta: false,
+                  oculta: true,
+                  recursosAsignados: [],
+                  comentarios: [...(intData.comentarios || []), ...releases, {
+                    texto: '🔒 Intervención cerrada automáticamente por cierre de día.',
+                    autor: 'Sistema', autorId: 'system', timestamp: Date.now(),
+                    fecha: formatCommentFecha(new Date())
+                  }],
+                  actualizadoEn: serverTimestamp()
+                });
+              }
+            }
+
+            await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', id), {
+              abierta: false,
+              oculta: isSingleDay ? true : false,
+              comentarios: [...(d.comentarios || []), autoLog, closureComm],
+              actualizadoEn: serverTimestamp()
             });
+
+            if (isSingleDay) {
+              await updateDoc(doc(db, 'preventivos', currentPreventivoId), {
+                abierta: false,
+                oculta: true,
+                actualizadoEn: serverTimestamp()
+              });
+            }
+          } else {
+            const reabrirLog = {
+              texto: `🔓 DÍA REABIERTO`,
+              autor: currentUserDoc.nombre || 'Usuario',
+              autorId: currentUser.uid,
+              timestamp: Date.now(),
+              fecha: formatCommentFecha(new Date())
+            };
+            await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', id), {
+              abierta: true,
+              oculta: false,
+              comentarios: [...(d.comentarios || []), reabrirLog],
+              actualizadoEn: serverTimestamp()
+            });
+            if ((p.dias || 1) === 1) {
+              await updateDoc(doc(db, 'preventivos', currentPreventivoId), {
+                abierta: true,
+                oculta: false,
+                actualizadoEn: serverTimestamp()
+              });
+            }
           }
 
-          data.comentarios = initialComms;
+          if (newStatus === false && !mostrarCerradas && (p.dias || 1) === 1) {
+            window.cerrarDetallePreventivo();
+          } else {
+            window.selectSubpreventivo(id);
+          }
 
-          await addDoc(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones'), data);
-          mostrarToast('Intervención registrada.');
-        }
-        cerrarModalPreventivoIntervencion();
+          mostrarToast(newStatus ? 'Día reabierto' : 'Día cerrado');
+        } catch (e) { console.error(e); }
+      };
 
-        // V.12.5.0: Borrar pin si venimos de búsqueda
-        if (window._pinPendingToDelete) {
-          await deleteDoc(doc(db, 'pines_mapa', window._pinPendingToDelete));
-          window._pinPendingToDelete = null;
-        }
+      window.togglePreventivoMotherStatus = async (id) => {
+        const p = preventivosCache[id];
+        if (!p) return;
+        const currentlyOpen = p.abierta !== false;
+        const newStatus = !currentlyOpen;
 
-        // Forzar refresco rutas/marcadores
-        if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
-      } catch (e) {
-        alert('Error: ' + e.message);
-      }
-    };
-
-    let editIntervencionId = null;
-    window.abrirEditarIntervencion = (id) => {
-      const i = intervencionesCache[id];
-      if (!i) return;
-
-      // Llamamos con true para indicar que es edición y no resetee el ID
-      window.abrirModalPreventivoIntervencion(true);
-      editIntervencionId = id;
-
-      document.querySelector('#overlay-preventivo-intervencion .modal-title').innerText = 'Editar Intervención';
-      document.getElementById('btn-save-prev-int').innerText = 'Modificar Intervención';
-
-      document.getElementById('prev-int-desc').value = i.descripcion || '';
-      document.getElementById('prev-int-dir').value = i.direccion || '';
-      document.getElementById('prev-int-prio').value = i.prioridad || 'rojo';
-
-      // Restore Solicitado Por
-      const prevOrgRaw = i.solicitadoPor || '';
-      const orgSelect = document.getElementById('prev-int-org');
-      const orgSubInput = document.getElementById('prev-int-org-sub-input');
-      const orgSubSelect = document.getElementById('prev-int-org-sub-select');
-
-      orgSelect.value = '';
-      if (prevOrgRaw.startsWith('Jefe de Operaciones - ')) {
-        orgSelect.value = 'Jefe de Operaciones';
-        handleSolicitadoChange('prev-int');
-        orgSubSelect.value = prevOrgRaw.replace('Jefe de Operaciones - ', '');
-      } else if (prevOrgRaw.startsWith('Otro - ')) {
-        orgSelect.value = 'Otro';
-        handleSolicitadoChange('prev-int');
-        orgSubInput.value = prevOrgRaw.replace('Otro - ', '');
-      } else {
-        const parts = prevOrgRaw.split(' - ');
-        const mainP = parts[0];
-        const subP = parts.slice(1).join(' - ');
-
-        let found = false;
-        Array.from(orgSelect.options).forEach(opt => {
-          if (opt.value === mainP) found = true;
-        });
-
-        if (found) {
-          orgSelect.value = mainP;
-          handleSolicitadoChange('prev-int');
-          if (subP) orgSubInput.value = subP;
-        } else {
-          // As fallback
-          orgSelect.value = 'Otro';
-          handleSolicitadoChange('prev-int');
-          orgSubInput.value = prevOrgRaw;
-        }
-      }
-
-      if (i.coords) {
-        pickedCoordsPrev = i.coords;
-        document.getElementById('prev-int-coords').innerText = `Ubicación fijada: ${i.coords.lat.toFixed(5)}, ${i.coords.lng.toFixed(5)}`;
-
-        if (prevMarkerInt) prevMarkerInt.setMap(null);
-        prevMarkerInt = new google.maps.marker.AdvancedMarkerElement({
-          position: i.coords,
-          map: mapPreventivos,
-          title: "Intervención (Editable)"
-        });
-      }
-
-      // Checkboxes de recursos
-      const checks = document.querySelectorAll('input[name="prev-int-recurso-v"]');
-      checks.forEach(c => c.checked = (i.recursosAsignados || []).includes(c.value));
-    };
-
-    window.toggleSubpreventivoStatus = async (id) => {
-      const d = subpreventivosCache[id];
-      const p = preventivosCache[currentPreventivoId];
-      if (!d || !p) return;
-
-      const currentlyOpen = d.abierta !== false;
-      const newStatus = !currentlyOpen;
-
-      try {
         if (newStatus === false) {
-          const motivo = prompt('Por favor, indica un motivo o resumen del cierre de este día de preventivo:');
-          if (motivo === null) return;
+          if (!confirm('¿Seguro que quieres finalizar este preventivo completo? Se cerrarán automáticamente todos los días del evento, todas sus intervenciones y se liberarán los recursos.')) return;
+        }
+
+        try {
+          if (newStatus === false) {
+            // Cierre recursivo de subpreventivos (días)
+            const snap = await getDocs(collection(db, 'preventivos', id, 'subpreventivos'));
+            for (const docSub of snap.docs) {
+              const dataSub = docSub.data();
+              if (dataSub.abierta !== false) {
+                // Primero cerrar todas sus intervenciones y liberar recursos
+                const intSnap = await getDocs(collection(db, 'preventivos', id, 'subpreventivos', docSub.id, 'intervenciones'));
+                for (const intDoc of intSnap.docs) {
+                  const intData = intDoc.data();
+                  if (intData.abierta !== false) {
+                    const releases = (intData.recursosAsignados || []).map(rvId => {
+                      const v = window.globalVehiculos && window.globalVehiculos[rvId];
+                      const indicativo = v?.alias || v?.indicativo || rvId;
+                      return {
+                        texto: `📤 Recurso liberado por cierre de preventivo: ${indicativo}`,
+                        autor: 'Sistema', autorId: 'system', timestamp: Date.now(),
+                        fecha: formatCommentFecha(new Date())
+                      };
+                    });
+                    await updateDoc(intDoc.ref, {
+                      abierta: false,
+                      oculta: true,
+                      recursosAsignados: [],
+                      comentarios: [...(intData.comentarios || []), ...releases, {
+                        texto: '🔒 Intervención cerrada automáticamente por cierre de preventivo global.',
+                        autor: 'Sistema', autorId: 'system', timestamp: Date.now(),
+                        fecha: formatCommentFecha(new Date())
+                      }],
+                      actualizadoEn: serverTimestamp()
+                    });
+                  }
+                }
+
+                // Luego cerrar el día
+                await updateDoc(docSub.ref, {
+                  abierta: false,
+                  oculta: true,
+                  comentarios: [...(dataSub.comentarios || []), {
+                    texto: '🔒 Día cerrado automáticamente por cierre de preventivo global.',
+                    autor: 'Sistema', autorId: 'system', timestamp: Date.now(),
+                    fecha: formatCommentFecha(new Date())
+                  }],
+                  actualizadoEn: serverTimestamp()
+                });
+              }
+            }
+          }
+
+          await updateDoc(doc(db, 'preventivos', id), {
+            abierta: newStatus,
+            oculta: newStatus === false ? true : false,
+            actualizadoEn: serverTimestamp()
+          });
+
+          if (newStatus === false && !mostrarCerradas) {
+            window.cerrarDetallePreventivo();
+            currentPreventivoId = null;
+          }
+
+          mostrarToast(newStatus ? 'Preventivo reabierto' : 'Preventivo finalizado por completo');
+        } catch (e) { alert('Error: ' + e.message); }
+      };
+
+      window.toggleIntervencionStatus = async (id) => {
+        const i = intervencionesCache[id];
+        if (!i) return;
+        const newStatus = !i.abierta;
+
+        let closureComm = null;
+        let releases = [];
+        if (newStatus === false) {
+          const motivo = prompt('Por favor, indica un motivo o resumen del cierre de esta intervención:');
+          if (motivo === null) return; // Cancelar
           if (!motivo.trim()) {
             alert('El motivo de cierre es obligatorio.');
             return;
           }
-          const autoLog = {
-            texto: `🚨 Preventivo cerrado el día ${new Date().toLocaleDateString('es-ES')} a las ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}`,
-            autor: 'Sistema',
-            autorId: 'system',
-            timestamp: Date.now(),
-            fecha: formatCommentFecha(new Date())
-          };
-          const closureComm = {
-            texto: `🔒 DÍA CERRADO: ${motivo.trim()}`,
+          closureComm = {
+            texto: `🔒 INTERVENCIÓN CERRADA: ${motivo.trim()} `,
             autor: currentUserDoc.nombre || 'Usuario',
             autorId: currentUser.uid,
             timestamp: Date.now(),
             fecha: formatCommentFecha(new Date())
           };
 
-          const isSingleDay = (p.dias || 1) === 1;
+          // Liberar recursos
+          releases = (i.recursosAsignados || []).map(rvId => {
+            const v = window.globalVehiculos && window.globalVehiculos[rvId];
+            const indicativo = v?.alias || v?.indicativo || rvId;
+            return {
+              texto: `📤 Recurso liberado por cierre: ${indicativo}`,
+              autor: 'Sistema',
+              autorId: 'system',
+              timestamp: Date.now(),
+              fecha: formatCommentFecha(new Date())
+            };
+          });
+        }
 
-          // Cerrar todas las intervenciones de este día y liberar recursos
+        try {
+          const comms = i.comentarios || [];
+          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
+            abierta: newStatus,
+            oculta: newStatus === false ? true : false,
+            recursosAsignados: newStatus === false ? [] : (i.recursosAsignados || []),
+            comentarios: newStatus === false ? [...comms, ...releases, closureComm] : [...comms, {
+              texto: `🔓 INTERVENCIÓN REABIERTA`,
+              autor: currentUserDoc.nombre || 'Usuario',
+              autorId: currentUser.uid,
+              timestamp: Date.now(),
+              fecha: formatCommentFecha(new Date())
+            }],
+            actualizadoEn: serverTimestamp()
+          });
+          if (newStatus === false) {
+            activeIntManageId = null;
+            // V.12.4.1: Sincronía inmediata local tras cierre
+            lastGlobalInterventionDocs = lastGlobalInterventionDocs.filter(d => d.id !== id);
+            window.clearPreventivoMapEffects();
+            if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
+          }
+
+          mostrarToast(newStatus ? 'Intervención reabierta' : 'Intervención cerrada y recursos liberados');
+        } catch (e) { console.error(e); }
+      };
+
+      window.toggleIntervencionOculta = async (id) => {
+        const i = intervencionesCache[id];
+        if (!i) return;
+        const newOculta = !i.oculta;
+        try {
+          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
+            oculta: newOculta,
+            actualizadoEn: serverTimestamp()
+          });
+        } catch (e) { console.error(e); }
+      };
+
+      window.borrarIntervencion = async (id) => {
+        if (!canDeleteIntervencion()) { mostrarToast('No tienes permiso para borrar intervenciones'); return; }
+        if (!confirm('¿Seguro que deseas eliminar esta intervención permanentemente?')) return;
+        try {
+          await deleteDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id));
+          // V.13.0.2: Sincronía inmediata local tras borrado
+          lastGlobalInterventionDocs = lastGlobalInterventionDocs.filter(d => d.id !== id);
+          if (intervencionesCache[id]) delete intervencionesCache[id];
+
+          window.refreshGlobalPreventivoMarkers();
+          if (currentPreventivoDiaId) renderHeaderResourceBadges(currentPreventivoDiaId);
+
+          mostrarToast('Intervención eliminada');
+        } catch (e) { alert('Error al borrar: ' + e.message); }
+      };
+
+      window.borrarSubpreventivo = async (id) => {
+        if (!canDeleteSubpreventivo()) { mostrarToast('No tienes permiso para borrar días'); return; }
+        if (!confirm('¿Seguro que deseas eliminar este día y todas sus intervenciones permanentemente?')) return;
+        try {
+          // V.12.4.1: Borrado paulatino de intervenciones
           const intSnap = await getDocs(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos', id, 'intervenciones'));
           for (const intDoc of intSnap.docs) {
-            const intData = intDoc.data();
-            if (intData.abierta !== false) {
-              const releases = (intData.recursosAsignados || []).map(rvId => {
-                const v = window.globalVehiculos && window.globalVehiculos[rvId];
-                const indicativo = v?.alias || v?.indicativo || rvId;
-                return {
-                  texto: `📤 Recurso liberado por cierre del día: ${indicativo}`,
-                  autor: 'Sistema', autorId: 'system', timestamp: Date.now(),
-                  fecha: formatCommentFecha(new Date())
-                };
-              });
-              await updateDoc(intDoc.ref, {
-                abierta: false,
-                oculta: true,
-                recursosAsignados: [],
-                comentarios: [...(intData.comentarios || []), ...releases, {
-                  texto: '🔒 Intervención cerrada automáticamente por cierre de día.',
-                  autor: 'Sistema', autorId: 'system', timestamp: Date.now(),
-                  fecha: formatCommentFecha(new Date())
-                }],
-                actualizadoEn: serverTimestamp()
-              });
-            }
+            // Si estaba abierta, liberamos (opcional por ser borrado, pero más seguro)
+            await deleteDoc(intDoc.ref);
           }
+          await deleteDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', id));
+          window.clearPreventivoMapEffects(); // V.12.4.1
+          if (currentPreventivoDiaId === id) cerrarDetallePreventivo();
+          mostrarToast('Día e intervenciones eliminadas');
+        } catch (e) { alert('Error al borrar: ' + e.message); }
+      };
 
-          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', id), {
-            abierta: false,
-            oculta: isSingleDay ? true : false,
-            comentarios: [...(d.comentarios || []), autoLog, closureComm],
-            actualizadoEn: serverTimestamp()
-          });
-
-          if (isSingleDay) {
-            await updateDoc(doc(db, 'preventivos', currentPreventivoId), {
-              abierta: false,
-              oculta: true,
-              actualizadoEn: serverTimestamp()
-            });
-          }
-        } else {
-          const reabrirLog = {
-            texto: `🔓 DÍA REABIERTO`,
-            autor: currentUserDoc.nombre || 'Usuario',
-            autorId: currentUser.uid,
-            timestamp: Date.now(),
-            fecha: formatCommentFecha(new Date())
-          };
-          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', id), {
-            abierta: true,
-            oculta: false,
-            comentarios: [...(d.comentarios || []), reabrirLog],
-            actualizadoEn: serverTimestamp()
-          });
-          if ((p.dias || 1) === 1) {
-            await updateDoc(doc(db, 'preventivos', currentPreventivoId), {
-              abierta: true,
-              oculta: false,
-              actualizadoEn: serverTimestamp()
-            });
-          }
-        }
-
-        if (newStatus === false && !mostrarCerradas && (p.dias || 1) === 1) {
-          window.cerrarDetallePreventivo();
-        } else {
-          window.selectSubpreventivo(id);
-        }
-
-        mostrarToast(newStatus ? 'Día reabierto' : 'Día cerrado');
-      } catch (e) { console.error(e); }
-    };
-
-    window.togglePreventivoMotherStatus = async (id) => {
-      const p = preventivosCache[id];
-      if (!p) return;
-      const currentlyOpen = p.abierta !== false;
-      const newStatus = !currentlyOpen;
-
-      if (newStatus === false) {
-        if (!confirm('¿Seguro que quieres finalizar este preventivo completo? Se cerrarán automáticamente todos los días del evento, todas sus intervenciones y se liberarán los recursos.')) return;
-      }
-
-      try {
-        if (newStatus === false) {
-          // Cierre recursivo de subpreventivos (días)
+      window.borrarPreventivo = async (id) => {
+        if (!canDeletePreventivo()) { mostrarToast('No tienes permiso para borrar preventivos'); return; }
+        if (!confirm('¿Seguro que deseas eliminar este preventivo y TODO su contenido permanentemente?')) return;
+        try {
+          // V.12.4.1: Borrado paulatino (recursivo)
           const snap = await getDocs(collection(db, 'preventivos', id, 'subpreventivos'));
           for (const docSub of snap.docs) {
-            const dataSub = docSub.data();
-            if (dataSub.abierta !== false) {
-              // Primero cerrar todas sus intervenciones y liberar recursos
-              const intSnap = await getDocs(collection(db, 'preventivos', id, 'subpreventivos', docSub.id, 'intervenciones'));
-              for (const intDoc of intSnap.docs) {
-                const intData = intDoc.data();
-                if (intData.abierta !== false) {
-                  const releases = (intData.recursosAsignados || []).map(rvId => {
-                    const v = window.globalVehiculos && window.globalVehiculos[rvId];
-                    const indicativo = v?.alias || v?.indicativo || rvId;
-                    return {
-                      texto: `📤 Recurso liberado por cierre de preventivo: ${indicativo}`,
-                      autor: 'Sistema', autorId: 'system', timestamp: Date.now(),
-                      fecha: formatCommentFecha(new Date())
-                    };
-                  });
-                  await updateDoc(intDoc.ref, {
-                    abierta: false,
-                    oculta: true,
-                    recursosAsignados: [],
-                    comentarios: [...(intData.comentarios || []), ...releases, {
-                      texto: '🔒 Intervención cerrada automáticamente por cierre de preventivo global.',
-                      autor: 'Sistema', autorId: 'system', timestamp: Date.now(),
-                      fecha: formatCommentFecha(new Date())
-                    }],
-                    actualizadoEn: serverTimestamp()
-                  });
-                }
-              }
-
-              // Luego cerrar el día
-              await updateDoc(docSub.ref, {
-                abierta: false,
-                oculta: true,
-                comentarios: [...(dataSub.comentarios || []), {
-                  texto: '🔒 Día cerrado automáticamente por cierre de preventivo global.',
-                  autor: 'Sistema', autorId: 'system', timestamp: Date.now(),
-                  fecha: formatCommentFecha(new Date())
-                }],
-                actualizadoEn: serverTimestamp()
-              });
-            }
+            const intSnap = await getDocs(collection(db, 'preventivos', id, 'subpreventivos', docSub.id, 'intervenciones'));
+            for (const intDoc of intSnap.docs) await deleteDoc(intDoc.ref);
+            await deleteDoc(docSub.ref);
           }
+          await deleteDoc(doc(db, 'preventivos', id));
+          window.clearPreventivoMapEffects(); // V.12.4.1
+          if (currentPreventivoId === id) backToPreventivosList();
+          mostrarToast('Preventivo y todo su contenido eliminado');
+        } catch (e) { alert('Error al borrar: ' + e.message); }
+      };
+
+      let currentComIntId = null;
+      let currentComMode = 'intervencion'; // V.12.4.1: 'intervencion' o 'dia'
+
+      window.abrirComentarios = (id, mode = 'intervencion') => {
+        currentComMode = mode;
+        currentComIntId = id;
+
+        let data = null;
+        if (mode === 'intervencion') {
+          data = intervencionesCache[id];
+        } else if (mode === 'dia') {
+          data = subpreventivosCache[id];
+        } else if (mode === 'preventivo') {
+          data = preventivosCache[id];
         }
 
-        await updateDoc(doc(db, 'preventivos', id), {
-          abierta: newStatus,
-          oculta: newStatus === false ? true : false,
-          actualizadoEn: serverTimestamp()
-        });
+        if (!data) return;
 
-        if (newStatus === false && !mostrarCerradas) {
-          window.cerrarDetallePreventivo();
-          currentPreventivoId = null;
+        const modalTitle = document.querySelector('#overlay-prev-comentarios .modal-title');
+        if (modalTitle) {
+          if (mode === 'intervencion') modalTitle.textContent = 'Comentarios Intervención';
+          else if (mode === 'preventivo') modalTitle.textContent = 'Comentarios de Preventivo';
+          else modalTitle.textContent = 'Registro / Incidencias del Día';
         }
 
-        mostrarToast(newStatus ? 'Preventivo reabierto' : 'Preventivo finalizado por completo');
-      } catch (e) { alert('Error: ' + e.message); }
-    };
+        renderComentariosList(data.comentarios || []);
+        document.getElementById('prev-comentario-txt').value = '';
 
-    window.toggleIntervencionStatus = async (id) => {
-      const i = intervencionesCache[id];
-      if (!i) return;
-      const newStatus = !i.abierta;
+        // V.13.8.1: Permiso para comentar
+        let canComment = true;
+        if (mode === 'intervencion') canComment = canCommentIntervencion(data);
+        else if (mode === 'dia') canComment = canCommentSubpreventivo(data);
+        else if (mode === 'preventivo') canComment = canEditPreventivo(data);
+        document.querySelector('#overlay-prev-comentarios .field').style.display = canComment ? 'block' : 'none';
+        document.querySelector('#overlay-prev-comentarios .btn-reg').style.display = canComment ? 'inline-block' : 'none';
 
-      let closureComm = null;
-      let releases = [];
-      if (newStatus === false) {
-        const motivo = prompt('Por favor, indica un motivo o resumen del cierre de esta intervención:');
-        if (motivo === null) return; // Cancelar
-        if (!motivo.trim()) {
-          alert('El motivo de cierre es obligatorio.');
+        document.getElementById('overlay-prev-comentarios').style.display = 'flex';
+      };
+
+      window.cerrarModalComentarios = () => document.getElementById('overlay-prev-comentarios').style.display = 'none';
+
+      function renderComentariosList(list) {
+        const cont = document.getElementById('prev-comentarios-list');
+        if (!cont) return;
+        if (list.length === 0) {
+          cont.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-4); font-size:12px;">Sin comentarios todavía.</div>';
           return;
         }
-        closureComm = {
-          texto: `🔒 INTERVENCIÓN CERRADA: ${motivo.trim()} `,
-          autor: currentUserDoc.nombre || 'Usuario',
-          autorId: currentUser.uid,
-          timestamp: Date.now(),
-          fecha: formatCommentFecha(new Date())
-        };
 
-        // Liberar recursos
-        releases = (i.recursosAsignados || []).map(rvId => {
-          const v = window.globalVehiculos && window.globalVehiculos[rvId];
-          const indicativo = v?.alias || v?.indicativo || rvId;
-          return {
-            texto: `📤 Recurso liberado por cierre: ${indicativo}`,
-            autor: 'Sistema',
-            autorId: 'system',
-            timestamp: Date.now(),
-            fecha: formatCommentFecha(new Date())
-          };
-        });
-      }
+        const isSuper = currentRole === 'super_admin';
+        const isElevated = currentRole === 'admin' || currentRole === 'manager' || isSuper;
 
-      try {
-        const comms = i.comentarios || [];
-        await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
-          abierta: newStatus,
-          oculta: newStatus === false ? true : false,
-          recursosAsignados: newStatus === false ? [] : (i.recursosAsignados || []),
-          comentarios: newStatus === false ? [...comms, ...releases, closureComm] : [...comms, {
-            texto: `🔓 INTERVENCIÓN REABIERTA`,
-            autor: currentUserDoc.nombre || 'Usuario',
-            autorId: currentUser.uid,
-            timestamp: Date.now(),
-            fecha: formatCommentFecha(new Date())
-          }],
-          actualizadoEn: serverTimestamp()
-        });
-        if (newStatus === false) {
-          activeIntManageId = null;
-          // V.12.4.1: Sincronía inmediata local tras cierre
-          lastGlobalInterventionDocs = lastGlobalInterventionDocs.filter(d => d.id !== id);
-          window.clearPreventivoMapEffects();
-          if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
-        }
+        cont.innerHTML = list.map((c, idx) => {
+          // V.13.8.1: Reglas solicitadas - Admin/Responsable/SuperAdmin editan, solo SuperAdmin borra
+          const canEdit = isElevated && (c.autorId !== 'system');
+          const canDelete = isSuper;
 
-        mostrarToast(newStatus ? 'Intervención reabierta' : 'Intervención cerrada y recursos liberados');
-      } catch (e) { console.error(e); }
-    };
-
-    window.toggleIntervencionOculta = async (id) => {
-      const i = intervencionesCache[id];
-      if (!i) return;
-      const newOculta = !i.oculta;
-      try {
-        await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
-          oculta: newOculta,
-          actualizadoEn: serverTimestamp()
-        });
-      } catch (e) { console.error(e); }
-    };
-
-    window.borrarIntervencion = async (id) => {
-      if (!canDeleteIntervencion()) { mostrarToast('No tienes permiso para borrar intervenciones'); return; }
-      if (!confirm('¿Seguro que deseas eliminar esta intervención permanentemente?')) return;
-      try {
-        await deleteDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id));
-        // V.13.0.2: Sincronía inmediata local tras borrado
-        lastGlobalInterventionDocs = lastGlobalInterventionDocs.filter(d => d.id !== id);
-        if (intervencionesCache[id]) delete intervencionesCache[id];
-
-        window.refreshGlobalPreventivoMarkers();
-        if (currentPreventivoDiaId) renderHeaderResourceBadges(currentPreventivoDiaId);
-
-        mostrarToast('Intervención eliminada');
-      } catch (e) { alert('Error al borrar: ' + e.message); }
-    };
-
-    window.borrarSubpreventivo = async (id) => {
-      if (!canDeleteSubpreventivo()) { mostrarToast('No tienes permiso para borrar días'); return; }
-      if (!confirm('¿Seguro que deseas eliminar este día y todas sus intervenciones permanentemente?')) return;
-      try {
-        // V.12.4.1: Borrado paulatino de intervenciones
-        const intSnap = await getDocs(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos', id, 'intervenciones'));
-        for (const intDoc of intSnap.docs) {
-          // Si estaba abierta, liberamos (opcional por ser borrado, pero más seguro)
-          await deleteDoc(intDoc.ref);
-        }
-        await deleteDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', id));
-        window.clearPreventivoMapEffects(); // V.12.4.1
-        if (currentPreventivoDiaId === id) cerrarDetallePreventivo();
-        mostrarToast('Día e intervenciones eliminadas');
-      } catch (e) { alert('Error al borrar: ' + e.message); }
-    };
-
-    window.borrarPreventivo = async (id) => {
-      if (!canDeletePreventivo()) { mostrarToast('No tienes permiso para borrar preventivos'); return; }
-      if (!confirm('¿Seguro que deseas eliminar este preventivo y TODO su contenido permanentemente?')) return;
-      try {
-        // V.12.4.1: Borrado paulatino (recursivo)
-        const snap = await getDocs(collection(db, 'preventivos', id, 'subpreventivos'));
-        for (const docSub of snap.docs) {
-          const intSnap = await getDocs(collection(db, 'preventivos', id, 'subpreventivos', docSub.id, 'intervenciones'));
-          for (const intDoc of intSnap.docs) await deleteDoc(intDoc.ref);
-          await deleteDoc(docSub.ref);
-        }
-        await deleteDoc(doc(db, 'preventivos', id));
-        window.clearPreventivoMapEffects(); // V.12.4.1
-        if (currentPreventivoId === id) backToPreventivosList();
-        mostrarToast('Preventivo y todo su contenido eliminado');
-      } catch (e) { alert('Error al borrar: ' + e.message); }
-    };
-
-    let currentComIntId = null;
-    let currentComMode = 'intervencion'; // V.12.4.1: 'intervencion' o 'dia'
-
-    window.abrirComentarios = (id, mode = 'intervencion') => {
-      currentComMode = mode;
-      currentComIntId = id;
-
-      let data = null;
-      if (mode === 'intervencion') {
-        data = intervencionesCache[id];
-      } else if (mode === 'dia') {
-        data = subpreventivosCache[id];
-      } else if (mode === 'preventivo') {
-        data = preventivosCache[id];
-      }
-
-      if (!data) return;
-
-      const modalTitle = document.querySelector('#overlay-prev-comentarios .modal-title');
-      if (modalTitle) {
-        if (mode === 'intervencion') modalTitle.textContent = 'Comentarios Intervención';
-        else if (mode === 'preventivo') modalTitle.textContent = 'Comentarios de Preventivo';
-        else modalTitle.textContent = 'Registro / Incidencias del Día';
-      }
-
-      renderComentariosList(data.comentarios || []);
-      document.getElementById('prev-comentario-txt').value = '';
-
-      // V.13.8.1: Permiso para comentar
-      let canComment = true;
-      if (mode === 'intervencion') canComment = canCommentIntervencion(data);
-      else if (mode === 'dia') canComment = canCommentSubpreventivo(data);
-      else if (mode === 'preventivo') canComment = canEditPreventivo(data);
-      document.querySelector('#overlay-prev-comentarios .field').style.display = canComment ? 'block' : 'none';
-      document.querySelector('#overlay-prev-comentarios .btn-reg').style.display = canComment ? 'inline-block' : 'none';
-
-      document.getElementById('overlay-prev-comentarios').style.display = 'flex';
-    };
-
-    window.cerrarModalComentarios = () => document.getElementById('overlay-prev-comentarios').style.display = 'none';
-
-    function renderComentariosList(list) {
-      const cont = document.getElementById('prev-comentarios-list');
-      if (!cont) return;
-      if (list.length === 0) {
-        cont.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-4); font-size:12px;">Sin comentarios todavía.</div>';
-        return;
-      }
-
-      const isSuper = currentRole === 'super_admin';
-      const isElevated = currentRole === 'admin' || currentRole === 'manager' || isSuper;
-
-      cont.innerHTML = list.map((c, idx) => {
-        // V.13.8.1: Reglas solicitadas - Admin/Responsable/SuperAdmin editan, solo SuperAdmin borra
-        const canEdit = isElevated && (c.autorId !== 'system');
-        const canDelete = isSuper;
-
-        return `
+          return `
         <div style="background:var(--bg-3); padding:8px 12px; border-radius:8px; border-left:3px solid var(--accent); margin-bottom:4px; position:relative;">
           <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
             <span style="font-size:11px; font-weight:700; color:var(--accent);">${c.autor}</span>
@@ -8956,213 +8970,213 @@ ${dataContext}
           <div style="font-size:12px; line-height:1.4; white-space: pre-wrap;">${c.texto}</div>
         </div>
         `;
-      }).join('');
-      cont.scrollTop = cont.scrollHeight;
-    }
-
-    // V.13.8.1: Funciones generales para edición y borrado de comentarios en modales de lista
-    window.editarComentarioGeneral = (index) => {
-      let data = null;
-      if (currentComMode === 'intervencion') data = intervencionesCache[currentComIntId];
-      else if (currentComMode === 'dia') data = subpreventivosCache[currentComIntId];
-      else if (currentComMode === 'preventivo') data = preventivosCache[currentComIntId];
-
-      if (!data || !data.comentarios || !data.comentarios[index]) return;
-      const c = data.comentarios[index];
-
-      editingCommIntId = currentComIntId; // Reutilizamos variables
-      editingCommIndex = index;
-
-      document.getElementById('edit-com-texto').value = c.texto || '';
-
-      let d = new Date();
-      if (c.timestamp) d = new Date(c.timestamp);
-      else if (c.fecha) {
-        const parts = c.fecha.split(/[ ,]+/);
-        if (parts.length >= 2) {
-          const fParts = parts[0].split("/");
-          const hParts = parts[1].split(":");
-          if (fParts.length >= 2) d.setDate(parseInt(fParts[0]));
-        }
+        }).join('');
+        cont.scrollTop = cont.scrollHeight;
       }
 
-      document.getElementById('edit-com-date').value = d.toISOString().split('T')[0];
-      document.getElementById('edit-com-time').value = d.toTimeString().substring(0, 5);
+      // V.13.8.1: Funciones generales para edición y borrado de comentarios en modales de lista
+      window.editarComentarioGeneral = (index) => {
+        let data = null;
+        if (currentComMode === 'intervencion') data = intervencionesCache[currentComIntId];
+        else if (currentComMode === 'dia') data = subpreventivosCache[currentComIntId];
+        else if (currentComMode === 'preventivo') data = preventivosCache[currentComIntId];
 
-      const saveBtn = document.getElementById('btn-save-edit-com');
-      saveBtn.onclick = () => window.guardarEditComentario();
+        if (!data || !data.comentarios || !data.comentarios[index]) return;
+        const c = data.comentarios[index];
 
-      document.getElementById('overlay-edit-comentario').style.display = 'flex';
-    };
+        editingCommIntId = currentComIntId; // Reutilizamos variables
+        editingCommIndex = index;
 
-    window.borrarComentarioGeneral = async (index) => {
-      let data = null;
-      let pathParts = [];
+        document.getElementById('edit-com-texto').value = c.texto || '';
 
-      if (currentComMode === 'intervencion') {
-        data = intervencionesCache[currentComIntId];
-        pathParts = ['preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', currentComIntId];
-      } else if (currentComMode === 'dia') {
-        data = subpreventivosCache[currentComIntId];
-        pathParts = ['preventivos', currentPreventivoId, 'subpreventivos', currentComIntId];
-      } else if (currentComMode === 'preventivo') {
-        data = preventivosCache[currentComIntId];
-        pathParts = ['preventivos', currentComIntId];
-      }
-
-      if (!data || !data.comentarios || !data.comentarios[index]) return;
-      if (!confirm('¿Seguro que quieres borrar este comentario?')) return;
-
-      const newComms = (data.comentarios || []).filter((_, idx) => idx !== index);
-      try {
-        await updateDoc(doc(db, ...pathParts), {
-          comentarios: newComms,
-          actualizadoEn: serverTimestamp()
-        });
-        mostrarToast('Comentario borrado');
-        renderComentariosList(newComms);
-      } catch (e) { alert('Error: ' + e.message); }
-    };
-
-    window.guardarComentarioPrev = async () => {
-      const txt = document.getElementById('prev-comentario-txt').value.trim();
-      if (!txt || !currentComIntId) return;
-
-      let data = null;
-      if (currentComMode === 'intervencion') data = intervencionesCache[currentComIntId];
-      else if (currentComMode === 'dia') data = subpreventivosCache[currentComIntId];
-      else if (currentComMode === 'preventivo') data = preventivosCache[currentComIntId];
-
-      if (!data) return;
-
-      // V.13.8.1: Guard de seguridad
-      let canComment = true;
-      if (currentComMode === 'intervencion') canComment = canCommentIntervencion(data);
-      else if (currentComMode === 'dia') canComment = canCommentSubpreventivo(data);
-      else if (currentComMode === 'preventivo') canComment = canEditPreventivo(data);
-
-      if (!canComment) { mostrarToast('No tienes permiso para comentar aquí'); return; }
-
-      const comms = data.comentarios || [];
-      const newComm = {
-        texto: txt,
-        autor: currentUserDoc.nombre || 'Usuario',
-        autorId: currentUser.uid,
-        timestamp: Date.now(),
-        fecha: formatCommentFecha(new Date())
-      };
-
-      try {
-        let docRef;
-        if (currentComMode === 'intervencion') {
-          docRef = doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', currentComIntId);
-        } else if (currentComMode === 'dia') {
-          docRef = doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentComIntId);
-        } else {
-          docRef = doc(db, 'preventivos', currentComIntId);
-        }
-
-        await updateDoc(docRef, {
-          comentarios: [...comms, newComm],
-          actualizadoEn: serverTimestamp()
-        });
-        document.getElementById('prev-comentario-txt').value = '';
-        mostrarToast('Comentario guardado');
-        // V.12.4.1: Refrescar modal forzando apertura
-        if (currentComMode === 'intervencion') abrirGestionIntervencion(currentComIntId, true);
-        // renderComentariosList se actualizará por el snapshot listener de cargarSubpreventivos/cargarIntervenciones
-        // O lo forzamos aquí localmente si queremos feedback instantáneo
-        renderComentariosList([...comms, newComm]);
-
-      } catch (e) { alert('Error: ' + e.message); }
-    };
-
-    window.abrirGestionIntervencion = async (id, forceOpen = false) => {
-      let i = intervencionesCache[id];
-      let manageDiv = document.getElementById(`prev-int-manage-${id}`);
-
-      // V.12.4.1: Si no existe el panel en el DOM, intentar saltar al día correspondiente
-      if (!manageDiv && lastGlobalInterventionDocs) {
-        const doc = lastGlobalInterventionDocs.find(d => d.id === id);
-        if (doc) {
-          const parts = doc.ref.path.split('/');
-          if (parts.length >= 4) {
-            const PID = parts[1];
-            const SID = parts[3];
-            console.log(`[Oysta] Autodetectado padre: PID=${PID}, SID=${SID}. Forzando vista...`);
-
-            // Asegurar que el objeto está en cache aunque no lo hayamos "visto" en este día todavía
-            if (!intervencionesCache[id]) {
-              intervencionesCache[id] = doc.data();
-            }
-
-            if (PID !== currentPreventivoId) {
-              console.log("[Oysta] Cambiando Preventivo...");
-              window.selectPreventivo(PID);
-              await new Promise(r => setTimeout(r, 800));
-            }
-            if (SID !== currentPreventivoDiaId) {
-              console.log("[Oysta] Cambiando Subpreventivo/Día...");
-              window.selectSubpreventivo(SID);
-              await new Promise(r => setTimeout(r, 1000)); // Más margen para renderizado pesado
-            }
-
-            manageDiv = document.getElementById(`prev-int-manage-${id}`);
-            i = intervencionesCache[id];
+        let d = new Date();
+        if (c.timestamp) d = new Date(c.timestamp);
+        else if (c.fecha) {
+          const parts = c.fecha.split(/[ ,]+/);
+          if (parts.length >= 2) {
+            const fParts = parts[0].split("/");
+            const hParts = parts[1].split(":");
+            if (fParts.length >= 2) d.setDate(parseInt(fParts[0]));
           }
         }
-      }
 
-      if (!i || !manageDiv) {
-        // Reintentar una vez más tras un pequeño delay
-        console.warn(`[Oysta] Reintentando apertura de gestión para ${id}...`);
-        await new Promise(r => setTimeout(r, 500));
-        manageDiv = document.getElementById(`prev-int-manage-${id}`);
-        i = intervencionesCache[id];
+        document.getElementById('edit-com-date').value = d.toISOString().split('T')[0];
+        document.getElementById('edit-com-time').value = d.toTimeString().substring(0, 5);
+
+        const saveBtn = document.getElementById('btn-save-edit-com');
+        saveBtn.onclick = () => window.guardarEditComentario();
+
+        document.getElementById('overlay-edit-comentario').style.display = 'flex';
+      };
+
+      window.borrarComentarioGeneral = async (index) => {
+        let data = null;
+        let pathParts = [];
+
+        if (currentComMode === 'intervencion') {
+          data = intervencionesCache[currentComIntId];
+          pathParts = ['preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', currentComIntId];
+        } else if (currentComMode === 'dia') {
+          data = subpreventivosCache[currentComIntId];
+          pathParts = ['preventivos', currentPreventivoId, 'subpreventivos', currentComIntId];
+        } else if (currentComMode === 'preventivo') {
+          data = preventivosCache[currentComIntId];
+          pathParts = ['preventivos', currentComIntId];
+        }
+
+        if (!data || !data.comentarios || !data.comentarios[index]) return;
+        if (!confirm('¿Seguro que quieres borrar este comentario?')) return;
+
+        const newComms = (data.comentarios || []).filter((_, idx) => idx !== index);
+        try {
+          await updateDoc(doc(db, ...pathParts), {
+            comentarios: newComms,
+            actualizadoEn: serverTimestamp()
+          });
+          mostrarToast('Comentario borrado');
+          renderComentariosList(newComms);
+        } catch (e) { alert('Error: ' + e.message); }
+      };
+
+      window.guardarComentarioPrev = async () => {
+        const txt = document.getElementById('prev-comentario-txt').value.trim();
+        if (!txt || !currentComIntId) return;
+
+        let data = null;
+        if (currentComMode === 'intervencion') data = intervencionesCache[currentComIntId];
+        else if (currentComMode === 'dia') data = subpreventivosCache[currentComIntId];
+        else if (currentComMode === 'preventivo') data = preventivosCache[currentComIntId];
+
+        if (!data) return;
+
+        // V.13.8.1: Guard de seguridad
+        let canComment = true;
+        if (currentComMode === 'intervencion') canComment = canCommentIntervencion(data);
+        else if (currentComMode === 'dia') canComment = canCommentSubpreventivo(data);
+        else if (currentComMode === 'preventivo') canComment = canEditPreventivo(data);
+
+        if (!canComment) { mostrarToast('No tienes permiso para comentar aquí'); return; }
+
+        const comms = data.comentarios || [];
+        const newComm = {
+          texto: txt,
+          autor: currentUserDoc.nombre || 'Usuario',
+          autorId: currentUser.uid,
+          timestamp: Date.now(),
+          fecha: formatCommentFecha(new Date())
+        };
+
+        try {
+          let docRef;
+          if (currentComMode === 'intervencion') {
+            docRef = doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', currentComIntId);
+          } else if (currentComMode === 'dia') {
+            docRef = doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentComIntId);
+          } else {
+            docRef = doc(db, 'preventivos', currentComIntId);
+          }
+
+          await updateDoc(docRef, {
+            comentarios: [...comms, newComm],
+            actualizadoEn: serverTimestamp()
+          });
+          document.getElementById('prev-comentario-txt').value = '';
+          mostrarToast('Comentario guardado');
+          // V.12.4.1: Refrescar modal forzando apertura
+          if (currentComMode === 'intervencion') abrirGestionIntervencion(currentComIntId, true);
+          // renderComentariosList se actualizará por el snapshot listener de cargarSubpreventivos/cargarIntervenciones
+          // O lo forzamos aquí localmente si queremos feedback instantáneo
+          renderComentariosList([...comms, newComm]);
+
+        } catch (e) { alert('Error: ' + e.message); }
+      };
+
+      window.abrirGestionIntervencion = async (id, forceOpen = false) => {
+        let i = intervencionesCache[id];
+        let manageDiv = document.getElementById(`prev-int-manage-${id}`);
+
+        // V.12.4.1: Si no existe el panel en el DOM, intentar saltar al día correspondiente
+        if (!manageDiv && lastGlobalInterventionDocs) {
+          const doc = lastGlobalInterventionDocs.find(d => d.id === id);
+          if (doc) {
+            const parts = doc.ref.path.split('/');
+            if (parts.length >= 4) {
+              const PID = parts[1];
+              const SID = parts[3];
+              console.log(`[Oysta] Autodetectado padre: PID=${PID}, SID=${SID}. Forzando vista...`);
+
+              // Asegurar que el objeto está en cache aunque no lo hayamos "visto" en este día todavía
+              if (!intervencionesCache[id]) {
+                intervencionesCache[id] = doc.data();
+              }
+
+              if (PID !== currentPreventivoId) {
+                console.log("[Oysta] Cambiando Preventivo...");
+                window.selectPreventivo(PID);
+                await new Promise(r => setTimeout(r, 800));
+              }
+              if (SID !== currentPreventivoDiaId) {
+                console.log("[Oysta] Cambiando Subpreventivo/Día...");
+                window.selectSubpreventivo(SID);
+                await new Promise(r => setTimeout(r, 1000)); // Más margen para renderizado pesado
+              }
+
+              manageDiv = document.getElementById(`prev-int-manage-${id}`);
+              i = intervencionesCache[id];
+            }
+          }
+        }
+
         if (!i || !manageDiv) {
-          console.error(`[Oysta] Fallo total al abrir gestión: ${id}`);
+          // Reintentar una vez más tras un pequeño delay
+          console.warn(`[Oysta] Reintentando apertura de gestión para ${id}...`);
+          await new Promise(r => setTimeout(r, 500));
+          manageDiv = document.getElementById(`prev-int-manage-${id}`);
+          i = intervencionesCache[id];
+          if (!i || !manageDiv) {
+            console.error(`[Oysta] Fallo total al abrir gestión: ${id}`);
+            return;
+          }
+        }
+
+        panToPreventivoMarker(id);
+
+        // V.12.4.1: También forzamos redimensionamiento inteligente
+        window._preventivosNeedsZoom = true;
+        if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
+
+        // Si ya está abierto y no es una recarga forzada (snapshot/forceOpen), lo cerramos
+        if (manageDiv.style.display === 'block' && activeIntManageId === id && !forceOpen) {
+          manageDiv.style.display = 'none';
+          activeIntManageId = null;
           return;
         }
-      }
 
-      panToPreventivoMarker(id);
+        // Cerrar otros abiertos
+        document.querySelectorAll('[id^="prev-int-manage-"]').forEach(el => {
+          if (el.id !== `prev-int-manage-${id}`) {
+            el.style.display = 'none';
+          }
+        });
 
-      // V.12.4.1: También forzamos redimensionamiento inteligente
-      window._preventivosNeedsZoom = true;
-      if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
+        activeIntManageId = id;
 
-      // Si ya está abierto y no es una recarga forzada (snapshot/forceOpen), lo cerramos
-      if (manageDiv.style.display === 'block' && activeIntManageId === id && !forceOpen) {
-        manageDiv.style.display = 'none';
-        activeIntManageId = null;
-        return;
-      }
+        const isClosed = i.abierta === false;
+        const isOculta = i.oculta === true;
 
-      // Cerrar otros abiertos
-      document.querySelectorAll('[id^="prev-int-manage-"]').forEach(el => {
-        if (el.id !== `prev-int-manage-${id}`) {
-          el.style.display = 'none';
-        }
-      });
+        const canEdit = canEditIntervencion(i);
+        const canDelete = canDeleteIntervencion();
+        const canReopen = canReopenEverything();
 
-      activeIntManageId = id;
-
-      const isClosed = i.abierta === false;
-      const isOculta = i.oculta === true;
-
-      const canEdit = canEditIntervencion(i);
-      const canDelete = canDeleteIntervencion();
-      const canReopen = canReopenEverything();
-
-      const commsHtml = (i.comentarios || []).length > 0
-        ? `<div style="max-height:200px; overflow-y:auto; margin-bottom:10px; border-bottom:1px solid var(--border-mid); padding-bottom:10px; border-left:2px solid var(--border-mid); padding-left:10px;">
+        const commsHtml = (i.comentarios || []).length > 0
+          ? `<div style="max-height:200px; overflow-y:auto; margin-bottom:10px; border-bottom:1px solid var(--border-mid); padding-bottom:10px; border-left:2px solid var(--border-mid); padding-left:10px;">
         ${(i.comentarios || []).slice().reverse().map((c, idx) => {
-          const originalIdx = (i.comentarios.length - 1) - idx;
-          const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
-          // V.12.4.1: Admin (Responsable), Manager (Administrador) y SuperAdmin para normales. Solo SuperAdmin para Oysta.
-          const isPowerUser = (currentRole === 'admin' || currentRole === 'manager' || currentRole === 'super_admin');
-          const canManageCom = canEdit && (!isOysta ? isPowerUser : (currentRole === 'super_admin'));
-          return `
+            const originalIdx = (i.comentarios.length - 1) - idx;
+            const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
+            // V.12.4.1: Admin (Responsable), Manager (Administrador) y SuperAdmin para normales. Solo SuperAdmin para Oysta.
+            const isPowerUser = (currentRole === 'admin' || currentRole === 'manager' || currentRole === 'super_admin');
+            const canManageCom = canEdit && (!isOysta ? isPowerUser : (currentRole === 'super_admin'));
+            return `
               <div class="tl-entry" style="margin-bottom:12px; border:none; padding:0; background:transparent;">
                 <div class="tl-body" style="border:none; padding:0;">
                   <div class="tl-meta" style="display:flex; align-items:center; margin-bottom:2px;">
@@ -9177,50 +9191,50 @@ ${dataContext}
                 </div>
               </div>
             `;
-        }).join('')
-        }
+          }).join('')
+          }
              </div> `
-        : `<div style="font-size:10px; color:var(--text-4); text-align:center; padding:10px;">Sin comentarios todavía.</div> `;
+          : `<div style="font-size:10px; color:var(--text-4); text-align:center; padding:10px;">Sin comentarios todavía.</div> `;
 
-      let html = `
+        let html = `
         <div style="position:relative; display:flex; flex-direction:column; gap:10px; background:rgba(0,0,0,0.03); padding:10px; border-radius:8px; border:1px solid var(--border-mid);">
           <div style="font-size:10px; font-weight:700; color:var(--text-3); text-transform:uppercase;">Comentarios</div>
           ${commsHtml}
       `;
 
-      if (!isClosed) {
-        // Encontrar recursos ocupados en otras intervenciones ABIERTAS del mismo día
-        const occupiedResources = new Set();
-        Object.keys(intervencionesCache).forEach(k => {
-          const other = intervencionesCache[k];
-          if (k !== id && other.abierta !== false && !other.oculta) {
-            (other.recursosAsignados || []).forEach(r => occupiedResources.add(r));
-          }
-        });
+        if (!isClosed) {
+          // Encontrar recursos ocupados en otras intervenciones ABIERTAS del mismo día
+          const occupiedResources = new Set();
+          Object.keys(intervencionesCache).forEach(k => {
+            const other = intervencionesCache[k];
+            if (k !== id && other.abierta !== false && !other.oculta) {
+              (other.recursosAsignados || []).forEach(r => occupiedResources.add(r));
+            }
+          });
 
-        // Recursos totales del día
-        const dayResources = subpreventivosCache[currentPreventivoDiaId]?.recursos || [];
-        const availableResources = dayResources.filter(r => !occupiedResources.has(r) && !(i.recursosAsignados || []).includes(r));
+          // Recursos totales del día
+          const dayResources = subpreventivosCache[currentPreventivoDiaId]?.recursos || [];
+          const availableResources = dayResources.filter(r => !occupiedResources.has(r) && !(i.recursosAsignados || []).includes(r));
 
-        // Construir lista de recursos disponibles con iconos y ORDENADOS
+          // Construir lista de recursos disponibles con iconos y ORDENADOS
 
-        const resListHtml = availableResources.length > 0
-          ? availableResources
-            .sort((a, b) => {
-              const va = window.globalVehiculos && window.globalVehiculos[a];
-              const vb = window.globalVehiculos && window.globalVehiculos[b];
-              return getVehiclePriority(va?.tipo) - getVehiclePriority(vb?.tipo);
-            })
-            .map(rvId => {
-              const v = window.globalVehiculos && window.globalVehiculos[rvId];
-              let iconUrl = 'assets/icons/icon_transp_personal.png';
-              if (v?.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
-              else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
-              else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
-              else if (v?.tipo?.includes('Turismo')) iconUrl = 'assets/icons/icon_turismo.png';
-              else if (v?.tipo?.includes('mixto')) iconUrl = 'assets/icons/icon_transp_mixto.png';
+          const resListHtml = availableResources.length > 0
+            ? availableResources
+              .sort((a, b) => {
+                const va = window.globalVehiculos && window.globalVehiculos[a];
+                const vb = window.globalVehiculos && window.globalVehiculos[b];
+                return getVehiclePriority(va?.tipo) - getVehiclePriority(vb?.tipo);
+              })
+              .map(rvId => {
+                const v = window.globalVehiculos && window.globalVehiculos[rvId];
+                let iconUrl = 'assets/icons/icon_transp_personal.png';
+                if (v?.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
+                else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
+                else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
+                else if (v?.tipo?.includes('Turismo')) iconUrl = 'assets/icons/icon_turismo.png';
+                else if (v?.tipo?.includes('mixto')) iconUrl = 'assets/icons/icon_transp_mixto.png';
 
-              return `
+                return `
         <div class="res-item-row" style="display:flex; align-items:center; gap:8px; padding:4px 6px; background:var(--bg-1); border:1px solid var(--border-mid); border-radius:4px; ${canEdit ? 'cursor:pointer;' : 'opacity:0.6; cursor:not-allowed;'} transition:all 0.2s;"
       ${canEdit ? `onclick="asignarRecursoIntervencion('${id}', '${rvId}')" onmouseover="this.style.borderColor='var(--accent)';" onmouseout="this.style.borderColor='var(--border-mid)';" title="Añadir ${v?.alias || v?.indicativo || rvId}"` : ''}>
         <img src="${iconUrl}" style="width:14px; height:14px; opacity:0.8;">
@@ -9228,20 +9242,20 @@ ${dataContext}
           ${canEdit ? '<span style="font-size:10px; color:var(--accent); font-weight:700;">+</span>' : ''}
         </div>
       `;
-            }).join('')
-          : `<div style="font-size:10px; color:var(--text-4); text-align:center; padding:6px;">No hay más vehículos libres para este día.</div> `;
+              }).join('')
+            : `<div style="font-size:10px; color:var(--text-4); text-align:center; padding:6px;">No hay más vehículos libres para este día.</div> `;
 
-        // V.12.4.1: Renderizar recursos YA ASIGNADOS con opción de retirar
-        const assignedRecsHtml = (i.recursosAsignados || []).map(rvId => {
-          const v = window.globalVehiculos && window.globalVehiculos[rvId];
-          let iconUrl = 'assets/icons/icon_transp_personal.png';
-          if (v?.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
-          else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
-          else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
-          else if (v?.tipo?.includes('Turismo')) iconUrl = 'assets/icons/icon_turismo.png';
-          else if (v?.tipo?.includes('mixto')) iconUrl = 'assets/icons/icon_transp_mixto.png';
+          // V.12.4.1: Renderizar recursos YA ASIGNADOS con opción de retirar
+          const assignedRecsHtml = (i.recursosAsignados || []).map(rvId => {
+            const v = window.globalVehiculos && window.globalVehiculos[rvId];
+            let iconUrl = 'assets/icons/icon_transp_personal.png';
+            if (v?.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
+            else if (v?.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
+            else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
+            else if (v?.tipo?.includes('Turismo')) iconUrl = 'assets/icons/icon_turismo.png';
+            else if (v?.tipo?.includes('mixto')) iconUrl = 'assets/icons/icon_transp_mixto.png';
 
-          return `
+            return `
             <div class="res-item-row" style="display:flex; align-items:center; gap:8px; padding:4px 6px; background:var(--accent-light); border:1px solid var(--accent); border-radius:4px; opacity:0.9;">
               <img src="${iconUrl}" style="width:14px; height:14px;">
               <span style="font-size:11px; font-weight:700; flex:1; color:var(--text-1);">${v?.alias || v?.indicativo || rvId}</span>
@@ -9249,9 +9263,9 @@ ${dataContext}
                       onclick="retirarRecursoIntervencion('${id}', '${rvId}')" title="Retirar">×</button>
             </div>
           `;
-        }).join('');
+          }).join('');
 
-        html += `
+          html += `
           <div style="margin-top:4px;">
             <div class="field-lbl" style="font-size:9px; margin-bottom:4px;">Añadir Comentario</div>
             <div style="display:flex; flex-direction:column; gap:6px;">
@@ -9268,9 +9282,9 @@ ${dataContext}
           </div>
           </div>
         `;
-      } else {
-        // CERRADA: Ocultar/Mostrar
-        html += `
+        } else {
+          // CERRADA: Ocultar/Mostrar
+          html += `
         <div style="display:flex; flex-direction:column; gap:8px;">
             <div style="font-size:10px; color:var(--text-4); text-align:center; padding:10px;">Esta intervención está cerrada.</div>
             <div style="margin-top:10px;">
@@ -9278,556 +9292,556 @@ ${dataContext}
             </div>
           </div>
         `;
-      }
-
-      html += `</div> `;
-      manageDiv.innerHTML = html;
-      manageDiv.style.display = 'block';
-    };
-
-    window.guardarComentarioInline = async (id) => {
-      const i = intervencionesCache[id];
-      if (!canCommentIntervencion(i)) { mostrarToast('No tienes permiso para comentar aquí'); return; }
-      const input = document.getElementById(`prev-inline-comm-${id}`);
-      const txt = input.value.trim();
-      if (!txt) return;
-
-      const comms = i.comentarios || [];
-      const newComm = {
-        texto: txt,
-        autor: currentUserDoc.nombre || 'Usuario',
-        autorId: currentUser.uid,
-        timestamp: Date.now(),
-        fecha: formatCommentFecha(new Date())
-      };
-
-      try {
-        await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
-          comentarios: [...comms, newComm],
-          actualizadoEn: serverTimestamp()
-        });
-        input.value = '';
-        mostrarToast('Comentario añadido');
-      } catch (e) { alert('Error: ' + e.message); }
-    };
-
-    let editingCommIntId = null;
-    let editingCommIndex = null;
-
-    window.cerrarModalEditComentario = () => {
-      document.getElementById('overlay-edit-comentario').style.display = 'none';
-      editingCommIntId = null;
-      editingCommIndex = null;
-    };
-
-    window.borrarComentarioInline = async (id, index) => {
-      const i = intervencionesCache[id];
-      if (!i || !i.comentarios || !i.comentarios[index]) return;
-      const c = i.comentarios[index];
-
-      // Permisos V.12.4.1
-      if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso'); return; }
-
-      const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
-      const isPowerUser = (currentRole === 'admin' || currentRole === 'manager' || currentRole === 'super_admin');
-
-      if (!isOysta && !isPowerUser) {
-        mostrarToast('No tienes permiso para borrar comentarios');
-        return;
-      }
-      if (isOysta && currentRole !== 'super_admin') {
-        mostrarToast('Solo Super Admin puede borrar avisos de Oysta');
-        return;
-      }
-
-      if (!confirm('¿Seguro que quieres borrar este comentario?')) return;
-
-      const newComms = (i.comentarios || []).filter((_, idx) => idx !== index);
-
-      try {
-        await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
-          comentarios: newComms,
-          actualizadoEn: serverTimestamp()
-        });
-        mostrarToast('Comentario borrado');
-      } catch (e) { alert('Error: ' + e.message); }
-    };
-
-    window.editarComentarioInline = async (id, index) => {
-      const i = intervencionesCache[id];
-      if (!i || !i.comentarios || !i.comentarios[index]) return;
-      const c = i.comentarios[index];
-
-      // Permiso base (V.12.4.1)
-      if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para editar comentarios'); return; }
-
-      // Restricción Oysta (V.12.4.1)
-      const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
-      if (isOysta && currentRole !== 'super_admin') {
-        mostrarToast('Solo los Super Administradores pueden editar avisos de Oysta');
-        return;
-      }
-
-      editingCommIntId = id;
-      editingCommIndex = index;
-
-      document.getElementById('edit-com-texto').value = c.texto || '';
-
-      // Tentar a reconstruir data a partir do timestamp ou string de fecha
-      let d = new Date();
-      if (c.timestamp) d = new Date(c.timestamp);
-      else if (c.fecha) {
-        // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.12.4.1)
-        const parts = c.fecha.split(/[ ,]+/);
-        if (parts.length >= 2) {
-          const fParts = parts[0].split("/");
-          const hParts = parts[1].split(":");
-          if (fParts.length >= 2) {
-            d.setDate(parseInt(fParts[0]));
-            d.setMonth(parseInt(fParts[1]) - 1);
-            if (fParts.length === 3) d.setFullYear(parseInt(fParts[2]));
-          }
-          if (hParts.length >= 2) {
-            d.setHours(parseInt(hParts[0]));
-            d.setMinutes(parseInt(hParts[1]));
-          }
         }
-      }
 
-      const isoDate = d.toISOString().split('T')[0];
-      const isoTime = d.toTimeString().substring(0, 5);
-
-      document.getElementById('edit-com-date').value = isoDate;
-      document.getElementById('edit-com-time').value = isoTime;
-
-      const saveBtn = document.getElementById('btn-save-edit-com');
-      saveBtn.onclick = () => window.guardarEditComentario();
-
-      document.getElementById('overlay-edit-comentario').style.display = 'flex';
-    };
-
-    window.guardarEditComentario = async () => {
-      if (!editingCommIntId || editingCommIndex === null) return;
-
-      const id = editingCommIntId;
-      const index = editingCommIndex;
-
-      let data = null;
-      let pathParts = [];
-      if (currentComMode === 'intervencion') {
-        data = intervencionesCache[id];
-        pathParts = ['preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id];
-      } else if (currentComMode === 'dia') {
-        data = subpreventivosCache[id];
-        pathParts = ['preventivos', currentPreventivoId, 'subpreventivos', id];
-      } else if (currentComMode === 'preventivo') {
-        data = preventivosCache[id];
-        pathParts = ['preventivos', id];
-      }
-
-      if (!data) return;
-
-      const newText = document.getElementById('edit-com-texto').value.trim();
-      const newDate = document.getElementById('edit-com-date').value;
-      const newTime = document.getElementById('edit-com-time').value;
-
-      if (!newText || !newDate || !newTime) return alert('Todos los campos son obligatorios');
-
-      const fullDate = new Date(`${newDate}T${newTime}`);
-      const formattedFecha = formatCommentFecha(fullDate);
-
-      const newComms = [...data.comentarios];
-      newComms[index] = {
-        ...newComms[index],
-        texto: newText,
-        fecha: formattedFecha,
-        timestamp: fullDate.getTime(),
-        editado: true,
-        editadoEn: Date.now()
+        html += `</div> `;
+        manageDiv.innerHTML = html;
+        manageDiv.style.display = 'block';
       };
 
-      try {
-        await updateDoc(doc(db, ...pathParts), {
-          comentarios: newComms,
-          actualizadoEn: serverTimestamp()
-        });
-        mostrarToast('Comentario actualizado');
-        if (typeof window.cerrarModalEditComentario === 'function') window.cerrarModalEditComentario();
-        renderComentariosList(newComms);
-        if (currentComMode === 'intervencion' && activeIntManageId === id) abrirGestionIntervencion(id, true);
-      } catch (e) { console.error(e); alert('Error al guardar: ' + e.message); }
-    };
+      window.guardarComentarioInline = async (id) => {
+        const i = intervencionesCache[id];
+        if (!canCommentIntervencion(i)) { mostrarToast('No tienes permiso para comentar aquí'); return; }
+        const input = document.getElementById(`prev-inline-comm-${id}`);
+        const txt = input.value.trim();
+        if (!txt) return;
 
-    window.cerrarModalGestionInt = () => { /* No longer used in V.12.4.1 */ };
+        const comms = i.comentarios || [];
+        const newComm = {
+          texto: txt,
+          autor: currentUserDoc.nombre || 'Usuario',
+          autorId: currentUser.uid,
+          timestamp: Date.now(),
+          fecha: formatCommentFecha(new Date())
+        };
 
-    window.asignarRecursoIntervencion = async (id, recurso) => {
-      const i = intervencionesCache[id];
-      if (!i) return;
-      const v = window.globalVehiculos && window.globalVehiculos[recurso];
-      const indicativo = v?.alias || v?.indicativo || recurso;
-
-      let icon = '🚐';
-      if (v?.tipo === 'Camión') icon = '🚒';
-      else if (v?.tipo === 'Ambulancia') icon = '🚑';
-      else if (v?.tipo?.includes('Terreno')) icon = '🛻';
-
-      const logComm = {
-        texto: `${icon} Recurso asignado: ${indicativo}`,
-        autor: 'Sist. Oysta',
-        autorId: 'system',
-        timestamp: Date.now(),
-        fecha: formatCommentFecha(new Date())
+        try {
+          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
+            comentarios: [...comms, newComm],
+            actualizadoEn: serverTimestamp()
+          });
+          input.value = '';
+          mostrarToast('Comentario añadido');
+        } catch (e) { alert('Error: ' + e.message); }
       };
 
-      const recs = [...(i.recursosAsignados || []), recurso];
-      const comms = [...(i.comentarios || []), logComm];
+      let editingCommIntId = null;
+      let editingCommIndex = null;
 
-      try {
-        await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
-          recursosAsignados: recs,
-          comentarios: comms,
-          actualizadoEn: serverTimestamp()
-        });
-        mostrarToast('Recurso asignado');
-        // V.12.4.1: Refrescar modal forzando apertura
-        abrirGestionIntervencion(id, true);
-      } catch (e) { console.error(e); }
-    };
-
-    window.retirarRecursoIntervencion = async (id, recurso) => {
-      const i = intervencionesCache[id];
-      if (!i) return;
-      const v = window.globalVehiculos && window.globalVehiculos[recurso];
-      const indicativo = v?.alias || v?.indicativo || recurso;
-
-      let icon = '🚐';
-      if (v?.tipo === 'Camión') icon = '🚒';
-      else if (v?.tipo === 'Ambulancia') icon = '🚑';
-      else if (v?.tipo?.includes('Terreno')) icon = '🛻';
-
-      const logComm = {
-        texto: `📤 Recurso retirado: ${indicativo}`,
-        autor: 'Sist. Oysta',
-        autorId: 'system',
-        timestamp: Date.now(),
-        fecha: formatCommentFecha(new Date())
+      window.cerrarModalEditComentario = () => {
+        document.getElementById('overlay-edit-comentario').style.display = 'none';
+        editingCommIntId = null;
+        editingCommIndex = null;
       };
 
-      const recs = (i.recursosAsignados || []).filter(r => r !== recurso);
-      const comms = [...(i.comentarios || []), logComm];
+      window.borrarComentarioInline = async (id, index) => {
+        const i = intervencionesCache[id];
+        if (!i || !i.comentarios || !i.comentarios[index]) return;
+        const c = i.comentarios[index];
 
-      try {
-        await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
-          recursosAsignados: recs,
-          comentarios: comms,
-          actualizadoEn: serverTimestamp()
-        });
-        mostrarToast('Recurso retirado');
-        // V.12.4.1: Refrescar modal forzando apertura
-        abrirGestionIntervencion(id, true);
-      } catch (e) { console.error(e); }
-    };
+        // Permisos V.12.4.1
+        if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso'); return; }
 
-    window.handleSearchPreventivos = (q) => {
-      document.getElementById('prev-search-clear').style.display = q ? 'block' : 'none';
-      const cards = document.querySelectorAll('#preventivos-list .op-card');
-      cards.forEach(c => {
-        const txt = c.textContent.toLowerCase();
-        c.style.display = txt.includes(q.toLowerCase()) ? 'block' : 'none';
-      });
-    };
+        const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
+        const isPowerUser = (currentRole === 'admin' || currentRole === 'manager' || currentRole === 'super_admin');
 
-    window.clearSearchPreventivos = () => {
-      const i = document.getElementById('prev-search');
-      i.value = '';
-      window.handleSearchPreventivos('');
-      i.focus();
-    };
-
-
-    // breescribir el renderDetalle y cerrarDetalle para manejar el botón de mapa en mobile
-    const originalAbrirDetalle = window.abrirDetalle;
-    window.abrirDetalle = (id) => {
-      originalAbrirDetalle(id);
-      if (window.innerWidth <= 900) {
-        document.getElementById('btn-mobile-map-toggle').style.display = 'none';
-      }
-    };
-
-    const originalCerrarDetalle = window.cerrarDetalle;
-    window.cerrarDetalle = () => {
-      originalCerrarDetalle();
-      if (window.innerWidth <= 900 && filtro === 'all') { // O ajusta según lógica
-        document.getElementById('btn-mobile-map-toggle').style.display = 'block';
-      } else if (window.innerWidth <= 900) {
-        // Asegurar que si estamos en operaciones se vea el botón
-        const activeSec = document.querySelector('.nav-item.on')?.dataset.sec || 'operaciones';
-        if (activeSec === 'operaciones') document.getElementById('btn-mobile-map-toggle').style.display = 'block';
-      }
-    };
-
-    // ── LOGS ADMIN JS (V.12.4.1) ────────────────────────────────────────
-    window.abrirModalLogsAdmin = () => {
-      document.getElementById('overlay-logs-admin').classList.add('open');
-    };
-    window.cerrarModalLogsAdmin = () => {
-      document.getElementById('overlay-logs-admin').classList.remove('open');
-    };
-
-    window.abrirModalOystaLogs = () => {
-      cerrarModalLogsAdmin();
-      document.getElementById('overlay-oysta-logs').classList.add('open');
-      cargarOystaLogs();
-    };
-    window.cerrarModalOystaLogs = () => {
-      document.getElementById('overlay-oysta-logs').classList.remove('open');
-    };
-
-    window.cargarOystaLogs = async () => {
-      const tbody = document.getElementById('oysta-logs-tbody');
-      const loader = document.getElementById('oysta-logs-loading');
-      const emptyMsg = document.getElementById('oysta-logs-empty');
-
-      tbody.innerHTML = '';
-      loader.style.display = 'block';
-      emptyMsg.style.display = 'none';
-
-      try {
-        const q = query(collection(db, 'oysta_logs'), orderBy('fecha', 'desc'), limit(50));
-        const snap = await getDocs(q);
-        loader.style.display = 'none';
-
-        if (snap.empty) {
-          emptyMsg.style.display = 'block';
+        if (!isOysta && !isPowerUser) {
+          mostrarToast('No tienes permiso para borrar comentarios');
+          return;
+        }
+        if (isOysta && currentRole !== 'super_admin') {
+          mostrarToast('Solo Super Admin puede borrar avisos de Oysta');
           return;
         }
 
-        snap.forEach(docSnap => {
-          const d = docSnap.data();
-          const tr = document.createElement('tr');
+        if (!confirm('¿Seguro que quieres borrar este comentario?')) return;
 
-          let fechaStr = '--';
-          if (d.fecha) {
-            const date = d.fecha.toDate();
-            fechaStr = date.toLocaleString('es-ES');
+        const newComms = (i.comentarios || []).filter((_, idx) => idx !== index);
+
+        try {
+          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
+            comentarios: newComms,
+            actualizadoEn: serverTimestamp()
+          });
+          mostrarToast('Comentario borrado');
+        } catch (e) { alert('Error: ' + e.message); }
+      };
+
+      window.editarComentarioInline = async (id, index) => {
+        const i = intervencionesCache[id];
+        if (!i || !i.comentarios || !i.comentarios[index]) return;
+        const c = i.comentarios[index];
+
+        // Permiso base (V.12.4.1)
+        if (!canEditIntervencion(i)) { mostrarToast('No tienes permiso para editar comentarios'); return; }
+
+        // Restricción Oysta (V.12.4.1)
+        const isOysta = (c.autorId === 'system' || c.autor === 'Sist. Oysta');
+        if (isOysta && currentRole !== 'super_admin') {
+          mostrarToast('Solo los Super Administradores pueden editar avisos de Oysta');
+          return;
+        }
+
+        editingCommIntId = id;
+        editingCommIndex = index;
+
+        document.getElementById('edit-com-texto').value = c.texto || '';
+
+        // Tentar a reconstruir data a partir do timestamp ou string de fecha
+        let d = new Date();
+        if (c.timestamp) d = new Date(c.timestamp);
+        else if (c.fecha) {
+          // Soporte para dd/mm/aaaa hh:mm y dd/mm, hh:mm (V.12.4.1)
+          const parts = c.fecha.split(/[ ,]+/);
+          if (parts.length >= 2) {
+            const fParts = parts[0].split("/");
+            const hParts = parts[1].split(":");
+            if (fParts.length >= 2) {
+              d.setDate(parseInt(fParts[0]));
+              d.setMonth(parseInt(fParts[1]) - 1);
+              if (fParts.length === 3) d.setFullYear(parseInt(fParts[2]));
+            }
+            if (hParts.length >= 2) {
+              d.setHours(parseInt(hParts[0]));
+              d.setMinutes(parseInt(hParts[1]));
+            }
+          }
+        }
+
+        const isoDate = d.toISOString().split('T')[0];
+        const isoTime = d.toTimeString().substring(0, 5);
+
+        document.getElementById('edit-com-date').value = isoDate;
+        document.getElementById('edit-com-time').value = isoTime;
+
+        const saveBtn = document.getElementById('btn-save-edit-com');
+        saveBtn.onclick = () => window.guardarEditComentario();
+
+        document.getElementById('overlay-edit-comentario').style.display = 'flex';
+      };
+
+      window.guardarEditComentario = async () => {
+        if (!editingCommIntId || editingCommIndex === null) return;
+
+        const id = editingCommIntId;
+        const index = editingCommIndex;
+
+        let data = null;
+        let pathParts = [];
+        if (currentComMode === 'intervencion') {
+          data = intervencionesCache[id];
+          pathParts = ['preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id];
+        } else if (currentComMode === 'dia') {
+          data = subpreventivosCache[id];
+          pathParts = ['preventivos', currentPreventivoId, 'subpreventivos', id];
+        } else if (currentComMode === 'preventivo') {
+          data = preventivosCache[id];
+          pathParts = ['preventivos', id];
+        }
+
+        if (!data) return;
+
+        const newText = document.getElementById('edit-com-texto').value.trim();
+        const newDate = document.getElementById('edit-com-date').value;
+        const newTime = document.getElementById('edit-com-time').value;
+
+        if (!newText || !newDate || !newTime) return alert('Todos los campos son obligatorios');
+
+        const fullDate = new Date(`${newDate}T${newTime}`);
+        const formattedFecha = formatCommentFecha(fullDate);
+
+        const newComms = [...data.comentarios];
+        newComms[index] = {
+          ...newComms[index],
+          texto: newText,
+          fecha: formattedFecha,
+          timestamp: fullDate.getTime(),
+          editado: true,
+          editadoEn: Date.now()
+        };
+
+        try {
+          await updateDoc(doc(db, ...pathParts), {
+            comentarios: newComms,
+            actualizadoEn: serverTimestamp()
+          });
+          mostrarToast('Comentario actualizado');
+          if (typeof window.cerrarModalEditComentario === 'function') window.cerrarModalEditComentario();
+          renderComentariosList(newComms);
+          if (currentComMode === 'intervencion' && activeIntManageId === id) abrirGestionIntervencion(id, true);
+        } catch (e) { console.error(e); alert('Error al guardar: ' + e.message); }
+      };
+
+      window.cerrarModalGestionInt = () => { /* No longer used in V.12.4.1 */ };
+
+      window.asignarRecursoIntervencion = async (id, recurso) => {
+        const i = intervencionesCache[id];
+        if (!i) return;
+        const v = window.globalVehiculos && window.globalVehiculos[recurso];
+        const indicativo = v?.alias || v?.indicativo || recurso;
+
+        let icon = '🚐';
+        if (v?.tipo === 'Camión') icon = '🚒';
+        else if (v?.tipo === 'Ambulancia') icon = '🚑';
+        else if (v?.tipo?.includes('Terreno')) icon = '🛻';
+
+        const logComm = {
+          texto: `${icon} Recurso asignado: ${indicativo}`,
+          autor: 'Sist. Oysta',
+          autorId: 'system',
+          timestamp: Date.now(),
+          fecha: formatCommentFecha(new Date())
+        };
+
+        const recs = [...(i.recursosAsignados || []), recurso];
+        const comms = [...(i.comentarios || []), logComm];
+
+        try {
+          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
+            recursosAsignados: recs,
+            comentarios: comms,
+            actualizadoEn: serverTimestamp()
+          });
+          mostrarToast('Recurso asignado');
+          // V.12.4.1: Refrescar modal forzando apertura
+          abrirGestionIntervencion(id, true);
+        } catch (e) { console.error(e); }
+      };
+
+      window.retirarRecursoIntervencion = async (id, recurso) => {
+        const i = intervencionesCache[id];
+        if (!i) return;
+        const v = window.globalVehiculos && window.globalVehiculos[recurso];
+        const indicativo = v?.alias || v?.indicativo || recurso;
+
+        let icon = '🚐';
+        if (v?.tipo === 'Camión') icon = '🚒';
+        else if (v?.tipo === 'Ambulancia') icon = '🚑';
+        else if (v?.tipo?.includes('Terreno')) icon = '🛻';
+
+        const logComm = {
+          texto: `📤 Recurso retirado: ${indicativo}`,
+          autor: 'Sist. Oysta',
+          autorId: 'system',
+          timestamp: Date.now(),
+          fecha: formatCommentFecha(new Date())
+        };
+
+        const recs = (i.recursosAsignados || []).filter(r => r !== recurso);
+        const comms = [...(i.comentarios || []), logComm];
+
+        try {
+          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id), {
+            recursosAsignados: recs,
+            comentarios: comms,
+            actualizadoEn: serverTimestamp()
+          });
+          mostrarToast('Recurso retirado');
+          // V.12.4.1: Refrescar modal forzando apertura
+          abrirGestionIntervencion(id, true);
+        } catch (e) { console.error(e); }
+      };
+
+      window.handleSearchPreventivos = (q) => {
+        document.getElementById('prev-search-clear').style.display = q ? 'block' : 'none';
+        const cards = document.querySelectorAll('#preventivos-list .op-card');
+        cards.forEach(c => {
+          const txt = c.textContent.toLowerCase();
+          c.style.display = txt.includes(q.toLowerCase()) ? 'block' : 'none';
+        });
+      };
+
+      window.clearSearchPreventivos = () => {
+        const i = document.getElementById('prev-search');
+        i.value = '';
+        window.handleSearchPreventivos('');
+        i.focus();
+      };
+
+
+      // breescribir el renderDetalle y cerrarDetalle para manejar el botón de mapa en mobile
+      const originalAbrirDetalle = window.abrirDetalle;
+      window.abrirDetalle = (id) => {
+        originalAbrirDetalle(id);
+        if (window.innerWidth <= 900) {
+          document.getElementById('btn-mobile-map-toggle').style.display = 'none';
+        }
+      };
+
+      const originalCerrarDetalle = window.cerrarDetalle;
+      window.cerrarDetalle = () => {
+        originalCerrarDetalle();
+        if (window.innerWidth <= 900 && filtro === 'all') { // O ajusta según lógica
+          document.getElementById('btn-mobile-map-toggle').style.display = 'block';
+        } else if (window.innerWidth <= 900) {
+          // Asegurar que si estamos en operaciones se vea el botón
+          const activeSec = document.querySelector('.nav-item.on')?.dataset.sec || 'operaciones';
+          if (activeSec === 'operaciones') document.getElementById('btn-mobile-map-toggle').style.display = 'block';
+        }
+      };
+
+      // ── LOGS ADMIN JS (V.12.4.1) ────────────────────────────────────────
+      window.abrirModalLogsAdmin = () => {
+        document.getElementById('overlay-logs-admin').classList.add('open');
+      };
+      window.cerrarModalLogsAdmin = () => {
+        document.getElementById('overlay-logs-admin').classList.remove('open');
+      };
+
+      window.abrirModalOystaLogs = () => {
+        cerrarModalLogsAdmin();
+        document.getElementById('overlay-oysta-logs').classList.add('open');
+        cargarOystaLogs();
+      };
+      window.cerrarModalOystaLogs = () => {
+        document.getElementById('overlay-oysta-logs').classList.remove('open');
+      };
+
+      window.cargarOystaLogs = async () => {
+        const tbody = document.getElementById('oysta-logs-tbody');
+        const loader = document.getElementById('oysta-logs-loading');
+        const emptyMsg = document.getElementById('oysta-logs-empty');
+
+        tbody.innerHTML = '';
+        loader.style.display = 'block';
+        emptyMsg.style.display = 'none';
+
+        try {
+          const q = query(collection(db, 'oysta_logs'), orderBy('fecha', 'desc'), limit(50));
+          const snap = await getDocs(q);
+          loader.style.display = 'none';
+
+          if (snap.empty) {
+            emptyMsg.style.display = 'block';
+            return;
           }
 
-          tr.innerHTML = `
+          snap.forEach(docSnap => {
+            const d = docSnap.data();
+            const tr = document.createElement('tr');
+
+            let fechaStr = '--';
+            if (d.fecha) {
+              const date = d.fecha.toDate();
+              fechaStr = date.toLocaleString('es-ES');
+            }
+
+            tr.innerHTML = `
             <td style="font-family: monospace;">${fechaStr}</td>
             <td style="color: var(--text-2); font-weight: 600;">${d.usuario || 'Invitado'}</td>
             <td style="font-size: 11px; opacity: 0.8;">${d.detalle || ''}</td>
           `;
-          tbody.appendChild(tr);
-        });
+            tbody.appendChild(tr);
+          });
 
-      } catch (e) {
-        console.error(e);
-        mostrarToast('Error al cargar logs');
-      }
-    };
+        } catch (e) {
+          console.error(e);
+          mostrarToast('Error al cargar logs');
+        }
+      };
 
-    window.borrarOystaLogs = async () => {
-      if (!confirm('¿Seguro que deseas ELIMINAR PERMANENTEMENTE todos los registros de logs de Oysta? Esta acción es irreversible.')) return;
+      window.borrarOystaLogs = async () => {
+        if (!confirm('¿Seguro que deseas ELIMINAR PERMANENTEMENTE todos los registros de logs de Oysta? Esta acción es irreversible.')) return;
 
-      try {
-        mostrarToast('Iniciando purga de logs...');
-        const purgeOystaLogs = httpsCallable(functions, 'purgeOystaLogs');
-        const res = await purgeOystaLogs();
-
-        mostrarToast(res.data.message || `Éxito: logs eliminados`);
-        cerrarModalOystaLogs();
-      } catch (e) {
-        console.error("Purge Error:", e);
-        const detail = e.details ? JSON.stringify(e.details) : '';
-        alert(`Error al purgar logs: [${e.code}] ${e.message} ${detail}`);
-      }
-    };
-
-    // ── API USAGE LOGIC (V.12.4.1) ──────────────────────────────────────
-    window.abrirModalApiUsage = () => {
-      cerrarModalLogsAdmin();
-      document.getElementById('overlay-api-usage').classList.add('open');
-      cargarApiUsage();
-    };
-    window.cerrarModalApiUsage = () => {
-      document.getElementById('overlay-api-usage').classList.remove('open');
-    };
-
-    // V.12.4.1: Gestión de Conmutación de Google Maps
-    window.guardarMapsConfig = async () => {
-      if (currentRole !== 'super_admin') {
-        mostrarToast("Solo los Super Administradores pueden cambiar la configuración.");
-        return;
-      }
-
-      const active = document.getElementById('maps-active-key').value;
-
-      try {
-        await setDoc(doc(db, 'config', 'maps'), {
-          activeKey: active,
-          actualizadoPor: currentUser.uid,
-          actualizadoEn: serverTimestamp()
-        }, { merge: true });
-        mostrarToast("Cuenta de mapas cambiada. Recarga la página (F5) para aplicar.");
-      } catch (e) {
-        console.error(e);
-        alert("Error al guardar: " + e.message);
-      }
-    };
-
-    window.incrementApiUsage = async (type, amount = 1) => {
-      const now = new Date();
-      const monthId = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const dayId = `${monthId}-${String(now.getDate()).padStart(2, '0')}`;
-
-      try {
-        // Guardamos por mes (para Maps) y por día (Gemini/Firestore)
-        const monthRef = doc(db, 'api_usage', monthId);
-        const dayRef = doc(db, 'api_usage', dayId);
-
-        const updates = {};
-        updates[type] = increment(amount);
-
-        // Actualizar ambos (si falla alguno no importa demasiado, es para estadística)
-        await Promise.all([
-          setDoc(monthRef, updates, { merge: true }),
-          setDoc(dayRef, updates, { merge: true })
-        ]);
-      } catch (e) {
-        console.warn("Error incrementando uso API:", e);
-      }
-    };
-
-    window.cargarApiUsage = async () => {
-      const statusEl = document.getElementById('api-sync-status');
-      if (statusEl) statusEl.textContent = '⏳ Sincronizando con Google...';
-
-      // 3. CARGAR CONFIGURACIÓN MAPS (V.12.4.1)
-      if (currentRole === 'super_admin') {
         try {
-          const mSnap = await getDoc(doc(db, 'config', 'maps'));
-          if (mSnap.exists()) {
-            const mCfg = mSnap.data();
-            const elA = document.getElementById('maps-active-key');
-            if (elA) elA.value = mCfg.activeKey || 'key1';
+          mostrarToast('Iniciando purga de logs...');
+          const purgeOystaLogs = httpsCallable(functions, 'purgeOystaLogs');
+          const res = await purgeOystaLogs();
+
+          mostrarToast(res.data.message || `Éxito: logs eliminados`);
+          cerrarModalOystaLogs();
+        } catch (e) {
+          console.error("Purge Error:", e);
+          const detail = e.details ? JSON.stringify(e.details) : '';
+          alert(`Error al purgar logs: [${e.code}] ${e.message} ${detail}`);
+        }
+      };
+
+      // ── API USAGE LOGIC (V.12.4.1) ──────────────────────────────────────
+      window.abrirModalApiUsage = () => {
+        cerrarModalLogsAdmin();
+        document.getElementById('overlay-api-usage').classList.add('open');
+        cargarApiUsage();
+      };
+      window.cerrarModalApiUsage = () => {
+        document.getElementById('overlay-api-usage').classList.remove('open');
+      };
+
+      // V.12.4.1: Gestión de Conmutación de Google Maps
+      window.guardarMapsConfig = async () => {
+        if (currentRole !== 'super_admin') {
+          mostrarToast("Solo los Super Administradores pueden cambiar la configuración.");
+          return;
+        }
+
+        const active = document.getElementById('maps-active-key').value;
+
+        try {
+          await setDoc(doc(db, 'config', 'maps'), {
+            activeKey: active,
+            actualizadoPor: currentUser.uid,
+            actualizadoEn: serverTimestamp()
+          }, { merge: true });
+          mostrarToast("Cuenta de mapas cambiada. Recarga la página (F5) para aplicar.");
+        } catch (e) {
+          console.error(e);
+          alert("Error al guardar: " + e.message);
+        }
+      };
+
+      window.incrementApiUsage = async (type, amount = 1) => {
+        const now = new Date();
+        const monthId = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const dayId = `${monthId}-${String(now.getDate()).padStart(2, '0')}`;
+
+        try {
+          // Guardamos por mes (para Maps) y por día (Gemini/Firestore)
+          const monthRef = doc(db, 'api_usage', monthId);
+          const dayRef = doc(db, 'api_usage', dayId);
+
+          const updates = {};
+          updates[type] = increment(amount);
+
+          // Actualizar ambos (si falla alguno no importa demasiado, es para estadística)
+          await Promise.all([
+            setDoc(monthRef, updates, { merge: true }),
+            setDoc(dayRef, updates, { merge: true })
+          ]);
+        } catch (e) {
+          console.warn("Error incrementando uso API:", e);
+        }
+      };
+
+      window.cargarApiUsage = async () => {
+        const statusEl = document.getElementById('api-sync-status');
+        if (statusEl) statusEl.textContent = '⏳ Sincronizando con Google...';
+
+        // 3. CARGAR CONFIGURACIÓN MAPS (V.12.4.1)
+        if (currentRole === 'super_admin') {
+          try {
+            const mSnap = await getDoc(doc(db, 'config', 'maps'));
+            if (mSnap.exists()) {
+              const mCfg = mSnap.data();
+              const elA = document.getElementById('maps-active-key');
+              if (elA) elA.value = mCfg.activeKey || 'key1';
+            }
+          } catch (e) { console.warn("Error cargando config Maps:", e); }
+        }
+
+        // 1. INTENTAR DATOS REALES DESDE GOOGLE CLOUD (V.12.4.1)
+        try {
+          const getReal = httpsCallable(functions, 'getRealApiUsage');
+          const res = await getReal();
+          const data = res.data; // { acc1: {...}, acc2: {...}, syncErrors: [...] }
+          const n = (v) => Number(v || 0);
+
+          const calcCost = (acc) => (
+            n(acc.maps.load) * 0.007 +
+            n(acc.maps.route) * 0.005 +
+            n(acc.maps.places) * 0.017 +
+            n(acc.maps.geocode) * 0.005
+          );
+          const calcReqs = (acc) => n(acc.maps.load) + n(acc.maps.route) + n(acc.maps.places) + n(acc.maps.geocode);
+
+          const cost1 = calcCost(data.acc1);
+          const cost2 = calcCost(data.acc2);
+          const reqs1 = calcReqs(data.acc1);
+          const reqs2 = calcReqs(data.acc2);
+
+          const nowComp = new Date();
+          const monthId = `${nowComp.getFullYear()}-${String(nowComp.getMonth() + 1).padStart(2, '0')}`;
+          const dayId = `${monthId}-${String(nowComp.getDate()).padStart(2, '0')}`;
+
+          try {
+            const [monthSnap, daySnap] = await Promise.all([
+              getDoc(doc(db, 'api_usage', monthId)),
+              getDoc(doc(db, 'api_usage', dayId))
+            ]);
+            const mData = monthSnap.exists() ? monthSnap.data() : {};
+            const dData = daySnap.exists() ? daySnap.data() : {};
+
+            const geminiFirestore = n(dData.ia_report);
+            const geminiLimit = 1500;
+
+            const fsR_Real = n(data.acc1.firestore.reads) + n(data.acc2.firestore.reads);
+            const fsR_Est = n(dData.fs_read);
+            const fsW_Real = n(data.acc1.firestore.writes) + n(data.acc2.firestore.writes);
+            const fsW_Est = n(dData.fs_write);
+
+            updateUsageUI('gemini', geminiFirestore, geminiLimit, `${geminiFirestore} peticiones hoy`, `Peticiones hoy · Fuente: Firestore (Límite: ${geminiLimit})`);
+            updateUsageUI('fs-reads', fsR_Real, 50000, `${fsR_Est} (Est) / ${fsR_Real} (Real)`, `Lecturas hoy (Límite: 50,000)`);
+            updateUsageUI('fs-writes', fsW_Real, 20000, `${fsW_Est} (Est) / ${fsW_Real} (Real)`, `Escrituras hoy (Límite: 20,000)`);
+          } catch (e) { }
+
+          updateUsageUI('maps-1', cost1, 200, `$${cost1.toFixed(2)}`, `${reqs1} peticiones este mes`);
+          updateUsageUI('maps-2', cost2, 200, `$${cost2.toFixed(2)}`, `${reqs2} peticiones este mes`);
+
+          if (statusEl) {
+            if (data.syncErrors && data.syncErrors.length > 0) {
+              statusEl.innerHTML = `⚠️ Sincronizado con avisos: <span title="${data.syncErrors.join('\n')}" style="cursor:help; text-decoration:underline;">${data.syncErrors.length} errores</span>`;
+              statusEl.style.color = 'var(--crit-3)';
+            } else {
+              statusEl.textContent = '✅ Sincronizado con Google Cloud (Ambas Cuentas)';
+              statusEl.style.color = 'var(--crit-1)';
+            }
           }
-        } catch (e) { console.warn("Error cargando config Maps:", e); }
-      }
+          return;
+        } catch (e) {
+          console.warn("Uso real no disponible, usando estimación local:", e);
+          if (statusEl) statusEl.textContent = '⚠️ Usando estimación local (Solo estimada)';
+        }
 
-      // 1. INTENTAR DATOS REALES DESDE GOOGLE CLOUD (V.12.4.1)
-      try {
-        const getReal = httpsCallable(functions, 'getRealApiUsage');
-        const res = await getReal();
-        const data = res.data; // { acc1: {...}, acc2: {...}, syncErrors: [...] }
-        const n = (v) => Number(v || 0);
-
-        const calcCost = (acc) => (
-          n(acc.maps.load) * 0.007 +
-          n(acc.maps.route) * 0.005 +
-          n(acc.maps.places) * 0.017 +
-          n(acc.maps.geocode) * 0.005
-        );
-        const calcReqs = (acc) => n(acc.maps.load) + n(acc.maps.route) + n(acc.maps.places) + n(acc.maps.geocode);
-
-        const cost1 = calcCost(data.acc1);
-        const cost2 = calcCost(data.acc2);
-        const reqs1 = calcReqs(data.acc1);
-        const reqs2 = calcReqs(data.acc2);
-
-        const nowComp = new Date();
-        const monthId = `${nowComp.getFullYear()}-${String(nowComp.getMonth() + 1).padStart(2, '0')}`;
-        const dayId = `${monthId}-${String(nowComp.getDate()).padStart(2, '0')}`;
+        // 2. FALLBACK A ESTIMACIÓN LOCAL (FIRESTORE)
+        const now = new Date();
+        const monthId = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+        const dayId = `${monthId}-${String(now.getDate()).padStart(2, '0')}`;
 
         try {
           const [monthSnap, daySnap] = await Promise.all([
             getDoc(doc(db, 'api_usage', monthId)),
             getDoc(doc(db, 'api_usage', dayId))
           ]);
+
           const mData = monthSnap.exists() ? monthSnap.data() : {};
           const dData = daySnap.exists() ? daySnap.data() : {};
 
-          const geminiFirestore = n(dData.ia_report);
-          const geminiLimit = 1500;
+          const n = (v) => Number(v || 0);
 
-          const fsR_Real = n(data.acc1.firestore.reads) + n(data.acc2.firestore.reads);
-          const fsR_Est = n(dData.fs_read);
-          const fsW_Real = n(data.acc1.firestore.writes) + n(data.acc2.firestore.writes);
-          const fsW_Est = n(dData.fs_write);
+          const mapsCost =
+            n(mData.maps_load) * 0.007 +
+            n(mData.maps_route) * 0.005 +
+            n(mData.maps_places) * 0.017 +
+            n(mData.maps_geocode) * 0.005;
 
-          updateUsageUI('gemini', geminiFirestore, geminiLimit, `${geminiFirestore} peticiones hoy`, `Peticiones hoy · Fuente: Firestore (Límite: ${geminiLimit})`);
-          updateUsageUI('fs-reads', fsR_Real, 50000, `${fsR_Est} (Est) / ${fsR_Real} (Real)`, `Lecturas hoy (Límite: 50,000)`);
-          updateUsageUI('fs-writes', fsW_Real, 20000, `${fsW_Est} (Est) / ${fsW_Real} (Real)`, `Escrituras hoy (Límite: 20,000)`);
-        } catch (e) { }
+          const totalMapsReqs = n(mData.maps_load) + n(mData.maps_route) + n(mData.maps_places) + n(mData.maps_geocode);
 
-        updateUsageUI('maps-1', cost1, 200, `$${cost1.toFixed(2)}`, `${reqs1} peticiones este mes`);
-        updateUsageUI('maps-2', cost2, 200, `$${cost2.toFixed(2)}`, `${reqs2} peticiones este mes`);
-
-        if (statusEl) {
-          if (data.syncErrors && data.syncErrors.length > 0) {
-            statusEl.innerHTML = `⚠️ Sincronizado con avisos: <span title="${data.syncErrors.join('\n')}" style="cursor:help; text-decoration:underline;">${data.syncErrors.length} errores</span>`;
-            statusEl.style.color = 'var(--crit-3)';
-          } else {
-            statusEl.textContent = '✅ Sincronizado con Google Cloud (Ambas Cuentas)';
-            statusEl.style.color = 'var(--crit-1)';
-          }
+          updateUsageUI('maps', mapsCost, 200, `$${mapsCost.toFixed(2)} (Est) / - (Real)`, `${totalMapsReqs} (Est) / - (Real) peticiones`);
+          // V.12.4.1: Restaurado a 1500 peticiones/día (Límite Gemini Flash Lite Free)
+          updateUsageUI('gemini', n(dData.ia_report), 1500, `${n(dData.ia_report)} (Est) / - (Real)`, `Peticiones hoy (Límite: 1500 | Reset: 09:00 PT)`);
+          updateUsageUI('fs-reads', n(dData.fs_read), 50000, `${n(dData.fs_read)} (Est) / - (Real)`, `Lecturas hoy (Límite: 50,000)`);
+          updateUsageUI('fs-writes', n(dData.fs_write), 20000, `${n(dData.fs_write)} (Est) / - (Real)`, `Escrituras hoy (Límite: 20,000)`);
+        } catch (e) {
+          console.error("Error cargando consumo local:", e);
         }
-        return;
-      } catch (e) {
-        console.warn("Uso real no disponible, usando estimación local:", e);
-        if (statusEl) statusEl.textContent = '⚠️ Usando estimación local (Solo estimada)';
+
+      };
+
+      function updateUsageUI(id, current, limit, labelText = null, metaText = null) {
+        const perc = Math.min((current / limit) * 100, 100);
+        const pb = document.getElementById(`pb-${id}`);
+        const val = document.getElementById(`val-${id}-consumed`);
+
+        if (pb) {
+          pb.style.width = `${perc}%`;
+          pb.classList.toggle('warning', perc >= 70 && perc < 90);
+          pb.classList.toggle('danger', perc >= 90);
+        }
+        if (val) val.textContent = labelText || current.toLocaleString();
+        if (metaText) {
+          const est = document.getElementById(`est-${id}-units`);
+          if (est) est.textContent = metaText;
+        }
       }
-
-      // 2. FALLBACK A ESTIMACIÓN LOCAL (FIRESTORE)
-      const now = new Date();
-      const monthId = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-      const dayId = `${monthId}-${String(now.getDate()).padStart(2, '0')}`;
-
-      try {
-        const [monthSnap, daySnap] = await Promise.all([
-          getDoc(doc(db, 'api_usage', monthId)),
-          getDoc(doc(db, 'api_usage', dayId))
-        ]);
-
-        const mData = monthSnap.exists() ? monthSnap.data() : {};
-        const dData = daySnap.exists() ? daySnap.data() : {};
-
-        const n = (v) => Number(v || 0);
-
-        const mapsCost =
-          n(mData.maps_load) * 0.007 +
-          n(mData.maps_route) * 0.005 +
-          n(mData.maps_places) * 0.017 +
-          n(mData.maps_geocode) * 0.005;
-
-        const totalMapsReqs = n(mData.maps_load) + n(mData.maps_route) + n(mData.maps_places) + n(mData.maps_geocode);
-
-        updateUsageUI('maps', mapsCost, 200, `$${mapsCost.toFixed(2)} (Est) / - (Real)`, `${totalMapsReqs} (Est) / - (Real) peticiones`);
-        // V.12.4.1: Restaurado a 1500 peticiones/día (Límite Gemini Flash Lite Free)
-        updateUsageUI('gemini', n(dData.ia_report), 1500, `${n(dData.ia_report)} (Est) / - (Real)`, `Peticiones hoy (Límite: 1500 | Reset: 09:00 PT)`);
-        updateUsageUI('fs-reads', n(dData.fs_read), 50000, `${n(dData.fs_read)} (Est) / - (Real)`, `Lecturas hoy (Límite: 50,000)`);
-        updateUsageUI('fs-writes', n(dData.fs_write), 20000, `${n(dData.fs_write)} (Est) / - (Real)`, `Escrituras hoy (Límite: 20,000)`);
-      } catch (e) {
-        console.error("Error cargando consumo local:", e);
-      }
-
-    };
-
-    function updateUsageUI(id, current, limit, labelText = null, metaText = null) {
-      const perc = Math.min((current / limit) * 100, 100);
-      const pb = document.getElementById(`pb-${id}`);
-      const val = document.getElementById(`val-${id}-consumed`);
-
-      if (pb) {
-        pb.style.width = `${perc}%`;
-        pb.classList.toggle('warning', perc >= 70 && perc < 90);
-        pb.classList.toggle('danger', perc >= 90);
-      }
-      if (val) val.textContent = labelText || current.toLocaleString();
-      if (metaText) {
-        const est = document.getElementById(`est-${id}-units`);
-        if (est) est.textContent = metaText;
-      }
-    }
 
   </script>
 
@@ -14282,7 +14296,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.8.9
+          Versión V.13.9.0
         </div>
       </div>
 
@@ -14711,7 +14725,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.8.9
+          Versión V.13.9.0
         </div>
       </div>
 
@@ -15598,7 +15612,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.8.9
+            Versión V.13.9.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
@@ -16102,20 +16116,20 @@ ${dataContext}
   <div id="toast"></div>
 
   <script>
-    setInterval(() => {
-      const now = new Date();
-      const elClock = document.getElementById('clock');
-      if (elClock) elClock.textContent = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      const elDate = document.getElementById('date');
-      if (elDate) {
-        const weekday = now.toLocaleDateString('es-ES', { weekday: 'long' });
-        const capitalizedWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
-        const day = String(now.getDate()).padStart(2, '0');
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const year = now.getFullYear();
-        elDate.textContent = `${capitalizedWeekday}, ${day}/${month}/${year}`;
-      }
-    }, 1000);
+      setInterval(() => {
+        const now = new Date();
+        const elClock = document.getElementById('clock');
+        if (elClock) elClock.textContent = now.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        const elDate = document.getElementById('date');
+        if (elDate) {
+          const weekday = now.toLocaleDateString('es-ES', { weekday: 'long' });
+          const capitalizedWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+          const day = String(now.getDate()).padStart(2, '0');
+          const month = String(now.getMonth() + 1).padStart(2, '0');
+          const year = now.getFullYear();
+          elDate.textContent = `${capitalizedWeekday}, ${day}/${month}/${year}`;
+        }
+      }, 1000);
   </script>
 </body>
 

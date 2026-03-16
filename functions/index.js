@@ -538,3 +538,196 @@ exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
         throw new functions.https.HttpsError("internal", "Error al purgar logs: " + error.message);
     }
 });
+
+// 5. Monitor Oysta Vehicles (V.13.9.0)
+// Detecta llegadas y salidas en segundo plano cada 2 minutos.
+exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRun(async (context) => {
+    const db = admin.firestore();
+    const bridgeUrl = process.env.OYSTA_BRIDGE_URL;
+    if (!bridgeUrl) return null;
+
+    try {
+        // 1. Obtener datos de Oysta
+        const resp = await fetch(`${bridgeUrl}?u=backend-monitor`);
+        if (!resp.ok) throw new Error("Oysta GAS error");
+        const oystaData = await resp.json();
+        if (!oystaData.vehicles) return null;
+
+        const vehiclesMap = {};
+        oystaData.vehicles.forEach(v => { vehiclesMap[String(v.id)] = v; });
+
+        // 2. Obtener mapeo de vehículos locales
+        const localVehiclesSnap = await db.collection("vehiculos").get();
+        const localVehiclesByOystaId = {};
+        localVehiclesSnap.forEach(doc => {
+            const data = doc.data();
+            if (data.oystaId) localVehiclesByOystaId[String(data.oystaId)] = { id: doc.id, ...data };
+        });
+
+        // 3. Obtener Operaciones Activas (Emergencias)
+        const activeOpsSnap = await db.collection("operaciones").where("estado", "==", "activa").get();
+
+        // 4. Obtener Intervenciones Abiertas (Preventivos)
+        const activeIntsSnap = await db.collectionGroup("intervenciones").where("abierta", "==", true).get();
+
+        const now = Date.now();
+
+        // --- PROCESAR EMERGENCIAS ---
+        for (const opDoc of activeOpsSnap.docs) {
+            const op = opDoc.data();
+            const opId = opDoc.id;
+            const opCoords = op.coords;
+            const assignedIds = op.recursosAsignadosIds || [];
+
+            for (const rid of assignedIds) {
+                const oystaId = Object.keys(localVehiclesByOystaId).find(key => localVehiclesByOystaId[key].id === rid);
+                const v = oystaId ? vehiclesMap[oystaId] : null;
+                if (!v) continue;
+
+                const pos = { lat: parseFloat(v.lat), lng: parseFloat(v.lng) };
+                const speed = parseFloat(v.speed);
+                const isMoving = speed > 5;
+                const stateKey = `eme_${opId}_${oystaId}`;
+                const indicativo = localVehiclesByOystaId[oystaId].alias || localVehiclesByOystaId[oystaId].indicativo || v.name;
+
+                // Timestamp real de Oysta
+                const oystaTsStr = v.last_pos ? v.last_pos.replace(' ', 'T') : null;
+                const oystaTime = oystaTsStr ? new Date(oystaTsStr).getTime() : now;
+
+                // Obtener estado anterior
+                const stateRef = db.collection("oysta_vehicle_states").doc(stateKey);
+                const stateSnap = await stateRef.get();
+                const vs = stateSnap.exists ? stateSnap.data() : { moving: isMoving, hasDeparted: false, hasArrived: false };
+
+                const distToDest = opCoords ? calculateHaversineDist(pos, opCoords) : 999;
+
+                // Salida
+                if (isMoving && !vs.hasDeparted) {
+                    const exists = await checkExistingAction(db, opId, indicativo, "sale hacia");
+                    if (!exists) {
+                        const text = `⚡️ ${indicativo} sale hacia el lugar (${op.dir || 'sin dirección'}).`;
+                        await db.collection("operaciones").doc(opId).collection("acciones").add({
+                            texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
+                        });
+                    }
+                    vs.hasDeparted = true;
+                    vs.moving = true;
+                    await stateRef.set(vs);
+                }
+                // Llegada
+                else if (!isMoving && distToDest < 0.1 && !vs.hasArrived && vs.hasDeparted) {
+                    const exists = await checkExistingAction(db, opId, indicativo, "llega al lugar");
+                    if (!exists) {
+                        const text = `✅ ${indicativo} llega al lugar del aviso (${op.dir || 'sin dirección'}).`;
+                        await db.collection("operaciones").doc(opId).collection("acciones").add({
+                            texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
+                        });
+                    }
+                    vs.hasArrived = true;
+                    vs.moving = false;
+                    await stateRef.set(vs);
+                } else if (isMoving !== vs.moving) {
+                    vs.moving = isMoving;
+                    await stateRef.set(vs);
+                }
+            }
+        }
+
+        // --- PROCESAR PREVENTIVOS ---
+        for (const intDoc of activeIntsSnap.docs) {
+            const iData = intDoc.data();
+            const iRef = intDoc.ref;
+            const iCoords = iData.coords;
+            const assignedIds = iData.recursosAsignados || [];
+
+            for (const rid of assignedIds) {
+                const oystaId = Object.keys(localVehiclesByOystaId).find(key => localVehiclesByOystaId[key].id === rid);
+                const v = oystaId ? vehiclesMap[oystaId] : null;
+                if (!v) continue;
+
+                const pos = { lat: parseFloat(v.lat), lng: parseFloat(v.lng) };
+                const speed = parseFloat(v.speed);
+                const isMoving = speed > 5;
+                const stateKey = `prev_${intDoc.id}_${oystaId}`;
+                const indicativo = localVehiclesByOystaId[oystaId].alias || localVehiclesByOystaId[oystaId].indicativo || v.name;
+
+                const oystaTsStr = v.last_pos ? v.last_pos.replace(' ', 'T') : null;
+                const oystaTime = oystaTsStr ? new Date(oystaTsStr).getTime() : now;
+
+                const stateRef = db.collection("oysta_vehicle_states").doc(stateKey);
+                const stateSnap = await stateRef.get();
+                const vs = stateSnap.exists ? stateSnap.data() : { moving: isMoving, hasDeparted: false, hasArrived: false };
+
+                const distToDest = iCoords ? calculateHaversineDist(pos, iCoords) : 999;
+
+                // Salida
+                if (isMoving && !vs.hasDeparted) {
+                    const exists = (iData.comentarios || []).some(c => c.texto && c.texto.includes(indicativo) && c.texto.includes("sale hacia"));
+                    if (!exists) {
+                        const text = `⚡️ ${indicativo} sale hacia ${iData.direccion || 'el lugar'}.`;
+                        await iRef.update({
+                            comentarios: admin.firestore.FieldValue.arrayUnion({
+                                texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
+                            })
+                        });
+                    }
+                    vs.hasDeparted = true;
+                    vs.moving = true;
+                    await stateRef.set(vs);
+                }
+                // Llegada
+                else if (!isMoving && distToDest < 0.05 && !vs.hasArrived) {
+                    const exists = (iData.comentarios || []).some(c => c.texto && c.texto.includes(indicativo) && c.texto.includes("llega al lugar"));
+                    if (!exists) {
+                        const text = `✅ ${indicativo} llega al lugar (${iData.direccion || 'sin dirección'}).`;
+                        await iRef.update({
+                            comentarios: admin.firestore.FieldValue.arrayUnion({
+                                texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
+                            })
+                        });
+                    }
+                    vs.hasArrived = true;
+                    vs.moving = false;
+                    await stateRef.set(vs);
+                } else if (isMoving !== vs.moving) {
+                    vs.moving = isMoving;
+                    await stateRef.set(vs);
+                }
+            }
+        }
+
+        return null;
+    } catch (err) {
+        console.error("Monitor Oysta Error:", err);
+        return null;
+    }
+});
+
+async function checkExistingAction(db, opId, indicativo, partialText) {
+    const snap = await db.collection("operaciones").doc(opId).collection("acciones")
+        .where("texto", ">=", `⚡️ ${indicativo}`) // Intento de optimización
+        .get();
+    return snap.docs.some(d => d.data().texto?.includes(indicativo) && d.data().texto?.includes(partialText));
+}
+
+function calculateHaversineDist(pos1, pos2) {
+    if (!pos1 || !pos2) return 999;
+    const R = 6371; // km
+    const dLat = (pos2.lat - pos1.lat) * Math.PI / 180;
+    const dLon = (pos2.lng - pos1.lng) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(pos1.lat * Math.PI / 180) * Math.cos(pos2.lat * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+}
+
+function formatCommentFecha(d) {
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    const hour = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${day}/${month}/${year} ${hour}:${min}`;
+}
+
