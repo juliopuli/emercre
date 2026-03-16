@@ -9833,8 +9833,8 @@ ${dataContext}
 
         if (pb) {
           pb.style.width = `${perc}%`;
-          pb.classList.toggle('warning', perc >= 70 && perc < 90);
-          pb.classList.toggle('danger', perc >= 90);
+          pb.classList.toggle("warning", perc >= 70 && perc < 90);
+          pb.classList.toggle("danger", perc >= 90);
         }
         if (val) val.textContent = labelText || current.toLocaleString();
         if (metaText) {
