@@ -1319,7 +1319,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.8.8 Loaded');
+    console.log('EmerCRE V.13.8.9 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7735,15 +7735,33 @@ ${dataContext}
           if (!window._oystaVehicleState[stateKey]) {
             const speedInit = parseFloat(oystaVeh.speed);
             const indicativo = localVeh.alias || localVeh.indicativo || oystaVeh.name;
-            // V.13.8.8: Mirar en comentarios existentes para no repetir logs tras F5
+            // V.13.8.9: Detección profunda de estado tras recarga
             const comms = iData.comentarios || [];
-            const alreadyDeparted = comms.some(c => c.texto && (c.texto.includes(`⚡️ ${indicativo} sale`) || c.texto.includes(`⚡️ ${indicativo} en movimiento`)));
-            const alreadyArrived = comms.some(c => c.texto && c.texto.includes(`✅ ${indicativo} llega`));
+            const alreadyDeparted = comms.some(c => c.texto && (c.texto.includes(`⚡️ ${indicativo} sale hacia`) || c.texto.includes(`⚡️ ${indicativo} en movimiento`)));
+            const alreadyArrivedPlace = comms.some(c => c.texto && c.texto.includes(`✅ ${indicativo} llega al lugar`));
+
+            // Buscar último "sale de" para persistir seguimiento sin dirección
+            const lastSaleDe = [...comms].reverse().find(c => c.texto && c.texto.includes(`⚡️ ${indicativo} sale de`));
+            const lastLlega = [...comms].reverse().find(c => c.texto && (c.texto.includes(`✅ ${indicativo} llega a`) || c.texto.includes(`✅ ${indicativo} llega al lugar`)));
+            const isMovingOffsite = !!(lastSaleDe && (!lastLlega || lastSaleDe.timestamp > lastLlega.timestamp));
+
+            let recoveredAddr = "";
+            let recoveredTS = 0;
+            if (isMovingOffsite) {
+              // Extraer dirección del texto "sale de [DIR]( a las | hacia |$)"
+              const match = lastSaleDe.texto.match(/sale de (.*?)( a las| hacia|$)/);
+              recoveredAddr = match ? match[1] : "";
+              recoveredTS = lastSaleDe.timestamp;
+            }
 
             window._oystaVehicleState[stateKey] = {
               moving: speedInit > 5,
+              movingSince: speedInit > 5 ? Date.now() : 0,
               hasDeparted: alreadyDeparted,
-              hasArrived: alreadyArrived,
+              hasArrived: alreadyArrivedPlace,
+              isMovingOffsite: isMovingOffsite,
+              lastSaleDeTS: recoveredTS,
+              lastStopAddr: recoveredAddr,
               initialPos: (iData.recursosPosicionesIniciales && iData.recursosPosicionesIniciales[localVeh.id]) ? { lat: iData.recursosPosicionesIniciales[localVeh.id].lat, lng: iData.recursosPosicionesIniciales[localVeh.id].lng } : pos,
               assignmentTime: (iData.timestamp?.toDate ? iData.timestamp.toDate().getTime() : (typeof iData.timestamp === 'number' ? iData.timestamp : Date.now())),
               lastStationaryPos: pos
@@ -7853,16 +7871,19 @@ ${dataContext}
                 const newAddr = addr || 'posición desconocida';
                 const arrivalText = `✅ ${indicativo} llega a ${newAddr}.`;
                 const arrivalTS = Date.now();
-                const newArrComment = { texto: arrivalText, autor: 'Sist. Oysta', autorId: 'system', timestamp: arrivalTS, fecha: formatCommentFecha(new Date()) };
+                const newArrComment = { texto: arrivalText, autor: 'Sist. Oysta', autorId: 'system', timestamp: arrivalTS, fecha: formatCommentFecha(new Date(arrivalTS)) };
 
                 try {
                   const snap = await getDoc(iRef);
                   if (snap.exists()) {
                     const comms = snap.data().comentarios || [];
-                    const oldTxt = `⚡️ ${indicativo} sale de ${vs.lastStopAddr}`;
-                    const newTxt = `⚡️ ${indicativo} sale a ${newAddr}`;
                     const updatedComms = comms.map(c => {
-                      if (c.timestamp === vs.lastSaleDeTS && c.texto === oldTxt) return { ...c, texto: newTxt, editado: true };
+                      if (c.timestamp === vs.lastSaleDeTS && c.texto.includes(`⚡️ ${indicativo} sale de`)) {
+                        // Modificar el comentario anterior para incluir el "hacia"
+                        let base = c.texto.split(' hacia ')[0]; // Quitar destino anterior si existiera
+                        if (base.endsWith('.')) base = base.slice(0, -1);
+                        return { ...c, texto: `${base} hacia ${newAddr}.`, editado: true };
+                      }
                       return c;
                     });
                     updatedComms.push(newArrComment);
@@ -7878,17 +7899,30 @@ ${dataContext}
             vs.lastStationaryPos = pos;
             vs.moving = false;
           } else {
-            if (!vs.moving) vs.moving = true;
+            if (!vs.moving) {
+              vs.moving = true;
+              vs.movingSince = Date.now();
+            }
             const distOff = vs.lastStationaryPos ? calculateHaversineDist(pos, vs.lastStationaryPos) : 0;
             // Solo activar "Sale de..." si ya ha salido del origen y no estamos ya en un tramo offsite
             if (distOff > THRESHOLD_OFFSITE && !vs.isMovingOffsite && vs.hasDeparted && !vs.hasArrived) {
               vs.isMovingOffsite = true; // Sync flag BEFORE await
               const stationaryPos = { ...vs.lastStationaryPos };
               reverseGeocodeWithCache(stationaryPos, async (addr) => {
-                vs.lastStopAddr = addr || 'posición conocida';
-                vs.lastSaleDeTS = Date.now();
-                const text = `⚡️ ${indicativo} sale de ${vs.lastStopAddr}`;
-                const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: vs.lastSaleDeTS, fecha: formatCommentFecha(new Date()) };
+                const originAddr = addr || 'posición conocida';
+                vs.lastStopAddr = originAddr;
+                // V.13.8.9: Cálculo de decalaje para tramos intermedios
+                // Si sabemos cuándo empezó a moverse, usamos ese tiempo. Si no (reload), estimamos.
+                let estMoveStart = vs.movingSince || (Date.now() - 60000); // fallback last min
+                if (speed > 5) {
+                  const hoursAgo = (distOff / speed); // D=V*T -> T=D/V
+                  const estTS = Date.now() - (hoursAgo * 3600000);
+                  if (estTS > estMoveStart) estMoveStart = estTS;
+                }
+                vs.lastSaleDeTS = Math.round(estMoveStart);
+                const saleTime = new Date(vs.lastSaleDeTS).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                const text = `⚡️ ${indicativo} sale de ${originAddr} a las ${saleTime}.`;
+                const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: vs.lastSaleDeTS, fecha: formatCommentFecha(new Date(vs.lastSaleDeTS)) };
                 try {
                   await updateDoc(iRef, { comentarios: arrayUnion(newComment) });
                 } catch (e) {
@@ -14247,7 +14281,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.8.8
+          Versión V.13.8.9
         </div>
       </div>
 
@@ -14676,7 +14710,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.8.8
+          Versión V.13.8.9
         </div>
       </div>
 
@@ -15563,7 +15597,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.8.8
+            Versión V.13.8.9
           </div>
         </div>
         <div class="field" id="j-prov-row">
