@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="es">
 
@@ -1319,7 +1320,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.9.1 Loaded');
+    console.log('EmerCRE V.13.8.9 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7735,13 +7736,9 @@ ${dataContext}
           if (!window._oystaVehicleState[stateKey]) {
             const speedInit = parseFloat(oystaVeh.speed);
             const indicativo = localVeh.alias || localVeh.indicativo || oystaVeh.name;
-            // V.13.9.1: Detección profunda de estado tras recarga
+            // V.13.8.9: Detección profunda de estado tras recarga
             const comms = iData.comentarios || [];
-            const alreadyDeparted = comms.some(c => c.texto && (
-              c.texto.includes(`⚡️ ${indicativo} sale`) ||
-              c.texto.includes(`⚡️ ${indicativo} en movimiento`) ||
-              (c.texto.includes(`Asignado: ${indicativo}`) && c.texto.includes('y ⚡️ SALE'))
-            ));
+            const alreadyDeparted = comms.some(c => c.texto && (c.texto.includes(`⚡️ ${indicativo} sale hacia`) || c.texto.includes(`⚡️ ${indicativo} en movimiento`)));
             const alreadyArrivedPlace = comms.some(c => c.texto && c.texto.includes(`✅ ${indicativo} llega al lugar`));
 
             // Buscar último "sale de" para persistir seguimiento sin dirección
@@ -7770,15 +7767,6 @@ ${dataContext}
               assignmentTime: (iData.timestamp?.toDate ? iData.timestamp.toDate().getTime() : (typeof iData.timestamp === 'number' ? iData.timestamp : Date.now())),
               lastStationaryPos: pos
             };
-            if (alreadyDeparted) {
-              window._oystaVehicleState[stateKey].loggedStartAtOrigin = true; // Evitar redundancia "en movimiento en lugar de inicio"
-            }
-            // V.13.9.1: Marcar como reportado si ya se asignó en movimiento para evitar duplicidad inmediata
-            if (speedInit > 5 && alreadyDeparted) {
-              // No sobreescribir si ya tiene valor
-            } else if (speedInit > 5) {
-              window._oystaVehicleState[stateKey].movingSince = Date.now();
-            }
           }
           const vs = window._oystaVehicleState[stateKey];
           const speed = parseFloat(oystaVeh.speed);
@@ -7823,77 +7811,124 @@ ${dataContext}
           // 1. Llegada (Solo si hay coordenadas de destino)
           if (distToDest !== null && distToDest < THRESHOLD_ARRIVE && !vs.hasArrived) {
             const text = `✅ ${indicativo} llega al lugar (${iData.direccion || 'sin dirección'}).`;
-            const arrivalTS = Date.now();
-            const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: arrivalTS, fecha: formatCommentFecha(new Date(arrivalTS)) };
+            const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
             try {
-              const snap = await getDoc(iRef);
-              let comms = snap.exists() ? (snap.data().comentarios || []) : [];
-              comms.push(newComment);
-              comms.sort((a, b) => a.timestamp - b.timestamp);
-              await updateDoc(iRef, { comentarios: comms });
+              await updateDoc(iRef, { comentarios: arrayUnion(newComment) });
               vs.hasArrived = true;
               vs.lastArrivedCoords = { ...iData.coords };
             } catch (e) { console.error("[Oysta] Error llegada:", e); }
           }
-        }
 
-        // 2. Salida Inicial / Decalaje
-        if (isMovingNow && !vs.hasDeparted) {
-          const distFromStart = calculateHaversineDist(pos, vs.initialPos);
-          if (distFromStart < THRESHOLD_DEPART && !vs.loggedStartAtOrigin) {
-            vs.loggedStartAtOrigin = true; // Sync flag BEFORE await to prevent loop
-            const actualTS = Date.now(); // Mov. en origen es tiempo real
-            const text = `⚡️ ${indicativo} en movimiento en lugar de inicio a las ${new Date(actualTS).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}.`;
-            const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: actualTS, fecha: formatCommentFecha(new Date(actualTS)) };
-            try {
-              const snap = await getDoc(iRef);
-              let comms = snap.exists() ? (snap.data().comentarios || []) : [];
-              comms.push(newComment);
-              comms.sort((a, b) => a.timestamp - b.timestamp);
-              await updateDoc(iRef, { comentarios: comms });
-            } catch (e) {
-              console.error("[Oysta] Error mov.inicio:", e);
-              vs.loggedStartAtOrigin = false;
-            }
-          } else if (distFromStart >= THRESHOLD_DEPART) {
-            vs.hasDeparted = true; // Sync flag BEFORE await
-            if (iData.direccion) {
-              // Con dirección: Salida normal
-              const decalaje = Math.round((Date.now() - vs.assignmentTime) / 60000);
-              const actualTS = Date.now() - (decalaje * 60000);
-              const text = `⚡️ ${indicativo} sale hacia ${iData.direccion}. [Decalaje: Hace ${decalaje} min]`;
+          // 2. Salida Inicial / Decalaje
+          if (isMovingNow && !vs.hasDeparted) {
+            const distFromStart = calculateHaversineDist(pos, vs.initialPos);
+            if (distFromStart < THRESHOLD_DEPART && !vs.loggedStartAtOrigin) {
+              vs.loggedStartAtOrigin = true; // Sync flag BEFORE await to prevent loop
+              const actualTS = Date.now(); // Mov. en origen es tiempo real
+              const text = `⚡️ ${indicativo} en movimiento en lugar de inicio a las ${new Date(actualTS).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}.`;
               const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: actualTS, fecha: formatCommentFecha(new Date(actualTS)) };
-              try {
-                const snap = await getDoc(iRef);
-                let comms = snap.exists() ? (snap.data().comentarios || []) : [];
-                comms.push(newComment);
-                comms.sort((a, b) => a.timestamp - b.timestamp);
-                await updateDoc(iRef, { comentarios: comms });
-              } catch (e) {
-                console.error("[Oysta] Error salida:", e);
-                vs.hasDeparted = false;
+              updateDoc(iRef, { comentarios: arrayUnion(newComment) }).catch(e => {
+                console.error("[Oysta] Error mov.inicio:", e);
+                vs.loggedStartAtOrigin = false;
+              });
+            } else if (distFromStart >= THRESHOLD_DEPART) {
+              vs.hasDeparted = true; // Sync flag BEFORE await
+              if (iData.direccion) {
+                // Con dirección: Salida normal
+                const decalaje = Math.round((Date.now() - vs.assignmentTime) / 60000);
+                const actualTS = Date.now() - (decalaje * 60000);
+                const text = `⚡️ ${indicativo} sale hacia ${iData.direccion}. [Decalaje: Hace ${decalaje} min]`;
+                const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: actualTS, fecha: formatCommentFecha(new Date(actualTS)) };
+                updateDoc(iRef, { comentarios: arrayUnion(newComment) }).catch(e => {
+                  console.error("[Oysta] Error salida:", e);
+                  vs.hasDeparted = false;
+                });
+              } else {
+                // Sin dirección: Seguimiento "Sale de..."
+                reverseGeocodeWithCache(vs.initialPos, (addr) => {
+                  const originAddr = addr || 'posición de inicio';
+                  vs.lastStopAddr = originAddr;
+                  const decalajeMs = Math.round((Date.now() - vs.assignmentTime));
+                  vs.lastSaleDeTS = Date.now() - decalajeMs;
+                  vs.isMovingOffsite = true;
+                  const saleTime = new Date(vs.lastSaleDeTS).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                  const text = `⚡️ ${indicativo} sale de ${originAddr} a las ${saleTime}.`;
+                  const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: vs.lastSaleDeTS, fecha: formatCommentFecha(new Date(vs.lastSaleDeTS)) };
+                  updateDoc(iRef, { comentarios: arrayUnion(newComment) }).catch(e => {
+                    console.error("[Oysta] Error salida-de-inicio:", e);
+                    vs.hasDeparted = false;
+                  });
+                });
               }
-            } else {
-              // Sin dirección: Seguimiento "Sale de..."
-              reverseGeocodeWithCache(vs.initialPos, (addr) => {
-                const originAddr = addr || 'posición de inicio';
-                vs.lastStopAddr = originAddr;
-                const decalajeMs = Math.round((Date.now() - vs.assignmentTime));
-                vs.lastSaleDeTS = Date.now() - decalajeMs;
-                vs.isMovingOffsite = true;
-                const saleTime = new Date(vs.lastSaleDeTS).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-                const text = `⚡️ ${indicativo} sale de ${originAddr} a las ${saleTime}.`;
-                const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: vs.lastSaleDeTS, fecha: formatCommentFecha(new Date(vs.lastSaleDeTS)) };
+            }
+          }
+
+          // 3. Seguimiento Paradas Intermedias (Seguimiento para casos sin dirección o cambios de ruta)
+          if (!isMovingNow) {
+            if (vs.isMovingOffsite) {
+              const currentPosStop = { ...pos };
+              vs.isMovingOffsite = false; // Sync flag BEFORE await
+              reverseGeocodeWithCache(currentPosStop, async (addr) => {
+                const newAddr = addr || 'posición desconocida';
+                const arrivalText = `✅ ${indicativo} llega a ${newAddr}.`;
+                const arrivalTS = Date.now();
+                const newArrComment = { texto: arrivalText, autor: 'Sist. Oysta', autorId: 'system', timestamp: arrivalTS, fecha: formatCommentFecha(new Date(arrivalTS)) };
 
                 try {
                   const snap = await getDoc(iRef);
-                  let comms = snap.exists() ? (snap.data().comentarios || []) : [];
-                  comms.push(newComment);
-                  comms.sort((a, b) => a.timestamp - b.timestamp);
-                  await updateDoc(iRef, { comentarios: comms });
+                  if (snap.exists()) {
+                    const comms = snap.data().comentarios || [];
+                    const updatedComms = comms.map(c => {
+                      if (c.timestamp === vs.lastSaleDeTS && c.texto.includes(`⚡️ ${indicativo} sale de`)) {
+                        // Modificar el comentario anterior para incluir el "hacia"
+                        let base = c.texto.split(' hacia ')[0]; // Quitar destino anterior si existiera
+                        if (base.endsWith('.')) base = base.slice(0, -1);
+                        return { ...c, texto: `${base} hacia ${newAddr}.`, editado: true };
+                      }
+                      return c;
+                    });
+                    updatedComms.push(newArrComment);
+                    await updateDoc(iRef, { comentarios: updatedComms, actualizadoEn: serverTimestamp() });
+                  }
                 } catch (e) {
-                  console.error("[Oysta] Error salida-de-inicio:", e);
-                  vs.hasDeparted = false;
+                  console.error("[Oysta] Error retro-modificación:", e);
+                  vs.isMovingOffsite = true;
+                }
+                vs.lastStopAddr = newAddr;
+              });
+            }
+            vs.lastStationaryPos = pos;
+            vs.moving = false;
+          } else {
+            if (!vs.moving) {
+              vs.moving = true;
+              vs.movingSince = Date.now();
+            }
+            const distOff = vs.lastStationaryPos ? calculateHaversineDist(pos, vs.lastStationaryPos) : 0;
+            // Solo activar "Sale de..." si ya ha salido del origen y no estamos ya en un tramo offsite
+            if (distOff > THRESHOLD_OFFSITE && !vs.isMovingOffsite && vs.hasDeparted && !vs.hasArrived) {
+              vs.isMovingOffsite = true; // Sync flag BEFORE await
+              const stationaryPos = { ...vs.lastStationaryPos };
+              reverseGeocodeWithCache(stationaryPos, async (addr) => {
+                const originAddr = addr || 'posición conocida';
+                vs.lastStopAddr = originAddr;
+                // V.13.8.9: Cálculo de decalaje para tramos intermedios
+                // Si sabemos cuándo empezó a moverse, usamos ese tiempo. Si no (reload), estimamos.
+                let estMoveStart = vs.movingSince || (Date.now() - 60000); // fallback last min
+                if (speed > 5) {
+                  const hoursAgo = (distOff / speed); // D=V*T -> T=D/V
+                  const estTS = Date.now() - (hoursAgo * 3600000);
+                  if (estTS > estMoveStart) estMoveStart = estTS;
+                }
+                vs.lastSaleDeTS = Math.round(estMoveStart);
+                const saleTime = new Date(vs.lastSaleDeTS).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                const text = `⚡️ ${indicativo} sale de ${originAddr} a las ${saleTime}.`;
+                const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: vs.lastSaleDeTS, fecha: formatCommentFecha(new Date(vs.lastSaleDeTS)) };
+                try {
+                  await updateDoc(iRef, { comentarios: arrayUnion(newComment) });
+                } catch (e) {
+                  console.error("[Oysta] Error sale-de:", e);
+                  vs.isMovingOffsite = false;
                 }
               });
             }
@@ -7901,98 +7936,27 @@ ${dataContext}
         }
       }
 
-      // 3. Seguimiento Paradas Intermedias (Seguimiento para casos sin dirección o cambios de ruta)
-      if (!isMovingNow) {
-        if (vs.isMovingOffsite) {
-          const currentPosStop = { ...pos };
-          vs.isMovingOffsite = false; // Sync flag BEFORE await
-          reverseGeocodeWithCache(currentPosStop, async (addr) => {
-            const newAddr = addr || 'posición desconocida';
-            const arrivalText = `✅ ${indicativo} llega a ${newAddr}.`;
-            const arrivalTS = Date.now();
-            const newArrComment = { texto: arrivalText, autor: 'Sist. Oysta', autorId: 'system', timestamp: arrivalTS, fecha: formatCommentFecha(new Date(arrivalTS)) };
-
-            try {
-              const snap = await getDoc(iRef);
-              if (snap.exists()) {
-                const comms = snap.data().comentarios || [];
-                const updatedComms = comms.map(c => {
-                  if (c.timestamp === vs.lastSaleDeTS && c.texto.includes(`⚡️ ${indicativo} sale de`)) {
-                    // Modificar el comentario anterior para incluir el "hacia"
-                    let base = c.texto.split(' hacia ')[0]; // Quitar destino anterior si existiera
-                    if (base.endsWith('.')) base = base.slice(0, -1);
-                    return { ...c, texto: `${base} hacia ${newAddr}.`, editado: true };
-                  }
-                  return c;
-                });
-                updatedComms.push(newArrComment);
-                updatedComms.sort((a, b) => a.timestamp - b.timestamp);
-                await updateDoc(iRef, { comentarios: updatedComms, actualizadoEn: serverTimestamp() });
-              }
-            } catch (e) {
-              console.error("[Oysta] Error retro-modificación:", e);
-              vs.isMovingOffsite = true;
-            }
-            vs.lastStopAddr = newAddr;
-          });
-        }
-        vs.lastStationaryPos = pos;
-        vs.moving = false;
-      } else {
-        if (!vs.moving) {
-          vs.moving = true;
-          vs.movingSince = Date.now();
-        }
-        const distOff = vs.lastStationaryPos ? calculateHaversineDist(pos, vs.lastStationaryPos) : 0;
-        // Solo activar "Sale de..." si ya ha salido del origen y no estamos ya en un tramo offsite
-        if (distOff > THRESHOLD_OFFSITE && !vs.isMovingOffsite && vs.hasDeparted && !vs.hasArrived) {
-          vs.isMovingOffsite = true; // Sync flag BEFORE await
-          const stationaryPos = { ...vs.lastStationaryPos };
-          reverseGeocodeWithCache(stationaryPos, async (addr) => {
-            const originAddr = addr || 'posición conocida';
-            vs.lastStopAddr = originAddr;
-            // V.13.8.9: Cálculo de decalaje para tramos intermedios
-            // Si sabemos cuándo empezó a moverse, usamos ese tiempo. Si no (reload), estimamos.
-            const saleTime = new Date(vs.lastSaleDeTS).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-            const text = `⚡️ ${indicativo} sale de ${originAddr} a las ${saleTime}.`;
-            const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: vs.lastSaleDeTS, fecha: formatCommentFecha(new Date(vs.lastSaleDeTS)) };
-            try {
-              const snap = await getDoc(iRef);
-              let comms = snap.exists() ? (snap.data().comentarios || []) : [];
-              comms.push(newComment);
-              comms.sort((a, b) => a.timestamp - b.timestamp);
-              await updateDoc(iRef, { comentarios: comms });
-            } catch (e) {
-              console.error("[Oysta] Error sale-de:", e);
-              vs.isMovingOffsite = false;
-            }
-          });
-        }
+      // Cleanup restos de rutas si existieran
+      if (window._prevRoutesMap) {
+        Object.keys(window._prevRoutesMap).forEach(k => {
+          const r = window._prevRoutesMap[k];
+          if (r.renderer) r.renderer.setMap(null);
+          delete window._prevRoutesMap[k];
+        });
       }
-    }
-    }
-
-    // Cleanup restos de rutas si existieran
-    if (window._prevRoutesMap) {
-      Object.keys(window._prevRoutesMap).forEach(k => {
-        const r = window._prevRoutesMap[k];
-        if (r.renderer) r.renderer.setMap(null);
-        delete window._prevRoutesMap[k];
-      });
-    }
-    if (window._prevLabelsMap) {
-      Object.keys(window._prevLabelsMap).forEach(k => {
-        window._prevLabelsMap[k].map = null;
-        delete window._prevLabelsMap[k];
-      });
-    }
-
-    Object.keys(window._prevIntVehicleMarkers).forEach(vid => {
-      if (!activeVehicleIds.has(vid)) {
-        window._prevIntVehicleMarkers[vid].map = null;
-        delete window._prevIntVehicleMarkers[vid];
+      if (window._prevLabelsMap) {
+        Object.keys(window._prevLabelsMap).forEach(k => {
+          window._prevLabelsMap[k].map = null;
+          delete window._prevLabelsMap[k];
+        });
       }
-    });
+
+      Object.keys(window._prevIntVehicleMarkers).forEach(vid => {
+        if (!activeVehicleIds.has(vid)) {
+          window._prevIntVehicleMarkers[vid].map = null;
+          delete window._prevIntVehicleMarkers[vid];
+        }
+      });
     }
 
     function clearPreventivoMarkers() {
@@ -8428,9 +8392,9 @@ ${dataContext}
 
       const orgFinal = parseSolicitadoData('prev-int');
 
-      const recs = [...new Set(Array.from(document.querySelectorAll('.prev-int-res-card'))
+      const recs = Array.from(document.querySelectorAll('.prev-int-res-card'))
         .filter(c => c.dataset.selected === 'true')
-        .map(c => c.dataset.id))];
+        .map(c => c.dataset.id);
 
       const isEdit = !!editIntervencionId;
       const iEdit = editIntervencionId ? (intervencionesCache[editIntervencionId] || {}) : {};
@@ -8467,7 +8431,7 @@ ${dataContext}
           data.oculta = false;
           data.timestamp = serverTimestamp();
 
-          // V.13.9.0: Log inicial de recursos con detección de movimiento inmediato
+          // V.13.0.4: Log inicial de recursos con detección de movimiento inmediato
           let initialComms = [];
           if (recs && recs.length > 0) {
             const logEntries = await Promise.all(recs.map(async rvId => {
@@ -8506,6 +8470,9 @@ ${dataContext}
                     const speed = parseFloat(ov.speed);
                     baseMsg += ` y ⚡️ SALE${origin} hacia el lugar (${speed} km/h)`;
                   }
+
+                  const speed = parseFloat(ov.speed);
+                  baseMsg += ` y ⚡️ SALE${origin} hacia el lugar (${speed} km/h)${delayStr}`;
                 }
               }
               return baseMsg;
@@ -14315,7 +14282,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.9.1
+          Versión V.13.8.9
         </div>
       </div>
 
@@ -14744,7 +14711,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.9.1
+          Versión V.13.8.9
         </div>
       </div>
 
@@ -15631,7 +15598,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.9.1
+            Versión V.13.8.9
           </div>
         </div>
         <div class="field" id="j-prov-row">
