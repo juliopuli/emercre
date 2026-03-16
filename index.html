@@ -238,7 +238,7 @@
       reverseGeocodeThrottle = true;
       setTimeout(() => { reverseGeocodeThrottle = false; }, 1000);
 
-      // V.13.8.0: Normalizar coordenadas para hit de caché (soporta LatLng y Literales)
+      // V.13.8.1: Normalizar coordenadas para hit de caché (soporta LatLng y Literales)
       const lat = (typeof latlng.lat === 'function') ? latlng.lat() : latlng.lat;
       const lng = (typeof latlng.lng === 'function') ? latlng.lng() : latlng.lng;
       if (lat === undefined || lng === undefined) { callback(null); return; }
@@ -456,7 +456,7 @@
         if (!picking && !editPickMode) window.cerrarDetalle();
       });
 
-      // V.13.8.0: Crear pin solo con doble click para evitar saturación
+      // V.13.8.1: Crear pin solo con doble click para evitar saturación
       mapEmergencias.addListener('dblclick', (e) => {
         if (e.latLng) window.onMapClickPersistentPin(e, 'eme');
       });
@@ -859,7 +859,7 @@
       }
     }
 
-    // V.13.8.0: Normalizar strings (quitar acentos) para búsqueda y filtrado
+    // V.13.8.1: Normalizar strings (quitar acentos) para búsqueda y filtrado
     window.filtrarBarcosAIS = (query) => {
       aisSearchQuery = (query || "").toLowerCase().trim();
       const resultsInfo = document.getElementById('ais-results-info');
@@ -1319,7 +1319,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.8.0 Loaded');
+    console.log('EmerCRE V.13.8.1 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2028,7 +2028,7 @@
         if (navChat) navChat.style.display = accesoEmergencias ? 'flex' : 'none';
         if (mnavChat) mnavChat.style.display = accesoEmergencias ? 'flex' : 'none';
 
-        // V.13.8.0: Restaurar última sección guardada
+        // V.13.8.1: Restaurar última sección guardada
         const lastSection = localStorage.getItem('emercre_last_section');
         if (lastSection === 'preventivos' && accesoPreventivos) {
           showSection('preventivos');
@@ -2978,7 +2978,7 @@
           }
         });
 
-        // V.13.8.0: Limpiar restos de rutas de Emergencias si existieran
+        // V.13.8.1: Limpiar restos de rutas de Emergencias si existieran
         if (window._emeRoutesMap) {
           Object.keys(window._emeRoutesMap).forEach(k => {
             const r = window._emeRoutesMap[k];
@@ -4900,7 +4900,7 @@ ${dataContext}
 
       document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('on', b.dataset.sec === sec));
 
-      // V.13.8.0: Guardar sección para persistencia
+      // V.13.8.1: Guardar sección para persistencia
       localStorage.setItem('emercre_last_section', sec);
 
       document.getElementById('section-operaciones').style.display = sec === 'operaciones' ? 'flex' : 'none';
@@ -6201,7 +6201,7 @@ ${dataContext}
         const mapDiv = document.getElementById('preventivos-map');
         if (!mapDiv) return;
 
-        // V.13.8.0: Recuperar zoom y centro guardados
+        // V.13.8.1: Recuperar zoom y centro guardados
         const savedState = localStorage.getItem('emercre_prev_map_state');
         let initialCenter = { lat: 37.3891, lng: -5.9845 };
         let initialZoom = 7;
@@ -6223,7 +6223,7 @@ ${dataContext}
           fullscreenControl: false
         });
 
-        // V.13.8.0: Guardar estado al mover el mapa
+        // V.13.8.1: Guardar estado al mover el mapa
         mapPreventivos.addListener('idle', () => {
           const center = mapPreventivos.getCenter();
           const zoom = mapPreventivos.getZoom();
@@ -6238,7 +6238,7 @@ ${dataContext}
           if (typeof cerrarDetallePreventivo === 'function') cerrarDetallePreventivo();
         });
 
-        // V.13.8.0: Crear pin solo con doble click para evitar saturación
+        // V.13.8.1: Crear pin solo con doble click para evitar saturación
         mapPreventivos.addListener('dblclick', (e) => {
           if (e.latLng) window.onMapClickPersistentPin(e, 'prev');
         });
@@ -6334,7 +6334,7 @@ ${dataContext}
         .catch(e => console.error("[Search-Pin] Error guardando pin:", e));
     }
 
-    // V.13.8.0: Handler global para clicks en mapa que crean pines
+    // V.13.8.1: Handler global para clicks en mapa que crean pines
     window.onMapClickPersistentPin = function (e, mapType) {
       // Solo actuar si no hay modales de selección de ubicación activos
       if (picking || editPickMode || routingPickField) return;
@@ -6342,7 +6342,7 @@ ${dataContext}
       const latLng = e.latLng;
       if (!latLng) return;
 
-      // V.13.8.0: Mostrar feedback inmediato
+      // V.13.8.1: Mostrar feedback inmediato
       mostrarToast("Obteniendo dirección...");
 
       reverseGeocodeWithCache(latLng, (address) => {
@@ -7520,7 +7520,7 @@ ${dataContext}
         setTimeout(() => abrirGestionIntervencion(activeIntManageId, true), 10);
       }
 
-      /* V.13.8.0: Desactivado auto-ajuste por petición usuario
+      /* V.13.8.1: Desactivado auto-ajuste por petición usuario
       if (hasCoords && mapPreventivos) {
         mapPreventivos.fitBounds(bounds);
         if (mapPreventivos.getZoom() > 16) mapPreventivos.setZoom(16);
@@ -7672,7 +7672,7 @@ ${dataContext}
             });
           }
 
-          /* V.13.8.0: Desactivado auto-ajuste por petición usuario
+          /* V.13.8.1: Desactivado auto-ajuste por petición usuario
           if (hasCoords) {
             const isMobile = window.innerWidth < 900;
             mapPreventivos.fitBounds(bounds, isMobile ? { top: 50, bottom: 50, left: 50, right: 50 } : { top: 70, bottom: 70, left: 370, right: 70 });
@@ -7686,7 +7686,7 @@ ${dataContext}
 
 
     // V.12.4.1: Renderiar en el mapa los vehículos Oysta, e incluir RUTA DINÁMICA hacia su intervención asignada
-    // V.13.8.0: Renderiar en el mapa los vehículos Oysta y monitorizar estados (Sin rutas por API cost)
+    // V.13.8.1: Renderiar en el mapa los vehículos Oysta y monitorizar estados (Sin rutas por API cost)
     async function renderPreventivoAssignedVehicles(interventionDocs, allAssignedIds) {
       if (!mapPreventivos) return;
       if (!allAssignedIds) allAssignedIds = new Set();
@@ -7763,7 +7763,7 @@ ${dataContext}
           const THRESHOLD_DEPART = 0.05; // 50m
           const THRESHOLD_OFFSITE = 0.20; // 200m
 
-          // V.13.8.0: Reset arrival logic if destination changes drastically
+          // V.13.8.1: Reset arrival logic if destination changes drastically
           if (vs.hasArrived && vs.lastArrivedCoords) {
             const dMove = calculateHaversineDist(iData.coords, vs.lastArrivedCoords);
             if (dMove > 0.05) {
@@ -7787,27 +7787,48 @@ ${dataContext}
           if (isMovingNow && !vs.hasDeparted) {
             const distFromStart = calculateHaversineDist(pos, vs.initialPos);
             if (distFromStart < THRESHOLD_DEPART && !vs.loggedStartAtOrigin) {
+              vs.loggedStartAtOrigin = true; // Sync flag BEFORE await to prevent loop
               const text = `⚡️ ${indicativo} en movimiento en lugar de inicio a las ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}.`;
               const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
-              try {
-                await updateDoc(iRef, { comentarios: arrayUnion(newComment) });
-                vs.loggedStartAtOrigin = true;
-              } catch (e) { console.error("[Oysta] Error mov.inicio:", e); }
+              updateDoc(iRef, { comentarios: arrayUnion(newComment) }).catch(e => {
+                console.error("[Oysta] Error mov.inicio:", e);
+                vs.loggedStartAtOrigin = false;
+              });
             } else if (distFromStart >= THRESHOLD_DEPART) {
-              const decalaje = Math.round((Date.now() - vs.assignmentTime) / 60000);
-              const text = `⚡️ ${indicativo} sale hacia ${iData.direccion || 'dirección de destino'}. [Decalaje: Hace ${decalaje} min]`;
-              const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
-              try {
-                await updateDoc(iRef, { comentarios: arrayUnion(newComment) });
-                vs.hasDeparted = true;
-              } catch (e) { console.error("[Oysta] Error salida:", e); }
+              vs.hasDeparted = true; // Sync flag BEFORE await
+              if (iData.direccion) {
+                // Con dirección: Salida normal
+                const decalaje = Math.round((Date.now() - vs.assignmentTime) / 60000);
+                const text = `⚡️ ${indicativo} sale hacia ${iData.direccion}. [Decalaje: Hace ${decalaje} min]`;
+                const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
+                updateDoc(iRef, { comentarios: arrayUnion(newComment) }).catch(e => {
+                  console.error("[Oysta] Error salida:", e);
+                  vs.hasDeparted = false;
+                });
+              } else {
+                // Sin dirección: Seguimiento "Sale de..."
+                reverseGeocodeWithCache(vs.initialPos, (addr) => {
+                  const originAddr = addr || 'posición de inicio';
+                  vs.lastStopAddr = originAddr;
+                  vs.lastSaleDeTS = Date.now();
+                  vs.isMovingOffsite = true;
+                  const text = `⚡️ ${indicativo} sale de ${originAddr}`;
+                  const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: vs.lastSaleDeTS, fecha: formatCommentFecha(new Date()) };
+                  updateDoc(iRef, { comentarios: arrayUnion(newComment) }).catch(e => {
+                    console.error("[Oysta] Error salida-de-inicio:", e);
+                    vs.hasDeparted = false;
+                  });
+                });
+              }
             }
           }
 
-          // 3. Seguimiento Paradas Intermedias
+          // 3. Seguimiento Paradas Intermedias (Seguimiento para casos sin dirección o cambios de ruta)
           if (!isMovingNow) {
             if (vs.isMovingOffsite) {
-              reverseGeocodeWithCache(pos, async (addr) => {
+              const currentPosStop = { ...pos };
+              vs.isMovingOffsite = false; // Sync flag BEFORE await
+              reverseGeocodeWithCache(currentPosStop, async (addr) => {
                 const newAddr = addr || 'posición desconocida';
                 const arrivalText = `✅ ${indicativo} llega a ${newAddr}.`;
                 const arrivalTS = Date.now();
@@ -7826,8 +7847,10 @@ ${dataContext}
                     updatedComms.push(newArrComment);
                     await updateDoc(iRef, { comentarios: updatedComms, actualizadoEn: serverTimestamp() });
                   }
-                } catch (e) { console.error("[Oysta] Error retro-modificación:", e); }
-                vs.isMovingOffsite = false;
+                } catch (e) {
+                  console.error("[Oysta] Error retro-modificación:", e);
+                  vs.isMovingOffsite = true;
+                }
                 vs.lastStopAddr = newAddr;
               });
             }
@@ -7836,16 +7859,21 @@ ${dataContext}
           } else {
             if (!vs.moving) vs.moving = true;
             const distOff = vs.lastStationaryPos ? calculateHaversineDist(pos, vs.lastStationaryPos) : 0;
+            // Solo activar "Sale de..." si ya ha salido del origen y no estamos ya en un tramo offsite
             if (distOff > THRESHOLD_OFFSITE && !vs.isMovingOffsite && vs.hasDeparted && !vs.hasArrived) {
-              vs.isMovingOffsite = true;
-              reverseGeocodeWithCache(vs.lastStationaryPos, async (addr) => {
+              vs.isMovingOffsite = true; // Sync flag BEFORE await
+              const stationaryPos = { ...vs.lastStationaryPos };
+              reverseGeocodeWithCache(stationaryPos, async (addr) => {
                 vs.lastStopAddr = addr || 'posición conocida';
                 vs.lastSaleDeTS = Date.now();
                 const text = `⚡️ ${indicativo} sale de ${vs.lastStopAddr}`;
                 const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: vs.lastSaleDeTS, fecha: formatCommentFecha(new Date()) };
                 try {
                   await updateDoc(iRef, { comentarios: arrayUnion(newComment) });
-                } catch (e) { console.error("[Oysta] Error sale-de:", e); }
+                } catch (e) {
+                  console.error("[Oysta] Error sale-de:", e);
+                  vs.isMovingOffsite = false;
+                }
               });
             }
           }
@@ -7909,7 +7937,7 @@ ${dataContext}
       // Añadir listener para centrar al hacer click
       container.addEventListener('click', () => {
         mapPreventivos.panTo(i.coords);
-        // mapPreventivos.setZoom(18); // V.13.8.0: Desactivado para respetar zoom usuario
+        // mapPreventivos.setZoom(18); // V.13.8.1: Desactivado para respetar zoom usuario
         abrirGestionIntervencion(id);
       });
     }
@@ -7918,7 +7946,7 @@ ${dataContext}
       const m = markersPreventivos[id];
       if (m && mapPreventivos) {
         mapPreventivos.panTo(m.position);
-        // mapPreventivos.setZoom(17); // V.13.8.0: Desactivado para respetar zoom usuario
+        // mapPreventivos.setZoom(17); // V.13.8.1: Desactivado para respetar zoom usuario
       }
     };
 
@@ -8815,7 +8843,7 @@ ${dataContext}
       renderComentariosList(data.comentarios || []);
       document.getElementById('prev-comentario-txt').value = '';
 
-      // V.13.8.0: Permiso para comentar
+      // V.13.8.1: Permiso para comentar
       let canComment = true;
       if (mode === 'intervencion') canComment = canCommentIntervencion(data);
       else if (mode === 'dia') canComment = canCommentSubpreventivo(data);
@@ -8840,7 +8868,7 @@ ${dataContext}
       const isElevated = currentRole === 'admin' || currentRole === 'manager' || isSuper;
 
       cont.innerHTML = list.map((c, idx) => {
-        // V.13.8.0: Reglas solicitadas - Admin/Responsable/SuperAdmin editan, solo SuperAdmin borra
+        // V.13.8.1: Reglas solicitadas - Admin/Responsable/SuperAdmin editan, solo SuperAdmin borra
         const canEdit = isElevated && (c.autorId !== 'system');
         const canDelete = isSuper;
 
@@ -8861,7 +8889,7 @@ ${dataContext}
       cont.scrollTop = cont.scrollHeight;
     }
 
-    // V.13.8.0: Funciones generales para edición y borrado de comentarios en modales de lista
+    // V.13.8.1: Funciones generales para edición y borrado de comentarios en modales de lista
     window.editarComentarioGeneral = (index) => {
       let data = null;
       if (currentComMode === 'intervencion') data = intervencionesCache[currentComIntId];
@@ -8936,7 +8964,7 @@ ${dataContext}
 
       if (!data) return;
 
-      // V.13.8.0: Guard de seguridad
+      // V.13.8.1: Guard de seguridad
       let canComment = true;
       if (currentComMode === 'intervencion') canComment = canCommentIntervencion(data);
       else if (currentComMode === 'dia') canComment = canCommentSubpreventivo(data);
@@ -14183,7 +14211,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.8.0
+          Versión V.13.8.1
         </div>
       </div>
 
@@ -14612,7 +14640,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.8.0
+          Versión V.13.8.1
         </div>
       </div>
 
@@ -15499,7 +15527,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.8.0
+            Versión V.13.8.1
           </div>
         </div>
         <div class="field" id="j-prov-row">
