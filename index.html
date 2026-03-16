@@ -1319,7 +1319,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.8.4 Loaded');
+    console.log('EmerCRE V.13.8.6 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -6666,11 +6666,13 @@ ${dataContext}
 
       const movingFilter = showMovingOysta && v.status.toLowerCase() !== 'parado';
       const localVeh = typeof localVehiclesByOystaId !== 'undefined' ? localVehiclesByOystaId[mid] : null;
+      // V.12.4.1: Mostrar vehículos Oysta vinculados a CUALQUIER preventivo abierto
       const isLocalAssigned = !!(localVeh && typeof _assignedVehiclesInOpenPreventivos !== 'undefined' && _assignedVehiclesInOpenPreventivos.has(localVeh.id));
 
-      if (isLocalAssigned) {
-        console.log(`[Oysta-Prev] Vehículo asignado detectado: ${v.name} (LocalID: ${localVeh.id})`);
-      }
+      // V.13.8.5: Si está asignado específicamente a una intervención, ocultamos el marcador general
+      // para evitar duplicidad, ya que renderPreventivoAssignedVehicles pintará el suyo.
+      const shouldShowGeneral = (isVisible && currentUserDoc?.canSeeVehicles) || movingFilter;
+      const finalMap = (shouldShowGeneral && !isLocalAssigned) ? mapPreventivos : null;
 
       if (oystaMarkersPrev[mid]) {
         oystaMarkersPrev[mid].position = pos;
@@ -6678,8 +6680,8 @@ ${dataContext}
           const statusClass = (v.status.toLowerCase() !== 'parado') ? 'moving' : 'stopped';
           oystaMarkersPrev[mid].content = window.createOystaMarkerContent(v, localVeh, statusClass);
         }
-        oystaMarkersPrev[mid].setMap(((isVisible && currentUserDoc?.canSeeVehicles) || movingFilter || isLocalAssigned) ? mapPreventivos : null);
-      } else if (isVisible || movingFilter || isLocalAssigned) {
+        oystaMarkersPrev[mid].setMap(finalMap);
+      } else if (finalMap) {
         let content;
         if (typeof window.createOystaMarkerContent === 'function') {
           const statusClass = (parseFloat(v.speed) > 5) ? 'moving' : 'stopped';
@@ -7787,8 +7789,9 @@ ${dataContext}
             const distFromStart = calculateHaversineDist(pos, vs.initialPos);
             if (distFromStart < THRESHOLD_DEPART && !vs.loggedStartAtOrigin) {
               vs.loggedStartAtOrigin = true; // Sync flag BEFORE await to prevent loop
-              const text = `⚡️ ${indicativo} en movimiento en lugar de inicio a las ${new Date().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}.`;
-              const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
+              const actualTS = Date.now(); // Mov. en origen es tiempo real
+              const text = `⚡️ ${indicativo} en movimiento en lugar de inicio a las ${new Date(actualTS).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}.`;
+              const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: actualTS, fecha: formatCommentFecha(new Date(actualTS)) };
               updateDoc(iRef, { comentarios: arrayUnion(newComment) }).catch(e => {
                 console.error("[Oysta] Error mov.inicio:", e);
                 vs.loggedStartAtOrigin = false;
@@ -7798,8 +7801,9 @@ ${dataContext}
               if (iData.direccion) {
                 // Con dirección: Salida normal
                 const decalaje = Math.round((Date.now() - vs.assignmentTime) / 60000);
+                const actualTS = Date.now() - (decalaje * 60000);
                 const text = `⚡️ ${indicativo} sale hacia ${iData.direccion}. [Decalaje: Hace ${decalaje} min]`;
-                const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
+                const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: actualTS, fecha: formatCommentFecha(new Date(actualTS)) };
                 updateDoc(iRef, { comentarios: arrayUnion(newComment) }).catch(e => {
                   console.error("[Oysta] Error salida:", e);
                   vs.hasDeparted = false;
@@ -7809,10 +7813,12 @@ ${dataContext}
                 reverseGeocodeWithCache(vs.initialPos, (addr) => {
                   const originAddr = addr || 'posición de inicio';
                   vs.lastStopAddr = originAddr;
-                  vs.lastSaleDeTS = Date.now();
+                  const decalajeMs = Math.round((Date.now() - vs.assignmentTime));
+                  vs.lastSaleDeTS = Date.now() - decalajeMs;
                   vs.isMovingOffsite = true;
-                  const text = `⚡️ ${indicativo} sale de ${originAddr}`;
-                  const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: vs.lastSaleDeTS, fecha: formatCommentFecha(new Date()) };
+                  const saleTime = new Date(vs.lastSaleDeTS).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                  const text = `⚡️ ${indicativo} sale de ${originAddr} a las ${saleTime}.`;
+                  const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: vs.lastSaleDeTS, fecha: formatCommentFecha(new Date(vs.lastSaleDeTS)) };
                   updateDoc(iRef, { comentarios: arrayUnion(newComment) }).catch(e => {
                     console.error("[Oysta] Error salida-de-inicio:", e);
                     vs.hasDeparted = false;
@@ -8401,12 +8407,17 @@ ${dataContext}
                   if (globalLast && globalLast.addr && !containsDate(globalLast.addr)) {
                     origin = ` desde ${globalLast.addr}`;
                     const diffMin = Math.round((Date.now() - globalLast.timestamp) / 60000);
+                    const saleTime = new Date(Date.now() - (diffMin * 60000)).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
                     if (diffMin > 1) delayStr = ` [Decalaje: Hace ${diffMin} min]`;
+                    const speed = parseFloat(ov.speed);
+                    baseMsg += ` y ⚡️ SALE${origin} a las ${saleTime} hacia el lugar (${speed} km/h)${delayStr}`;
                   } else {
                     // Si no hay parada previa clara o el addr es basura (ej: fecha), intentamos geocodificar pos actual
                     const currentPos = { lat: parseFloat(ov.lat), lng: parseFloat(ov.lng) };
                     const addr = await new Promise(res => reverseGeocodeWithCache(currentPos, res));
                     if (addr) origin = ` desde ${addr}`;
+                    const speed = parseFloat(ov.speed);
+                    baseMsg += ` y ⚡️ SALE${origin} hacia el lugar (${speed} km/h)`;
                   }
 
                   const speed = parseFloat(ov.speed);
@@ -8420,7 +8431,7 @@ ${dataContext}
               texto: `🚀 INTERVENCIÓN INICIADA\n${logEntries.join('\n')} `,
               autor: 'Sist. Oysta',
               autorId: 'system',
-              timestamp: Date.now(),
+              timestamp: Date.now(), // El timestamp real de los SALE se ajusta individualmente en el loop si fuera necesario, pero aquí lo dejamos como tiempo de registro base
               fecha: formatCommentFecha(new Date())
             });
           }
@@ -14220,7 +14231,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.8.4
+          Versión V.13.8.6
         </div>
       </div>
 
@@ -14649,7 +14660,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.8.4
+          Versión V.13.8.6
         </div>
       </div>
 
@@ -15536,7 +15547,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.8.4
+            Versión V.13.8.6
           </div>
         </div>
         <div class="field" id="j-prov-row">
