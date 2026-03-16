@@ -1319,7 +1319,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.8.3 Loaded');
+    console.log('EmerCRE V.13.8.4 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -8311,6 +8311,10 @@ ${dataContext}
       if (prevMarkerInt) prevMarkerInt.setMap(null);
       prevMarkerInt = null;
 
+      // V.13.8.4: Limpiar coordenadas y dirección para evitar polución entre intervenciones
+      pickedCoordsPrev = null;
+      if (typeof fastAssignAddress !== 'undefined') fastAssignAddress = "";
+
       // V.12.4.1: Limpiar ranking al cerrar el modal (reutilizando helper)
       window.clearAmbulanceRanking();
     };
@@ -8391,7 +8395,10 @@ ${dataContext}
                   let origin = "";
                   let delayStr = "";
 
-                  if (globalLast && globalLast.addr && !globalLast.addr.includes(':')) {
+                  // V.13.8.4: Verificación más robusta de dirección (evitar fechas/horas tipo Oysta)
+                  const containsDate = (s) => (s && (s.includes(':') || /\d{4}-\d{2}-\d{2}/.test(s)));
+
+                  if (globalLast && globalLast.addr && !containsDate(globalLast.addr)) {
                     origin = ` desde ${globalLast.addr}`;
                     const diffMin = Math.round((Date.now() - globalLast.timestamp) / 60000);
                     if (diffMin > 1) delayStr = ` [Decalaje: Hace ${diffMin} min]`;
@@ -14213,7 +14220,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.8.3
+          Versión V.13.8.4
         </div>
       </div>
 
@@ -14642,7 +14649,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.8.3
+          Versión V.13.8.4
         </div>
       </div>
 
@@ -15529,7 +15536,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.8.3
+            Versión V.13.8.4
           </div>
         </div>
         <div class="field" id="j-prov-row">
