@@ -1319,7 +1319,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.8.1 Loaded');
+    console.log('EmerCRE V.13.8.2 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2375,7 +2375,7 @@
       const hasCache = populateOystaVehicleListFromCache();
       populateOystaVehicleListPrevFromCache(); // V.12.4.1
       // V.12.4.1: Adaptive Oysta Sync (Throttled & Visibility-aware)
-      let oystaInterval = 60000; // Default 1 min
+      let oystaInterval = 30000; // V.13.8.2: 30s as requested
       cargarVehiculosOysta(!hasCache);
 
       const restartOystaInterval = (ms) => {
@@ -7699,7 +7699,6 @@ ${dataContext}
       const iDocsArr = interventionDocs || [];
       iDocsArr.forEach(snap => {
         const i = snap.data();
-        if (!i.coords) return;
         (i.recursosAsignados || []).forEach(vid => {
           resourceMap[String(vid)] = { snap, data: i };
         });
@@ -7758,13 +7757,13 @@ ${dataContext}
           }
 
           // B. Monitoreo de Estados
-          const distToDest = calculateHaversineDist(pos, iData.coords);
+          const distToDest = iData.coords ? calculateHaversineDist(pos, iData.coords) : null;
           const THRESHOLD_ARRIVE = 0.05; // 50m
           const THRESHOLD_DEPART = 0.05; // 50m
           const THRESHOLD_OFFSITE = 0.20; // 200m
 
           // V.13.8.1: Reset arrival logic if destination changes drastically
-          if (vs.hasArrived && vs.lastArrivedCoords) {
+          if (vs.hasArrived && vs.lastArrivedCoords && iData.coords) {
             const dMove = calculateHaversineDist(iData.coords, vs.lastArrivedCoords);
             if (dMove > 0.05) {
               vs.hasArrived = false;
@@ -7772,8 +7771,8 @@ ${dataContext}
             }
           }
 
-          // 1. Llegada
-          if (distToDest < THRESHOLD_ARRIVE && !vs.hasArrived) {
+          // 1. Llegada (Solo si hay coordenadas de destino)
+          if (distToDest !== null && distToDest < THRESHOLD_ARRIVE && !vs.hasArrived) {
             const text = `✅ ${indicativo} llega al lugar (${iData.direccion || 'sin dirección'}).`;
             const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: Date.now(), fecha: formatCommentFecha(new Date()) };
             try {
@@ -8388,18 +8387,21 @@ ${dataContext}
               if (v && v.oystaId) {
                 const ov = oystaVehiclesCache.find(x => String(x.id) === String(v.oystaId));
                 if (ov && parseFloat(ov.speed) > 5) {
-                  let origin = "";
                   const globalLast = window._oystaGlobalLastStop[String(v.oystaId)];
+                  let origin = "";
                   let delayStr = "";
-                  if (globalLast) {
-                    if (globalLast.addr) origin = ` desde ${globalLast.addr}`;
+
+                  if (globalLast && globalLast.addr && !globalLast.addr.includes(':')) {
+                    origin = ` desde ${globalLast.addr}`;
                     const diffMin = Math.round((Date.now() - globalLast.timestamp) / 60000);
                     if (diffMin > 1) delayStr = ` [Decalaje: Hace ${diffMin} min]`;
-                  } else if (ov.last_pos) {
-                    origin = ` desde ${ov.last_pos}`;
+                  } else {
+                    // Si no hay parada previa clara o el addr es basura (ej: fecha), intentamos geocodificar pos actual
+                    const currentPos = { lat: parseFloat(ov.lat), lng: parseFloat(ov.lng) };
+                    const addr = await new Promise(res => reverseGeocodeWithCache(currentPos, res));
+                    if (addr) origin = ` desde ${addr}`;
                   }
 
-                  // Calcular decalaje si es posible (V.13.0.4)
                   const speed = parseFloat(ov.speed);
                   baseMsg += ` y ⚡️ SALE${origin} hacia el lugar (${speed} km/h)${delayStr}`;
                 }
@@ -14211,7 +14213,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.8.1
+          Versión V.13.8.2
         </div>
       </div>
 
@@ -14640,7 +14642,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.8.1
+          Versión V.13.8.2
         </div>
       </div>
 
@@ -15527,7 +15529,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.8.1
+            Versión V.13.8.2
           </div>
         </div>
         <div class="field" id="j-prov-row">
