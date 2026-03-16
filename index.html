@@ -1319,7 +1319,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.8.6 Loaded');
+    console.log('EmerCRE V.13.8.7 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -6666,13 +6666,16 @@ ${dataContext}
 
       const movingFilter = showMovingOysta && v.status.toLowerCase() !== 'parado';
       const localVeh = typeof localVehiclesByOystaId !== 'undefined' ? localVehiclesByOystaId[mid] : null;
-      // V.12.4.1: Mostrar vehículos Oysta vinculados a CUALQUIER preventivo abierto
-      const isLocalAssigned = !!(localVeh && typeof _assignedVehiclesInOpenPreventivos !== 'undefined' && _assignedVehiclesInOpenPreventivos.has(localVeh.id));
 
-      // V.13.8.5: Si está asignado específicamente a una intervención, ocultamos el marcador general
-      // para evitar duplicidad, ya que renderPreventivoAssignedVehicles pintará el suyo.
-      const shouldShowGeneral = (isVisible && currentUserDoc?.canSeeVehicles) || movingFilter;
-      const finalMap = (shouldShowGeneral && !isLocalAssigned) ? mapPreventivos : null;
+      // V.12.4.1: Mostrar vehículos Oysta vinculados a CUALQUIER preventivo abierto
+      const isLocalAssigned = !!(localVeh && window._assignedVehiclesInOpenPreventivos && window._assignedVehiclesInOpenPreventivos.has(localVeh.id));
+      const isInIntervention = !!(localVeh && window._vehiclesInInterventions && window._vehiclesInInterventions.has(localVeh.id));
+
+      // V.13.8.7: Un vehículo asignado a un preventivo (día o intervención) debe ser visible.
+      // Pero si ya tiene un marcador específico de intervención (renderPreventivoAssignedVehicles), 
+      // ocultamos el marcador general para evitar duplicados.
+      const shouldShowGeneral = (isVisible && currentUserDoc?.canSeeVehicles) || movingFilter || isLocalAssigned;
+      const finalMap = (shouldShowGeneral && !isInIntervention) ? mapPreventivos : null;
 
       if (oystaMarkersPrev[mid]) {
         oystaMarkersPrev[mid].position = pos;
@@ -7592,20 +7595,26 @@ ${dataContext}
 
       // V.12.4.1: Recopilar todos los recursos asignados con redundancia (snapshots globales + caches locales)
       const assignedResourceIds = new Set();
+      const interventionResourceIds = new Set(); // V.13.8.7: Trackear específicamente los que están en intervención
       const addRids = (arr) => { if (arr && Array.isArray(arr)) arr.forEach(rid => { if (rid) assignedResourceIds.add(String(rid)); }); };
+      const addIntRids = (arr) => { if (arr && Array.isArray(arr)) arr.forEach(rid => { if (rid) interventionResourceIds.add(String(rid)); }); };
 
       // 1. De intervenciones globales (abiertas)
-      lastGlobalInterventionDocs.forEach(doc => addRids(doc.data().recursosAsignados));
+      lastGlobalInterventionDocs.forEach(doc => {
+        const r = doc.data().recursosAsignados;
+        addRids(r);
+        addIntRids(r);
+      });
 
       // 2. De subpreventivos globales (días abiertos)
       lastGlobalSubpreventivoDocs.forEach(doc => addRids(doc.data().recursos));
 
-      // 3. Redundancia: De caches locales (último snapshot de preventivos y subpreventivos conocidos)
+      // 3. Redundancia: De caches locales
       Object.values(preventivosCache).forEach(p => { if (p.abierta !== false) addRids(p.recursos); });
       Object.values(subpreventivosCache).forEach(s => { if (s.abierta !== false) addRids(s.recursos); });
 
-      console.log("[Preventivos] Agregación de recursos finalizada. Total únicos:", assignedResourceIds.size, Array.from(assignedResourceIds));
       window._assignedVehiclesInOpenPreventivos = assignedResourceIds;
+      window._vehiclesInInterventions = interventionResourceIds;
 
       const filteredDocs = intDocs.filter(doc => {
         const i = doc.data();
@@ -15547,7 +15556,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.8.6
+            Versión V.13.8.7
           </div>
         </div>
         <div class="field" id="j-prov-row">
