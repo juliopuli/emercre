@@ -206,9 +206,9 @@
     let fastAssignLocation = null;
     let fastAssignAddress = "";
 
-    // ── SISTEMA DE CACHÉ Y OPTIMIZACIÓN DE API (V.12.4.1 / V.13.17.0) ──────────────
+    // ── SISTEMA DE CACHÉ Y OPTIMIZACIÓN DE API (V.12.4.1 / V.13.17.1) ──────────────
     const geocodeCache = {};
-    // V.13.17.0: reverseGeocodeCache persistido en sessionStorage para sobrevivir recargas suaves
+    // V.13.17.1: reverseGeocodeCache persistido en sessionStorage para sobrevivir recargas suaves
     const _rgcKey = 'emercre_rgc';
     const reverseGeocodeCache = (() => { try { return JSON.parse(sessionStorage.getItem(_rgcKey) || '{}'); } catch(e) { return {}; } })();
     function _saveRgcCache() { try { sessionStorage.setItem(_rgcKey, JSON.stringify(reverseGeocodeCache)); } catch(e) {} }
@@ -280,7 +280,7 @@
       gc.geocode({ location: { lat, lng } }, (results, status) => {
         if (status === 'OK' && results[0]) {
           reverseGeocodeCache[key] = results[0].formatted_address;
-          _saveRgcCache(); // V.13.17.0: Persistir en sessionStorage
+          _saveRgcCache(); // V.13.17.1: Persistir en sessionStorage
           callback(results[0].formatted_address);
         } else {
           callback(null);
@@ -1348,7 +1348,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.17.0 Loaded');
+    console.log('EmerCRE V.13.17.1 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1643,7 +1643,8 @@
     async function cargarUsuariosParaChat() {
       if (unsubUserPresence) unsubUserPresence();
       // V.12.4.1: Solo cargar usuarios que no sean anónimos y limitar a 100 para ahorrar lecturas
-      const q = query(collection(db, 'users'), where('role', '!=', 'anonimo'), limit(100));
+      // V.13.17.1: Ordenar por ultimaActividad desc para priorizar usuarios recientes en listado de chat
+      const q = query(collection(db, 'users'), where('role', '!=', 'anonimo'), orderBy('ultimaActividad', 'desc'), limit(100));
       unsubUserPresence = onSnapshot(q, snap => {
         allUsersCache = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
         renderChatList();
@@ -5002,7 +5003,12 @@ ${dataContext}
         currentChatId = null;
       }
 
-      if (sec === 'usuarios') suscribirUsuarios();
+      if (sec === 'usuarios') {
+        suscribirUsuarios();
+      } else {
+        // V.13.17.1: Cancelar el listener de usuarios al salir de la sección para ahorrar lecturas
+        if (unsubUsuarios) { unsubUsuarios(); unsubUsuarios = null; cachedUsersSnap = null; }
+      }
       if (sec === 'tablas' && typeof window.showTablaMaestra === 'function') {
         window.showTablaMaestra('vehiculos');
       }
@@ -5448,7 +5454,7 @@ ${dataContext}
     let editingVehiculoId = null;
 
     async function cargarVehiculos() {
-      // V.13.17.0: Usar caché local en lugar de relanzar getDocs. localVehiclesById ya
+      // V.13.17.1: Usar caché local en lugar de relanzar getDocs. localVehiclesById ya
       // está poblado por el onSnapshot al cargar la app. Ahorra 1 lectura completa por apertura.
       const tbody = document.getElementById('vehiculos-tbody');
       if (!tbody) return;
@@ -6914,7 +6920,7 @@ ${dataContext}
       if (prov) window.cargarRecursoPreventivoMain(prov, preselected);
     };
 
-    // V.13.17.0: Caché de vehículos por provincia con TTL de 5 minutos para evitar getDocs repetidos
+    // V.13.17.1: Caché de vehículos por provincia con TTL de 5 minutos para evitar getDocs repetidos
     window._vehiculosProvCache = window._vehiculosProvCache || {};
     async function getVehiculosByProvincia(prov) {
       const now = Date.now();
@@ -7133,7 +7139,7 @@ ${dataContext}
         }
       });
 
-      // V.13.17.0: Usar caché con TTL en lugar de getDocs directo
+      // V.13.17.1: Usar caché con TTL en lugar de getDocs directo
       getVehiculosByProvincia(p.provincia || 'Andalucía').then(vehs => {
         vehs.forEach(v => { window.globalVehiculos[v.id] = v; });
         
@@ -7241,7 +7247,7 @@ ${dataContext}
       const recList = document.getElementById('prev-dia-recursos-list');
       recList.innerHTML = 'Cargando vehículos...';
       const p = preventivosCache[currentPreventivoId];
-      // V.13.17.0: Usar caché con TTL en lugar de getDocs directo
+      // V.13.17.1: Usar caché con TTL en lugar de getDocs directo
       const vehs = await getVehiculosByProvincia(p.provincia || 'Andalucía');
       window.globalVehiculos = window.globalVehiculos || {};
       if (vehs.length === 0) {
@@ -7305,7 +7311,7 @@ ${dataContext}
     };
 
     window.renderResourceBadges = (recursos, occupiedResources) => {
-      // Función obsoleta tras V.13.17.0, ahora se usa renderHeaderResourceBadges para el banner
+      // Función obsoleta tras V.13.17.1, ahora se usa renderHeaderResourceBadges para el banner
       return '';
     };
 
@@ -7322,7 +7328,7 @@ ${dataContext}
       banner.classList.add('visible');
       
       const occupiedResources = new Set();
-      // V.13.17.0: Lógica robusta de disponibilidad basada en el snapshot actual
+      // V.13.17.1: Lógica robusta de disponibilidad basada en el snapshot actual
       if (typeof lastIntervencionesSnap !== 'undefined' && lastIntervencionesSnap) {
         lastIntervencionesSnap.docs.forEach(doc => {
           const i = doc.data();
@@ -7384,7 +7390,7 @@ ${dataContext}
       currentPreventivoId = d.preventivoId || currentPreventivoId;
       currentPreventivoDiaId = id;
       activeIntManageId = null;
-      window._prevIntSearch = ""; // V.13.17.0: Limpiar búsqueda al cambiar de día
+      window._prevIntSearch = ""; // V.13.17.1: Limpiar búsqueda al cambiar de día
       const sInput = document.getElementById('prev-int-search');
       if (sInput) sInput.value = "";
       if (side) side.classList.add('open');
@@ -8126,7 +8132,7 @@ ${dataContext}
         const d = subpreventivosCache[currentPreventivoDiaId];
         if (!d || !d.recursos) return;
 
-        // V.13.17.0: Guard real — evitar llamadas si las coords no han cambiado >300m en <60s
+        // V.13.17.1: Guard real — evitar llamadas si las coords no han cambiado >300m en <60s
         const now = Date.now();
         if (lastDistanceMatrixCoords && lastDistanceMatrixTime && (now - lastDistanceMatrixTime) < 60000) {
           const dLat = Math.abs(destCoords.lat - lastDistanceMatrixCoords.lat);
@@ -10449,7 +10455,7 @@ ${dataContext}
       white-space: nowrap;
     }
 
-    /* V.13.17.0: Estilos Faldón Operatividad (Compacto - Derecha - Iconos Grandes) */
+    /* V.13.17.1: Estilos Faldón Operatividad (Compacto - Derecha - Iconos Grandes) */
     .operability-banner {
       position: absolute;
       top: 10px;
@@ -10527,7 +10533,7 @@ ${dataContext}
       border-color: rgba(46, 204, 113, 0.7);
     }
     .op-resource-icon {
-      width: 28px; /* V.13.17.0: Iconos aún más grandes */
+      width: 28px; /* V.13.17.1: Iconos aún más grandes */
       height: 28px;
       object-fit: contain;
       filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));
@@ -11510,7 +11516,7 @@ ${dataContext}
       box-shadow: 10px 0 40px rgba(0,0,0,0.18);
       border-right: 1px solid var(--border-mid);
     }
-    /* V.13.17.0: Nuevo Panel de Gestión de Intervención (Lateral al Detalle) */
+    /* V.13.17.1: Nuevo Panel de Gestión de Intervención (Lateral al Detalle) */
     #preventivos-management-panel {
       left: 330px; /* Al lado del detalle-panel lateral */
       width: 0;
@@ -14398,7 +14404,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.17.0
+          Versión V.13.17.1
         </div>
       </div>
 
@@ -14827,7 +14833,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.17.0
+          Versión V.13.17.1
         </div>
       </div>
 
@@ -14872,7 +14878,7 @@ ${dataContext}
         </div>
       </div>
 
-      <!-- V.13.17.0: Panel de Gestión de Intervención (Lateral al Detalle) -->
+      <!-- V.13.17.1: Panel de Gestión de Intervención (Lateral al Detalle) -->
       <div class="detail-panel" id="preventivos-management-panel">
         <div class="dp-header" style="background:var(--bg-2); padding: 12px 14px 8px;">
            <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -14891,7 +14897,7 @@ ${dataContext}
       </div>
 
       <div class="panel-right">
-        <!-- V.13.17.0: Faldón de Operatividad -->
+        <!-- V.13.17.1: Faldón de Operatividad -->
         <div id="prev-operability-banner" class="operability-banner">
           <div id="op-row-ambulancias" class="op-banner-row">
             <div class="op-banner-label">🚑 Ambulancias</div>
@@ -15746,7 +15752,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.17.0
+            Versión V.13.17.1
           </div>
         </div>
         <div class="field" id="j-prov-row">
