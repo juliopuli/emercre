@@ -1344,7 +1344,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.14.1 Loaded');
+    console.log('EmerCRE V.13.14.2 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7112,7 +7112,7 @@ ${dataContext}
         }
       });
 
-      // V.13.14.1: Cargar primero los vehículos y luego los subpreventivos para asegurar consistencia
+      // V.13.14.2: Cargar primero los vehículos y luego los subpreventivos para asegurar consistencia
       const qV = query(collection(db, 'vehiculos'), where('provincia', '==', p.provincia || 'Andalucía'));
       getDocs(qV).then(snapV => {
         snapV.docs.forEach(dv => {
@@ -7277,7 +7277,7 @@ ${dataContext}
     };
 
     window.renderResourceBadges = (recursos, occupiedResources) => {
-      // Función obsoleta tras V.13.14.1, ahora se usa renderHeaderResourceBadges para el banner
+      // Función obsoleta tras V.13.14.2, ahora se usa renderHeaderResourceBadges para el banner
       return '';
     };
 
@@ -7294,7 +7294,7 @@ ${dataContext}
       banner.classList.add('visible');
       
       const occupiedResources = new Set();
-      // V.13.14.1: Lógica robusta de disponibilidad basada en el snapshot actual
+      // V.13.14.2: Lógica robusta de disponibilidad basada en el snapshot actual
       if (typeof lastIntervencionesSnap !== 'undefined' && lastIntervencionesSnap) {
         lastIntervencionesSnap.docs.forEach(doc => {
           const i = doc.data();
@@ -7356,7 +7356,7 @@ ${dataContext}
       currentPreventivoId = d.preventivoId || currentPreventivoId;
       currentPreventivoDiaId = id;
       activeIntManageId = null;
-      window._prevIntSearch = ""; // V.13.14.1: Limpiar búsqueda al cambiar de día
+      window._prevIntSearch = ""; // V.13.14.2: Limpiar búsqueda al cambiar de día
       const sInput = document.getElementById('prev-int-search');
       if (sInput) sInput.value = "";
       if (side) side.classList.add('open');
@@ -10476,22 +10476,22 @@ ${dataContext}
       white-space: nowrap;
     }
 
-    /* V.13.14.1: Estilos Faldón Operatividad (Panorámico Premium) */
+    /* V.13.14.2: Estilos Faldón Operatividad (Panorámico Minimalista & Ultra-Transparente) */
     .operability-banner {
       position: absolute;
       top: 14px;
-      left: 175px; /* V.13.14.1: Restaurado margen izquierdo para filtros */
-      right: 14px; /* Pegado al borde derecho */
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 249, 252, 0.93));
-      border: 1px solid rgba(255, 255, 255, 0.7);
-      border-radius: 12px;
-      padding: 8px 16px;
+      left: 175px; 
+      right: 14px; 
+      background: rgba(255, 255, 255, 0.15); /* Ultra-transparente */
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 10px;
+      padding: 4px 12px; /* Reducción de padding vertical */
       z-index: 900;
       display: none;
       flex-direction: column;
-      gap: 4px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.4);
-      backdrop-filter: blur(15px);
+      gap: 2px; /* Reducción de gap entre filas */
+      box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+      backdrop-filter: blur(8px); /* Blur más suave para transparencia real */
       transition: all 0.3s ease;
     }
     .operability-banner.visible {
@@ -10500,83 +10500,79 @@ ${dataContext}
     .op-banner-row {
       display: flex;
       align-items: center;
-      gap: 12px;
-      min-height: 34px;
-      border-bottom: 1px solid rgba(0, 0, 0, 0.04);
-      padding-bottom: 4px;
+      gap: 10px;
+      min-height: 24px; /* V.13.14.2: Más pequeño (2/3 del tamaño previo) */
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 2px;
     }
     .op-banner-row:last-child {
       border-bottom: none;
       padding-bottom: 0;
     }
     .op-banner-label {
-      font-size: 8px;
+      font-size: 7px; /* Fuente más pequeña */
       font-weight: 800;
-      color: var(--text-3);
-      width: 65px;
+      color: rgba(255, 255, 255, 0.9); /* Texto en blanco para fondo oscuro/transparente si el mapa es variado */
+      width: 55px; /* Etiqueta más estrecha */
       flex-shrink: 0;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
-      line-height: 1.1;
+      letter-spacing: 0.05em;
+      line-height: 1;
       text-align: right;
-      padding-right: 10px;
-      border-right: 1px solid rgba(0, 0, 0, 0.08);
-      opacity: 0.8;
+      padding-right: 8px;
+      border-right: 1px solid rgba(255, 255, 255, 0.2);
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5); /* Sombra para legibilidad en transparencia */
     }
     .op-banner-content {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 4px; /* Gap más pequeño entre recursos */
       flex: 1;
     }
     .op-resource-card {
       display: flex;
       flex-direction: row;
       align-items: center;
-      background: white;
-      border: 1px solid rgba(0,0,0,0.06);
-      border-radius: 8px;
-      padding: 3px 10px;
-      min-width: 85px;
+      background: rgba(255, 255, 255, 0.2); /* Casi transparente */
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      padding: 1px 6px;
+      min-width: 70px; /* Más estrecho */
       cursor: default;
-      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      transition: all 0.2s;
       position: relative;
-      gap: 8px;
-      box-shadow: 0 2px 4px rgba(0,0,0,0.02);
-    }
-    .op-resource-card:hover {
-      transform: translateY(-1px);
-      box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+      gap: 5px;
     }
     .op-resource-card.occupied {
-      background: #fff5f5;
-      border-color: #feb2b2;
+      background: rgba(231, 76, 60, 0.3);
+      border-color: rgba(231, 76, 60, 0.5);
     }
     .op-resource-card.available {
-      background: #f0fff4;
-      border-color: #9ae6b4;
+      background: rgba(46, 204, 113, 0.3);
+      border-color: rgba(46, 204, 113, 0.5);
     }
     .op-resource-icon {
-      width: 22px; /* V.13.14.1: Iconos más grandes */
-      height: 22px;
+      width: 16px; /* Ajuste proporcional del icono */
+      height: 16px;
       object-fit: contain;
-      filter: drop-shadow(0 2px 3px rgba(0,0,0,0.05));
+      filter: drop-shadow(0 1px 2px rgba(0,0,0,0.2));
     }
     .op-resource-name {
-      font-size: 10px;
+      font-size: 8px; /* Texto más pequeño */
       font-weight: 800;
-      color: var(--text-2);
+      color: #fff; /* Blanco para máxima legibilidad en transparencia */
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      max-width: 80px;
+      max-width: 65px;
     }
     .op-status-dot {
-      width: 6px;
-      height: 6px;
+      width: 4px; /* Punto de estado más discreto */
+      height: 4px;
       border-radius: 50%;
       flex-shrink: 0;
-      box-shadow: 0 0 4px rgba(0,0,0,0.1);
+      box-shadow: 0 0 3px rgba(255,255,255,0.5);
     }
     .op-resource-card.occupied .op-status-dot { background: #e74c3c; }
     .op-resource-card.available .op-status-dot { background: #2ecc71; }
@@ -14374,7 +14370,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.14.1
+          Versión V.13.14.2
         </div>
       </div>
 
@@ -14803,7 +14799,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.14.1
+          Versión V.13.14.2
         </div>
       </div>
 
@@ -14849,7 +14845,7 @@ ${dataContext}
       </div>
 
       <div class="panel-right">
-        <!-- V.13.14.1: Faldón de Operatividad -->
+        <!-- V.13.14.2: Faldón de Operatividad -->
         <div id="prev-operability-banner" class="operability-banner">
           <div id="op-row-ambulancias" class="op-banner-row">
             <div class="op-banner-label">🚑 Ambulancias</div>
