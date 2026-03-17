@@ -1344,7 +1344,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.13.2 Loaded');
+    console.log('EmerCRE V.13.14.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7112,7 +7112,7 @@ ${dataContext}
         }
       });
 
-      // V.13.13.2: Cargar primero los vehículos y luego los subpreventivos para asegurar consistencia
+      // V.13.14.0: Cargar primero los vehículos y luego los subpreventivos para asegurar consistencia
       const qV = query(collection(db, 'vehiculos'), where('provincia', '==', p.provincia || 'Andalucía'));
       getDocs(qV).then(snapV => {
         snapV.docs.forEach(dv => {
@@ -7277,7 +7277,7 @@ ${dataContext}
     };
 
     window.renderResourceBadges = (recursos, occupiedResources) => {
-      // Función obsoleta tras V.13.13.2, ahora se usa renderHeaderResourceBadges para el banner
+      // Función obsoleta tras V.13.14.0, ahora se usa renderHeaderResourceBadges para el banner
       return '';
     };
 
@@ -7294,7 +7294,7 @@ ${dataContext}
       banner.classList.add('visible');
       
       const occupiedResources = new Set();
-      // V.13.13.2: Lógica robusta de disponibilidad basada en el snapshot actual
+      // V.13.14.0: Lógica robusta de disponibilidad basada en el snapshot actual
       if (typeof lastIntervencionesSnap !== 'undefined' && lastIntervencionesSnap) {
         lastIntervencionesSnap.docs.forEach(doc => {
           const i = doc.data();
@@ -7356,7 +7356,7 @@ ${dataContext}
       currentPreventivoId = d.preventivoId || currentPreventivoId;
       currentPreventivoDiaId = id;
       activeIntManageId = null;
-      window._prevIntSearch = ""; // V.13.13.2: Limpiar búsqueda al cambiar de día
+      window._prevIntSearch = ""; // V.13.14.0: Limpiar búsqueda al cambiar de día
       const sInput = document.getElementById('prev-int-search');
       if (sInput) sInput.value = "";
       if (side) side.classList.add('open');
@@ -10476,24 +10476,25 @@ ${dataContext}
       white-space: nowrap;
     }
 
-    /* V.13.13.2: Estilos Faldón Operatividad (Ultra-compacto y Blanco) */
+    /* V.13.14.0: Estilos Faldón Operatividad (Premium Glassmorphism - Derecha) */
     .operability-banner {
       position: absolute;
       top: 14px;
-      left: 175px;
-      right: 14px;
-      background: rgba(255, 255, 255, 0.98);
-      border: 1px solid var(--border-mid);
-      border-radius: 6px;
-      padding: 4px 10px;
+      right: 14px; /* V.13.14.0: Movido a la derecha */
+      left: auto;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 249, 252, 0.92));
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      border-radius: 12px;
+      padding: 10px 14px;
       z-index: 900;
       display: none;
       flex-direction: column;
-      gap: 2px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-      backdrop-filter: blur(8px);
-      transition: all 0.3s ease;
-      max-width: 70%; /* V.13.13.2: Limitar ancho máximo */
+      gap: 6px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+      backdrop-filter: blur(15px);
+      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      width: fit-content;
+      max-width: 400px;
     }
     .operability-banner.visible {
       display: flex;
@@ -10501,47 +10502,53 @@ ${dataContext}
     .op-banner-row {
       display: flex;
       align-items: center;
-      gap: 8px;
-      min-height: 28px;
-      border-bottom: 1px solid var(--border-mid);
-      padding-bottom: 1px;
+      gap: 12px;
+      min-height: 34px;
+      border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+      padding-bottom: 4px;
     }
     .op-banner-row:last-child {
       border-bottom: none;
       padding-bottom: 0;
     }
     .op-banner-label {
-      font-size: 7px;
+      font-size: 8px;
       font-weight: 800;
       color: var(--text-3);
-      width: 60px;
+      width: 65px;
       flex-shrink: 0;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
-      line-height: 1;
+      letter-spacing: 0.08em;
+      line-height: 1.1;
       text-align: right;
-      padding-right: 6px;
-      border-right: 1px solid var(--border-mid);
+      padding-right: 10px;
+      border-right: 1px solid rgba(0, 0, 0, 0.08);
+      opacity: 0.8;
     }
     .op-banner-content {
       display: flex;
       flex-wrap: wrap;
-      gap: 4px;
+      gap: 6px;
       flex: 1;
     }
     .op-resource-card {
       display: flex;
       flex-direction: row;
       align-items: center;
-      background: var(--bg-1);
-      border: 1px solid var(--border-mid);
-      border-radius: 3px;
-      padding: 1px 6px;
-      min-width: 80px;
+      background: white;
+      border: 1px solid rgba(0,0,0,0.06);
+      border-radius: 8px;
+      padding: 3px 10px;
+      min-width: 85px;
       cursor: default;
-      transition: all 0.2s;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
       position: relative;
-      gap: 4px;
+      gap: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+    .op-resource-card:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 8px rgba(0,0,0,0.05);
     }
     .op-resource-card.occupied {
       background: #fff5f5;
@@ -10552,24 +10559,26 @@ ${dataContext}
       border-color: #9ae6b4;
     }
     .op-resource-icon {
-      width: 14px;
-      height: 14px;
+      width: 22px; /* V.13.14.0: Iconos más grandes */
+      height: 22px;
       object-fit: contain;
+      filter: drop-shadow(0 2px 3px rgba(0,0,0,0.05));
     }
     .op-resource-name {
-      font-size: 9px;
-      font-weight: 700;
+      font-size: 10px;
+      font-weight: 800;
       color: var(--text-2);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      max-width: 75px;
+      max-width: 80px;
     }
     .op-status-dot {
-      width: 5px;
-      height: 5px;
+      width: 6px;
+      height: 6px;
       border-radius: 50%;
       flex-shrink: 0;
+      box-shadow: 0 0 4px rgba(0,0,0,0.1);
     }
     .op-resource-card.occupied .op-status-dot { background: #e74c3c; }
     .op-resource-card.available .op-status-dot { background: #2ecc71; }
@@ -14367,7 +14376,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.13.2
+          Versión V.13.14.0
         </div>
       </div>
 
@@ -14796,7 +14805,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.13.2
+          Versión V.13.14.0
         </div>
       </div>
 
@@ -14842,7 +14851,7 @@ ${dataContext}
       </div>
 
       <div class="panel-right">
-        <!-- V.13.13.2: Faldón de Operatividad -->
+        <!-- V.13.14.0: Faldón de Operatividad -->
         <div id="prev-operability-banner" class="operability-banner">
           <div id="op-row-ambulancias" class="op-banner-row">
             <div class="op-banner-label">🚑 Ambulancias</div>
