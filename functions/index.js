@@ -741,7 +741,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                         await stateRef.set(vs);
                     } else if (!isMoving && vs.moving && distToDest > 0.05) {
                         // Parada en trayecto
-                        const arrivalText = `✅ ${indicativo} se ha detenido en el trayecto.`;
+                        const arrivalText = `⚡️ ${indicativo} efectúa parada en trayecto.`;
                         const comms = iData.comentarios || [];
                         let foundIndex = -1;
                         for(let k = comms.length - 1; k >= 0; k--) {
@@ -758,11 +758,11 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                                 const lines = cText.split('\n');
                                 const idx = lines.findIndex(l => l.includes(indicativo));
                                 if (idx !== -1) {
-                                    lines[idx] = lines[idx].replace(" hacia el lugar", " hacia parada intermedia");
+                                    lines[idx] = lines[idx].replace(" hacia el lugar", " hacia parada en trayecto");
                                     cText = lines.join('\n');
                                 }
                             } else {
-                                cText = cText.replace(" hacia el lugar", " hacia parada intermedia");
+                                cText = cText.replace(" hacia el lugar", " hacia parada en trayecto");
                             }
                             comms[foundIndex].texto = cText;
                             comms[foundIndex].editado = true;

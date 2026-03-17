@@ -1343,7 +1343,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.10.8 Loaded');
+    console.log('EmerCRE V.13.10.9 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7947,7 +7947,7 @@ ${dataContext}
                 const currentPosStop = { ...pos };
                 reverseGeocodeWithCache(currentPosStop, async (addr) => {
                   const newAddr = addr || 'posición desconocida';
-                  const arrivalText = `✅ ${indicativo} llega a ${newAddr}.`;
+                  const arrivalText = `⚡️ ${indicativo} efectúa parada en ${newAddr}.`;
                   const arrivalTS = Date.now();
                   const newArrComment = { texto: arrivalText, autor: 'Sist. Oysta', autorId: 'system', timestamp: arrivalTS, fecha: formatCommentFecha(new Date(arrivalTS)) };
 
@@ -14355,7 +14355,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.10.8
+          Versión V.13.10.9
         </div>
       </div>
 
@@ -14784,7 +14784,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.10.8
+          Versión V.13.10.9
         </div>
       </div>
 
@@ -15674,7 +15674,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.10.8
+            Versión V.13.10.9
           </div>
         </div>
         <div class="field" id="j-prov-row">
