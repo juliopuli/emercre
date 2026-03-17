@@ -1343,7 +1343,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.10.2 Loaded');
+    console.log('EmerCRE V.13.10.3 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2471,14 +2471,10 @@
     // ── SUSCRIPCIÓN OPERACIONES ────────────────────────────────────────
     function suscribirOps() {
       if (unsubOps) unsubOps();
-      // V.13.10.0: Optimización - Por defecto cargar solo NO ocultas (abiertas) para ahorrar lecturas.
-      // Si el usuario activa 'mostrarCerradas', se relanza sin el filtro where.
-      const constraints = [orderBy('creadoEn', 'desc'), limit(30)];
-      if (!mostrarCerradas) {
-        constraints.unshift(where('oculta', '==', false));
-      }
-
-      const q = query(collection(db, 'operaciones'), ...constraints);
+      // V.13.10.3: Optimización de lecturas. Cargamos siempre las últimas 30 (abiertas o cerradas)
+      // para evitar errores de índice y asegurar compatibilidad con datos antiguos sin campo 'oculta'.
+      // El filtrado visual de las ocultas se realiza en el cliente dentro de renderSidebar/renderMapa.
+      const q = query(collection(db, 'operaciones'), orderBy('creadoEn', 'desc'), limit(30));
       let initialLoad = true;
 
       unsubOps = onSnapshot(q, snap => {
@@ -6752,13 +6748,9 @@ ${dataContext}
 
     window.cargarPreventivos = () => {
       if (unsubPreventivos) unsubPreventivos();
-      // V.13.10.0: Optimización - Por defecto cargar solo NO ocultos.
-      const constraints = [orderBy('creadoEn', 'desc'), limit(50)];
-      if (!mostrarCerradas) {
-        constraints.unshift(where('oculta', '==', false));
-      }
-      
-      const q = query(collection(db, 'preventivos'), ...constraints);
+      // V.13.10.3: Optimización - Cargamos los 50 más recientes para ahorrar lecturas masivas.
+      // El filtrado por estado 'oculta' se realiza en el cliente para máxima compatibilidad con datos antiguos.
+      const q = query(collection(db, 'preventivos'), orderBy('creadoEn', 'desc'), limit(50));
       unsubPreventivos = onSnapshot(q, snap => {
         // V.12.4.1: Poblar cache inmediatamente para evitar problemas de sincronía con intervenciones
         snap.forEach(doc => {
@@ -14316,7 +14308,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.10.2
+          Versión V.13.10.3
         </div>
       </div>
 
@@ -14745,7 +14737,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.10.2
+          Versión V.13.10.3
         </div>
       </div>
 
@@ -15632,7 +15624,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.10.2
+            Versión V.13.10.3
           </div>
         </div>
         <div class="field" id="j-prov-row">
