@@ -1344,7 +1344,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.16.1 Loaded');
+    console.log('EmerCRE V.13.16.2 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7112,7 +7112,7 @@ ${dataContext}
         }
       });
 
-      // V.13.16.1: Cargar primero los vehículos y luego los subpreventivos para asegurar consistencia
+      // V.13.16.2: Cargar primero los vehículos y luego los subpreventivos para asegurar consistencia
       const qV = query(collection(db, 'vehiculos'), where('provincia', '==', p.provincia || 'Andalucía'));
       getDocs(qV).then(snapV => {
         snapV.docs.forEach(dv => {
@@ -7288,7 +7288,7 @@ ${dataContext}
     };
 
     window.renderResourceBadges = (recursos, occupiedResources) => {
-      // Función obsoleta tras V.13.16.1, ahora se usa renderHeaderResourceBadges para el banner
+      // Función obsoleta tras V.13.16.2, ahora se usa renderHeaderResourceBadges para el banner
       return '';
     };
 
@@ -7305,7 +7305,7 @@ ${dataContext}
       banner.classList.add('visible');
       
       const occupiedResources = new Set();
-      // V.13.16.1: Lógica robusta de disponibilidad basada en el snapshot actual
+      // V.13.16.2: Lógica robusta de disponibilidad basada en el snapshot actual
       if (typeof lastIntervencionesSnap !== 'undefined' && lastIntervencionesSnap) {
         lastIntervencionesSnap.docs.forEach(doc => {
           const i = doc.data();
@@ -7367,7 +7367,7 @@ ${dataContext}
       currentPreventivoId = d.preventivoId || currentPreventivoId;
       currentPreventivoDiaId = id;
       activeIntManageId = null;
-      window._prevIntSearch = ""; // V.13.16.1: Limpiar búsqueda al cambiar de día
+      window._prevIntSearch = ""; // V.13.16.2: Limpiar búsqueda al cambiar de día
       const sInput = document.getElementById('prev-int-search');
       if (sInput) sInput.value = "";
       if (side) side.classList.add('open');
@@ -7484,8 +7484,8 @@ ${dataContext}
               <div style="display:flex; justify-content:space-between; align-items:flex-end;">
                  <div class="card-loc-mini">📍 ${i.direccion || 'Ubicación en mapa'}</div>
                  <div style="display:flex; flex-direction:column; align-items:flex-end; gap:1px; flex-shrink:0;">
-                   <div style="font-size:7px; color:var(--text-4); font-weight:700;">🆕 ${createdTs}</div>
-                   <div style="font-size:7px; color:var(--accent); font-weight:700;">🕒 ${updatedTs}</div>
+                   <div style="font-size:9px; color:var(--text-4); font-weight:700;">🆕 ${createdTs}</div>
+                   <div style="font-size:9px; color:var(--accent); font-weight:700;">🕒 ${updatedTs}</div>
                  </div>
               </div>
             </div>`;
@@ -7605,12 +7605,12 @@ ${dataContext}
 
       filteredDocs.forEach(doc => {
         const i = doc.data();
-        if (i.coords && i.oculta !== true) {
+        if (doc && doc.id && i.coords && i.oculta !== true) {
           if (!markersPreventivos[doc.id]) {
             addInterventionMarker(doc.id, i);
           } else {
-            // Actualizar posición si cambió
-            markersPreventivos[doc.id].position = i.coords;
+            const m = markersPreventivos[doc.id];
+            if (m) m.position = i.coords;
           }
         }
       });
@@ -8372,11 +8372,14 @@ ${dataContext}
         const iEdit = editIntervencionId ? (intervencionesCache[editIntervencionId] || {}) : {};
 
         try {
+          if (!currentPreventivoId || !currentPreventivoDiaId) {
+            throw new Error("No se ha podido identificar el Preventivo o el Día activo. Por favor, recarga o vuelve a seleccionar el evento.");
+          }
           const posIniciales = (isEdit && iEdit.recursosPosicionesIniciales) ? { ...iEdit.recursosPosicionesIniciales } : {};
           recs.forEach(rvId => {
             if (!posIniciales[rvId]) {
               const v = localVehiclesById[rvId];
-              if (v && v.oystaId) {
+              if (v && v.oystaId && Array.isArray(oystaVehiclesCache)) {
                 const ov = oystaVehiclesCache.find(x => String(x.id) === String(v.oystaId));
                 if (ov) posIniciales[rvId] = { lat: parseFloat(ov.lat), lng: parseFloat(ov.lng) };
               }
@@ -8417,7 +8420,7 @@ ${dataContext}
                 let baseMsg = `${icon} Asignado: ${indicativo}`;
 
                 // Verificación Oysta inmediata
-                if (v && v.oystaId) {
+                if (v && v.oystaId && Array.isArray(oystaVehiclesCache)) {
                   const ov = oystaVehiclesCache.find(x => String(x.id) === String(v.oystaId));
                   if (ov && parseFloat(ov.speed) > 5) {
                     const globalLast = window._oystaGlobalLastStop[String(v.oystaId)];
@@ -8461,7 +8464,7 @@ ${dataContext}
                 texto: `🚀 INTERVENCIÓN INICIADA\n${logEntries.join('\n')} `,
                 autor: 'Sist. Oysta',
                 autorId: 'system',
-                timestamp: Date.now(), // El timestamp real de los SALE se ajusta individualmente en el loop si fuera necesario, pero aquí lo dejamos como tiempo de registro base
+                timestamp: Date.now(), 
                 fecha: formatCommentFecha(new Date())
               });
             }
@@ -8473,15 +8476,14 @@ ${dataContext}
           }
           window.cerrarModalPreventivoIntervencion();
 
-          // V.12.5.0: Borrar pin si venimos de búsqueda
           if (window._pinPendingToDelete) {
             await deleteDoc(doc(db, 'pines_mapa', window._pinPendingToDelete));
             window._pinPendingToDelete = null;
           }
 
-          // Forzar refresco rutas/marcadores
           if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
         } catch (e) {
+          console.error("[CreateInt] Error:", e);
           alert('Error: ' + e.message);
         }
       };
@@ -8818,16 +8820,24 @@ ${dataContext}
         if (!canDeleteIntervencion()) { mostrarToast('No tienes permiso para borrar intervenciones'); return; }
         if (!confirm('¿Seguro que deseas eliminar esta intervención permanentemente?')) return;
         try {
+          if (!id || !currentPreventivoId || !currentPreventivoDiaId) {
+            throw new Error("No se ha podido identificar el documento a borrar o el ámbito actual.");
+          }
           await deleteDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', id));
           // V.13.0.2: Sincronía inmediata local tras borrado
-          lastGlobalInterventionDocs = lastGlobalInterventionDocs.filter(d => d.id !== id);
+          if (Array.isArray(lastGlobalInterventionDocs)) {
+            lastGlobalInterventionDocs = lastGlobalInterventionDocs.filter(d => d && d.id !== id);
+          }
           if (intervencionesCache[id]) delete intervencionesCache[id];
 
           window.refreshGlobalPreventivoMarkers();
           if (currentPreventivoDiaId) window.renderHeaderResourceBadges(currentPreventivoDiaId);
 
           mostrarToast('Intervención eliminada');
-        } catch (e) { alert('Error al borrar: ' + e.message); }
+        } catch (e) {
+          console.error("[DeleteInt] Error:", e);
+          alert('Error al borrar: ' + e.message);
+        }
       };
 
       window.borrarSubpreventivo = async (id) => {
@@ -10409,7 +10419,7 @@ ${dataContext}
       white-space: nowrap;
     }
 
-    /* V.13.16.1: Estilos Faldón Operatividad (Compacto - Derecha - Iconos Grandes) */
+    /* V.13.16.2: Estilos Faldón Operatividad (Compacto - Derecha - Iconos Grandes) */
     .operability-banner {
       position: absolute;
       top: 10px;
@@ -10487,7 +10497,7 @@ ${dataContext}
       border-color: rgba(46, 204, 113, 0.7);
     }
     .op-resource-icon {
-      width: 28px; /* V.13.16.1: Iconos aún más grandes */
+      width: 28px; /* V.13.16.2: Iconos aún más grandes */
       height: 28px;
       object-fit: contain;
       filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));
@@ -11470,7 +11480,7 @@ ${dataContext}
       box-shadow: 10px 0 40px rgba(0,0,0,0.18);
       border-right: 1px solid var(--border-mid);
     }
-    /* V.13.16.1: Nuevo Panel de Gestión de Intervención (Lateral al Detalle) */
+    /* V.13.16.2: Nuevo Panel de Gestión de Intervención (Lateral al Detalle) */
     #preventivos-management-panel {
       left: 330px; /* Al lado del detalle-panel lateral */
       width: 0;
@@ -14358,7 +14368,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.16.1
+          Versión V.13.16.2
         </div>
       </div>
 
@@ -14787,7 +14797,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.16.1
+          Versión V.13.16.2
         </div>
       </div>
 
@@ -14832,7 +14842,7 @@ ${dataContext}
         </div>
       </div>
 
-      <!-- V.13.16.1: Panel de Gestión de Intervención (Lateral al Detalle) -->
+      <!-- V.13.16.2: Panel de Gestión de Intervención (Lateral al Detalle) -->
       <div class="detail-panel" id="preventivos-management-panel">
         <div class="dp-header" style="background:var(--bg-2); padding: 12px 14px 8px;">
            <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -14851,7 +14861,7 @@ ${dataContext}
       </div>
 
       <div class="panel-right">
-        <!-- V.13.16.1: Faldón de Operatividad -->
+        <!-- V.13.16.2: Faldón de Operatividad -->
         <div id="prev-operability-banner" class="operability-banner">
           <div id="op-row-ambulancias" class="op-banner-row">
             <div class="op-banner-label">🚑 Ambulancias</div>
@@ -15706,7 +15716,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.13.0
+            Versión V.13.16.2
           </div>
         </div>
         <div class="field" id="j-prov-row">
