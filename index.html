@@ -1343,7 +1343,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.10.3 Loaded');
+    console.log('EmerCRE V.13.10.5 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7774,10 +7774,18 @@ ${dataContext}
           if (!window._oystaVehicleState[stateKey]) {
             const speedInit = parseFloat(oystaVeh.speed);
             const indicativo = localVeh.alias || localVeh.indicativo || oystaVeh.name;
-            // V.13.9.1: Detección profunda de estado tras recarga
+            // V.13.10.5: Detección profunda de estado tras recarga (Case-insensitive y detección de mensaje inicial)
             const comms = iData.comentarios || [];
-            const alreadyDeparted = comms.some(c => c.texto && (c.texto.includes(`⚡️ ${indicativo} sale hacia`) || c.texto.includes(`⚡️ ${indicativo} en movimiento`)));
-            const alreadyArrivedPlace = comms.some(c => c.texto && c.texto.includes(`✅ ${indicativo} llega al lugar`));
+            const alreadyDeparted = comms.some(c => {
+              if (!c.texto) return false;
+              const t = c.texto.toLowerCase();
+              return t.includes(indicativo.toLowerCase()) && (t.includes("sale") || t.includes("en movimiento") || t.includes("intervención iniciada"));
+            });
+            const alreadyArrivedPlace = comms.some(c => {
+              if (!c.texto) return false;
+              const t = c.texto.toLowerCase();
+              return t.includes(indicativo.toLowerCase()) && t.includes("llega al lugar");
+            });
 
             // Buscar último "sale de" para persistir seguimiento sin dirección
             const lastSaleDe = [...comms].reverse().find(c => c.texto && c.texto.includes(`⚡️ ${indicativo} sale de`));
@@ -7869,7 +7877,14 @@ ${dataContext}
           // 2. Salida Inicial / Decalaje
           if (isMovingNow && !vs.hasDeparted) {
             const distFromStart = calculateHaversineDist(pos, vs.initialPos);
-            if (distFromStart < THRESHOLD_DEPART && !vs.loggedStartAtOrigin) {
+            // V.13.10.5: Check prevent duplicados (Case-insensitive)
+            const comms = iData.comentarios || [];
+            const alreadyLogged = comms.some(c => {
+              const t = (c.texto || "").toLowerCase();
+              return t.includes(indicativo.toLowerCase()) && (t.includes("sale") || t.includes("en movimiento") || t.includes("intervención iniciada"));
+            });
+
+            if (distFromStart < THRESHOLD_DEPART && !vs.loggedStartAtOrigin && !alreadyLogged) {
               vs.loggedStartAtOrigin = true; // Sync flag BEFORE await to prevent loop
               const text = `⚡️ ${indicativo} en movimiento en lugar de inicio a las ${new Date(oystaTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}.`;
               const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime)) };
@@ -7878,9 +7893,7 @@ ${dataContext}
                 vs.loggedStartAtOrigin = false;
               });
             } else if (distFromStart >= THRESHOLD_DEPART) {
-              // V.13.9.1: Check prevent duplicados
-              const comms = iData.comentarios || [];
-              const alreadyLogged = comms.some(c => c.texto && c.texto.includes(indicativo) && (c.texto.includes("sale hacia") || c.texto.includes("en movimiento")));
+              // V.13.10.5: Check prevent duplicados (Case-insensitive)
               if (!alreadyLogged) {
                 vs.hasDeparted = true; // Sync flag BEFORE await
                 if (iData.direccion) {
@@ -8520,8 +8533,14 @@ ${dataContext}
                       baseMsg += ` y ⚡️ SALE${origin} hacia el lugar (${speed} km/h)`;
                     }
 
-                    const speed = parseFloat(ov.speed);
-                    baseMsg += ` y ⚡️ SALE${origin} hacia el lugar (${speed} km/h)${delayStr}`;
+                    // V.13.10.4: Marcar como ya salido en el estado global para evitar duplicados del monitor automático
+                    const stateKey = `prev_${v.id}_${v.oystaId}`;
+                    if (!window._oystaVehicleState) window._oystaVehicleState = {};
+                    if (!window._oystaVehicleState[stateKey]) {
+                      window._oystaVehicleState[stateKey] = { moving: true, hasDeparted: true, hasArrived: false };
+                    } else {
+                      window._oystaVehicleState[stateKey].hasDeparted = true;
+                    }
                   }
                 }
                 return baseMsg;
@@ -14308,7 +14327,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.10.3
+          Versión V.13.10.5
         </div>
       </div>
 
@@ -14737,7 +14756,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.10.3
+          Versión V.13.10.5
         </div>
       </div>
 
@@ -15624,7 +15643,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.10.3
+            Versión V.13.10.5
           </div>
         </div>
         <div class="field" id="j-prov-row">

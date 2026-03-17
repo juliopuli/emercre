@@ -662,7 +662,11 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
 
                 // Salida
                 if (isMoving && !vs.hasDeparted) {
-                    const exists = (iData.comentarios || []).some(c => c.texto && c.texto.includes(indicativo) && c.texto.includes("sale hacia"));
+                    const exists = (iData.comentarios || []).some(c => {
+                        if (!c.texto) return false;
+                        const t = c.texto.toLowerCase();
+                        return t.includes(indicativo.toLowerCase()) && (t.includes("sale") || t.includes("en movimiento") || t.includes("intervención iniciada"));
+                    });
                     if (!exists) {
                         const text = `⚡️ ${indicativo} sale hacia ${iData.direccion || 'el lugar'}.`;
                         await iRef.update({
@@ -677,7 +681,11 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 }
                 // Llegada
                 else if (!isMoving && distToDest < 0.05 && !vs.hasArrived) {
-                    const exists = (iData.comentarios || []).some(c => c.texto && c.texto.includes(indicativo) && c.texto.includes("llega al lugar"));
+                    const exists = (iData.comentarios || []).some(c => {
+                        if (!c.texto) return false;
+                        const t = c.texto.toLowerCase();
+                        return t.includes(indicativo.toLowerCase()) && t.includes("llega al lugar");
+                    });
                     if (!exists) {
                         const text = `✅ ${indicativo} llega al lugar (${iData.direccion || 'sin dirección'}).`;
                         await iRef.update({
