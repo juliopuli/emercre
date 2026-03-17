@@ -178,6 +178,7 @@
     let unsubGlobalPreventivoIntervenciones = null; // V.12.4.1: Restaurado
     let unsubGlobalSubpreventivos = null; // V.12.4.1: Para seguimiento de recursos asignados a días
     let oystaMarkersPrev = {};
+    let globalVehiculos = {}; // V.13.12.2: Caché global para recursos de preventivos
     let searchMarkerEme = null;
     let searchMarkerPrev = null;
     let infoWindowSearch = null;
@@ -1343,7 +1344,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.12.1 Loaded');
+    console.log('EmerCRE V.13.12.2 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7265,11 +7266,19 @@ ${dataContext}
     };
 
     window.renderResourceBadges = (recursos, occupiedResources) => {
-      const recList = (recursos || []).map(rvId => ({ id: rvId, data: window.globalVehiculos && window.globalVehiculos[rvId], isOccupied: occupiedResources.has(rvId) }));
+      const recList = (recursos || []).map(rvId => ({ 
+        id: String(rvId), 
+        data: globalVehiculos[rvId] || window.globalVehiculos?.[rvId], 
+        isOccupied: occupiedResources.has(String(rvId)) 
+      }));
       const categories = [
-        { label: '🚑 AMBULANCIAS', filter: v => v?.tipo === 'Ambulancia' },
-        { label: '🛻 TODOTERRENOS', filter: v => v?.tipo?.includes('Terreno') },
-        { label: '🚒 OTROS RECURSOS', filter: v => v?.tipo !== 'Ambulancia' && !v?.tipo?.includes('Terreno') }
+        { label: '🚑 AMBULANCIAS', filter: v => v?.tipo?.toString().toUpperCase().includes('AMBULANCIA') },
+        { label: '🛻 TODOTERRENOS', filter: v => v?.tipo?.toString().toUpperCase().includes('TERRENO') },
+        { label: '🚒 OTROS RECURSOS', filter: v => {
+             if (!v) return true; // Si no hay datos, va a Otros temporalmente
+             const t = v.tipo?.toString().toUpperCase() || '';
+             return !t.includes('AMBULANCIA') && !t.includes('TERRENO');
+        }}
       ];
       return categories.map(cat => {
         const filtered = recList.filter(item => cat.filter(item.data));
@@ -7278,14 +7287,17 @@ ${dataContext}
           const v = item.data;
           const statusColor = item.isOccupied ? '#ff4d4d' : '#2ecc71';
           let iconUrl = 'assets/icons/icon_transp_personal.png';
-          if (v) {
-            if (v.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
-            else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
-            else if (v.tipo?.includes('Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
+          if (v && v.tipo) {
+            const t = v.tipo.toString().toUpperCase();
+            if (t.includes('AMBULANCIA')) iconUrl = 'assets/icons/icon_ambulancia.png';
+            else if (t.includes('TERRENO')) iconUrl = 'assets/icons/icon_todoterreno.png';
+            else if (t.includes('CAMI')) iconUrl = 'assets/icons/icon_camion.png';
+            else if (t.includes('MIXTO')) iconUrl = 'assets/icons/icon_transp_mixto.png';
+            else if (t.includes('TURISMO')) iconUrl = 'assets/icons/icon_turismo.png';
           }
-          return `<span class="badge-tipo" style="background:var(--bg-3); color:var(--text-1); font-size:10px; display:inline-flex; align-items:center; gap:4px; margin: 0 4px 4px 0; padding:2px 6px; border-radius:4px; border:1px solid var(--border-mid);"><span style="width:6px; height:6px; background:${statusColor}; border-radius:50%;"></span>${v ? `<img src="${iconUrl}" style="width:12px; height:12px; opacity:0.8;"> ${v.alias || v.indicativo || 'SIN IND'}` : `🚗 ${item.id}`}</span>`;
+          return `<span class="badge-tipo" style="background:var(--bg-3); color:var(--text-1); font-size:10px; display:inline-flex; align-items:center; gap:4px; margin: 0 4px 4px 0; padding:2px 6px; border-radius:4px; border:1px solid var(--border-mid); white-space:nowrap;"><span style="width:6px; height:6px; background:${statusColor}; border-radius:50%; flex-shrink:0;"></span>${v ? `<img src="${iconUrl}" style="width:12px; height:12px; opacity:0.8; flex-shrink:0;"> ${v.alias || v.indicativo || 'SIN IND'}` : `🚗 ${item.id}`}</span>`;
         }).join('');
-        return `<div style="margin-bottom:10px;"><div style="font-size:9px; font-weight:800; color:var(--text-3); margin-bottom:4px; border-left:2px solid var(--accent); padding-left:6px;">${cat.label}</div><div style="display:flex; flex-wrap:wrap;">${badges}</div></div>`;
+        return `<div style="margin-bottom:8px;"><div style="font-size:9px; font-weight:800; color:var(--text-3); margin-bottom:4px; border-left:2px solid var(--accent); padding-left:6px;">${cat.label}</div><div style="display:flex; flex-wrap:wrap; align-items:center;">${badges}</div></div>`;
       }).join('');
     };
 
@@ -11285,7 +11297,7 @@ ${dataContext}
     }
 
     .detail-panel.open {
-      width: 380px;
+      width: 400px;
       opacity: 1;
       border-right: 1px solid var(--border-mid);
     }
@@ -14219,7 +14231,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.12.1
+          Versión V.13.12.2
         </div>
       </div>
 
@@ -14648,20 +14660,20 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.12.1
+          Versión V.13.12.2
         </div>
       </div>
 
       <!-- V.12.4.1: Nuevo Panel de Detalle Deslizable -->
-      <!-- V.13.12.1: Rediseño Panel Detalle -->
+      <!-- V.13.12.2: Rediseño Panel Detalle -->
       <div class="detail-panel" id="preventivos-detail-panel">
         <div class="dp-header" style="background:var(--bg-2); padding: 12px 16px;">
           <div id="prev-dp-title" style="font-size: 14px; font-weight: 700; color: var(--accent); line-height:1.2;"></div>
           <div id="prev-dp-controls-row" style="display:flex; align-items:center; gap:8px; margin-top:10px;"></div>
         </div>
 
-        <div id="prev-recursos-dia-wrapper" style="padding: 10px 16px; border-bottom: 1px solid var(--border-mid); background:var(--bg-1);">
-          <div id="prev-recursos-dia-container" style="display: flex; flex-direction:column; gap:8px;"></div>
+        <div id="prev-recursos-dia-wrapper" style="padding: 10px 16px; border-bottom: 1px solid var(--border-mid); background:var(--bg-1); max-height: 180px; overflow-y: auto;">
+          <div id="prev-recursos-dia-container" style="display: flex; flex-direction:column; gap:4px;"></div>
         </div>
 
         <div style="padding: 12px 16px; border-bottom: 1px solid var(--border-mid); background:var(--bg-2); display:flex; flex-direction:column; gap:10px;">
