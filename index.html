@@ -1344,7 +1344,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.14.0 Loaded');
+    console.log('EmerCRE V.13.14.1 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7112,7 +7112,7 @@ ${dataContext}
         }
       });
 
-      // V.13.14.0: Cargar primero los vehículos y luego los subpreventivos para asegurar consistencia
+      // V.13.14.1: Cargar primero los vehículos y luego los subpreventivos para asegurar consistencia
       const qV = query(collection(db, 'vehiculos'), where('provincia', '==', p.provincia || 'Andalucía'));
       getDocs(qV).then(snapV => {
         snapV.docs.forEach(dv => {
@@ -7277,7 +7277,7 @@ ${dataContext}
     };
 
     window.renderResourceBadges = (recursos, occupiedResources) => {
-      // Función obsoleta tras V.13.14.0, ahora se usa renderHeaderResourceBadges para el banner
+      // Función obsoleta tras V.13.14.1, ahora se usa renderHeaderResourceBadges para el banner
       return '';
     };
 
@@ -7294,7 +7294,7 @@ ${dataContext}
       banner.classList.add('visible');
       
       const occupiedResources = new Set();
-      // V.13.14.0: Lógica robusta de disponibilidad basada en el snapshot actual
+      // V.13.14.1: Lógica robusta de disponibilidad basada en el snapshot actual
       if (typeof lastIntervencionesSnap !== 'undefined' && lastIntervencionesSnap) {
         lastIntervencionesSnap.docs.forEach(doc => {
           const i = doc.data();
@@ -7356,7 +7356,7 @@ ${dataContext}
       currentPreventivoId = d.preventivoId || currentPreventivoId;
       currentPreventivoDiaId = id;
       activeIntManageId = null;
-      window._prevIntSearch = ""; // V.13.14.0: Limpiar búsqueda al cambiar de día
+      window._prevIntSearch = ""; // V.13.14.1: Limpiar búsqueda al cambiar de día
       const sInput = document.getElementById('prev-int-search');
       if (sInput) sInput.value = "";
       if (side) side.classList.add('open');
@@ -10476,25 +10476,23 @@ ${dataContext}
       white-space: nowrap;
     }
 
-    /* V.13.14.0: Estilos Faldón Operatividad (Premium Glassmorphism - Derecha) */
+    /* V.13.14.1: Estilos Faldón Operatividad (Panorámico Premium) */
     .operability-banner {
       position: absolute;
       top: 14px;
-      right: 14px; /* V.13.14.0: Movido a la derecha */
-      left: auto;
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(248, 249, 252, 0.92));
+      left: 175px; /* V.13.14.1: Restaurado margen izquierdo para filtros */
+      right: 14px; /* Pegado al borde derecho */
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(248, 249, 252, 0.93));
       border: 1px solid rgba(255, 255, 255, 0.7);
       border-radius: 12px;
-      padding: 10px 14px;
+      padding: 8px 16px;
       z-index: 900;
       display: none;
       flex-direction: column;
-      gap: 6px;
-      box-shadow: 0 10px 40px rgba(0,0,0,0.12), inset 0 0 0 1px rgba(255, 255, 255, 0.3);
+      gap: 4px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.1), inset 0 0 0 1px rgba(255, 255, 255, 0.4);
       backdrop-filter: blur(15px);
-      transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-      width: fit-content;
-      max-width: 400px;
+      transition: all 0.3s ease;
     }
     .operability-banner.visible {
       display: flex;
@@ -10559,7 +10557,7 @@ ${dataContext}
       border-color: #9ae6b4;
     }
     .op-resource-icon {
-      width: 22px; /* V.13.14.0: Iconos más grandes */
+      width: 22px; /* V.13.14.1: Iconos más grandes */
       height: 22px;
       object-fit: contain;
       filter: drop-shadow(0 2px 3px rgba(0,0,0,0.05));
@@ -14376,7 +14374,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.14.0
+          Versión V.13.14.1
         </div>
       </div>
 
@@ -14805,7 +14803,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.14.0
+          Versión V.13.14.1
         </div>
       </div>
 
@@ -14851,7 +14849,7 @@ ${dataContext}
       </div>
 
       <div class="panel-right">
-        <!-- V.13.14.0: Faldón de Operatividad -->
+        <!-- V.13.14.1: Faldón de Operatividad -->
         <div id="prev-operability-banner" class="operability-banner">
           <div id="op-row-ambulancias" class="op-banner-row">
             <div class="op-banner-label">🚑 Ambulancias</div>
