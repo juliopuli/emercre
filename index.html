@@ -1643,8 +1643,8 @@
     async function cargarUsuariosParaChat() {
       if (unsubUserPresence) unsubUserPresence();
       // V.12.4.1: Solo cargar usuarios que no sean anónimos y limitar a 100 para ahorrar lecturas
-      // V.13.17.1: Ordenar por ultimaActividad desc para priorizar usuarios recientes en listado de chat
-      const q = query(collection(db, 'users'), where('role', '!=', 'anonimo'), orderBy('ultimaActividad', 'desc'), limit(100));
+      // V.13.17.1: Ordenar por ultimaActividad desc (revertido por falta de índice compuesto)
+      const q = query(collection(db, 'users'), where('role', '!=', 'anonimo'), limit(100));
       unsubUserPresence = onSnapshot(q, snap => {
         allUsersCache = snap.docs.map(d => ({ uid: d.id, ...d.data() }));
         renderChatList();
@@ -4961,6 +4961,7 @@ ${dataContext}
           // V.12.4.1: Política de auto-activación robusta
           // Intentamos durante 6 segundos (una vez por segundo) ver si hay coches, si no, forzamos sync.
           let checkAttempts = 0;
+          let syncRequested = false;
           const forceOystaCheck = setInterval(() => {
             checkAttempts++;
             const hasVehicles = oystaVehiclesCache && oystaVehiclesCache.length > 0;
@@ -4968,12 +4969,13 @@ ${dataContext}
               clearInterval(forceOystaCheck);
               return;
             }
-            if (!hasVehicles && currentUserDoc?.canSeeVehicles) {
+            if (!hasVehicles && currentUserDoc?.canSeeVehicles && !syncRequested) {
               console.log(`[Oysta] Attempt ${checkAttempts}: No vehicles in cache yet. Triggering sync...`);
-              cargarVehiculosOysta(true);
+              syncRequested = true;
+              cargarVehiculosOysta(true).finally(() => { syncRequested = false; });
             }
             if (checkAttempts >= 6) clearInterval(forceOystaCheck);
-          }, 1000);
+          }, 1500);
         } else {
           // Desuscribir al salir de preventivos
           if (unsubGlobalPreventivoIntervenciones) {
