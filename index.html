@@ -7978,42 +7978,8 @@ ${dataContext}
             vs.lastStationaryPos = pos;
           }
         }
-                  if (speed > 5) {
-                    const hoursAgo = (distOff / speed); // D=V*T -> T=D/V
-                    const estTS = Date.now() - (hoursAgo * 3600000);
-                    if (estTS > estMoveStart) estMoveStart = estTS;
-                  }
-                  vs.lastSaleDeTS = Math.round(estMoveStart);
-                  const saleTime = new Date(vs.lastSaleDeTS).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-                  const text = `⚡️ ${indicativo} sale de ${originAddr} a las ${saleTime}.`;
-                  const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: vs.lastSaleDeTS, fecha: formatCommentFecha(new Date(vs.lastSaleDeTS)) };
-                  try {
-                    await updateDoc(iRef, { comentarios: arrayUnion(newComment) });
-                  } catch (e) {
-                    console.error("[Oysta] Error sale-de:", e);
-                    vs.isMovingOffsite = false;
-                  }
-                });
-              }
-            }
-          }
-        }
 
-        // Cleanup restos de rutas si existieran
-        if (window._prevRoutesMap) {
-          Object.keys(window._prevRoutesMap).forEach(k => {
-            const r = window._prevRoutesMap[k];
-            if (r.renderer) r.renderer.setMap(null);
-            delete window._prevRoutesMap[k];
-          });
-        }
-        if (window._prevLabelsMap) {
-          Object.keys(window._prevLabelsMap).forEach(k => {
-            window._prevLabelsMap[k].map = null;
-            delete window._prevLabelsMap[k];
-          });
-        }
-
+        // Cleanup restos de marcadores si ya no están asignados
         Object.keys(window._prevIntVehicleMarkers).forEach(vid => {
           if (!activeVehicleIds.has(vid)) {
             window._prevIntVehicleMarkers[vid].map = null;
