@@ -7,8 +7,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <link rel="apple-touch-icon" href="assets/logo_emercre.png?v=12.3.0">
-  <link rel="icon" type="image/png" href="assets/logo_emercre.png?v=12.3.0">
+  <link rel="apple-touch-icon" href="assets/logo_emercre.png?v=13.10.0">
+  <link rel="icon" type="image/png" href="assets/logo_emercre.png?v=13.10.0">
   <link rel="manifest" href="manifest.json">
   <title>EmerCRE — Sistema de Gestión de Catástrofes</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1343,7 +1343,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.9.1 Loaded');
+    console.log('EmerCRE V.13.10.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2471,8 +2471,14 @@
     // ── SUSCRIPCIÓN OPERACIONES ────────────────────────────────────────
     function suscribirOps() {
       if (unsubOps) unsubOps();
-      // V.12.4.1: Limitar a las últimas 30 operaciones para evitar cargar todo el histórico
-      const q = query(collection(db, 'operaciones'), orderBy('creadoEn', 'desc'), limit(30));
+      // V.13.10.0: Optimización - Por defecto cargar solo NO ocultas (abiertas) para ahorrar lecturas.
+      // Si el usuario activa 'mostrarCerradas', se relanza sin el filtro where.
+      const constraints = [orderBy('creadoEn', 'desc'), limit(30)];
+      if (!mostrarCerradas) {
+        constraints.unshift(where('oculta', '==', false));
+      }
+
+      const q = query(collection(db, 'operaciones'), ...constraints);
       let initialLoad = true;
 
       unsubOps = onSnapshot(q, snap => {
@@ -3837,6 +3843,10 @@
       document.querySelectorAll('input[type="checkbox"][onchange*="toggleGlobalCerradas"]').forEach(cb => {
         cb.checked = checked;
       });
+
+      // V.13.10.0: Relanzar suscripciones principales para traer o quitar cerrados según elección del usuario
+      suscribirOps();
+      cargarPreventivos();
 
       renderSidebar();
       renderMapa();
@@ -6742,8 +6752,13 @@ ${dataContext}
 
     window.cargarPreventivos = () => {
       if (unsubPreventivos) unsubPreventivos();
-      // V.12.4.1: Limitar a los 50 preventivos más recientes
-      const q = query(collection(db, 'preventivos'), orderBy('creadoEn', 'desc'), limit(50));
+      // V.13.10.0: Optimización - Por defecto cargar solo NO ocultos.
+      const constraints = [orderBy('creadoEn', 'desc'), limit(50)];
+      if (!mostrarCerradas) {
+        constraints.unshift(where('oculta', '==', false));
+      }
+      
+      const q = query(collection(db, 'preventivos'), ...constraints);
       unsubPreventivos = onSnapshot(q, snap => {
         // V.12.4.1: Poblar cache inmediatamente para evitar problemas de sincronía con intervenciones
         snap.forEach(doc => {
@@ -7587,26 +7602,28 @@ ${dataContext}
 
       console.log("[Preventivos] Suscribiendo intervenciones globales...");
 
-      // Sin filtro where para evitar error de índice en collectionGroup.
-      // El filtro de abierta===true se hace en el cliente dentro de refreshGlobalPreventivoMarkers.
-      // V.12.4.1: CRÍTICO - Filtrar en servidor solo intervenciones ABIERTAS.
+      // V.13.10.0: CRÍTICO - Filtrar en servidor solo intervenciones ABIERTAS.
       // Esto ahorra miles de lecturas al no descargar el histórico cerrado.
-      unsubGlobalPreventivoIntervenciones = onSnapshot(query(collectionGroup(db, 'intervenciones')), snap => {
-        lastGlobalInterventionDocs = snap.docs.filter(d => d.data().abierta === true);
-        console.log("[Preventivos] Intervenciones abiertas (filtro cliente):", lastGlobalInterventionDocs.length);
+      // Nota: Si el usuario quiere ver cerradas en el mapa, tendría que consultar el panel histórico,
+      // la vista de mapa táctico se centra en lo activo.
+      const qInt = query(collectionGroup(db, 'intervenciones'), where('abierta', '==', true));
+      unsubGlobalPreventivoIntervenciones = onSnapshot(qInt, snap => {
+        lastGlobalInterventionDocs = snap.docs;
+        console.log("[Preventivos] Intervenciones abiertas (filtro server):", lastGlobalInterventionDocs.length);
         window.refreshGlobalPreventivoMarkers();
       }, err => {
         console.error("[Preventivos] Error en suscripción global intervenciones:", err);
       });
 
-      // V.12.4.1: Suscribir a subpreventivos sin 'where' para evitar error de índice si no existe
+      // V.13.10.0: Filtrar subpreventivos abiertos en servidor.
       if (unsubGlobalSubpreventivos) unsubGlobalSubpreventivos();
-      unsubGlobalSubpreventivos = onSnapshot(query(collectionGroup(db, 'subpreventivos')), snap => {
+      const qSub = query(collectionGroup(db, 'subpreventivos'), where('abierta', '==', true));
+      unsubGlobalSubpreventivos = onSnapshot(qSub, snap => {
         const subCache = {};
         snap.docs.forEach(d => { subCache[d.id] = d.data(); });
         Object.assign(subpreventivosCache, subCache); // Actualizar cache global
-        lastGlobalSubpreventivoDocs = snap.docs.filter(d => d.data().abierta === true);
-        console.log("[Preventivos] Subpreventivos abiertos (filtro cliente):", lastGlobalSubpreventivoDocs.length);
+        lastGlobalSubpreventivoDocs = snap.docs;
+        console.log("[Preventivos] Subpreventivos abiertos (filtro server):", lastGlobalSubpreventivoDocs.length);
         if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
       }, err => {
         console.error("[Preventivos] Error en suscripción global subpreventivos:", err);
@@ -14297,7 +14314,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.9.1
+          Versión V.13.10.0
         </div>
       </div>
 
@@ -14726,7 +14743,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.9.1
+          Versión V.13.10.0
         </div>
       </div>
 
@@ -15613,7 +15630,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.9.1
+            Versión V.13.10.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
