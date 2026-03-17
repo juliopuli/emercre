@@ -1343,7 +1343,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.10.7 Loaded');
+    console.log('EmerCRE V.13.10.8 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -6268,9 +6268,12 @@ ${dataContext}
           }));
         });
 
+        // Eliminado auto-cierre del panel al hacer clic en mapa (V.13.10.8)
+        /*
         mapPreventivos.addListener('click', () => {
           if (typeof window.cerrarDetallePreventivo === 'function') window.cerrarDetallePreventivo();
         });
+        */
 
         // V.13.8.1: Crear pin solo con doble click para evitar saturación
         mapPreventivos.addListener('dblclick', (e) => {
@@ -11501,8 +11504,46 @@ ${dataContext}
       overflow-x: auto;
       max-width: 100%;
       -webkit-overflow-scrolling: touch;
-      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
-      /* Amentado para mejor contraste */
+      box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08); /* Amentado para mejor contraste */
+    }
+
+    /* V.13.10.8: Rediseño Panel Intervenciones Preventivos como Overlay Sidebar */
+    #preventivos-detail-panel {
+      left: 0;
+      width: 0;
+      opacity: 0;
+      z-index: 1200;
+      transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease;
+      background: var(--bg-1);
+    }
+    #preventivos-detail-panel.open {
+      width: 320px;
+      opacity: 1;
+      box-shadow: 10px 0 40px rgba(0,0,0,0.18);
+      border-right: 1px solid var(--border-mid);
+    }
+    .dp-footer {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border-mid);
+      background: var(--bg-1);
+      display: flex;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .dp-footer button {
+      width: 100%;
+      padding: 10px;
+      font-weight: 600;
+      background: var(--bg-3);
+      border: 1px solid var(--border-mid);
+      color: var(--text-2);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .dp-footer button:hover {
+      background: var(--border-mid);
+      color: var(--text-1);
     }
 
     .nivel-selector {
@@ -14314,7 +14355,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.10.7
+          Versión V.13.10.8
         </div>
       </div>
 
@@ -14688,7 +14729,7 @@ ${dataContext}
         style="display:none;">Ver Mapa 🗺</button>
       <div class="panel-left"
         onclick="if(event.target === this) { window._preventivosNeedsZoom = true; window.refreshGlobalPreventivoMarkers(); }">
-        <div class="panel-left-head" onclick="if(event.target === this) cerrarDetallePreventivo()">
+        <div class="panel-left-head">
           <div class="search-box">
             <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
               stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -14743,7 +14784,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.10.7
+          Versión V.13.10.8
         </div>
       </div>
 
@@ -14786,6 +14827,9 @@ ${dataContext}
           <div class="empty-msg" id="empty-msg-prev-int" style="display:none;">
             <div style="font-size:28px;opacity:0.4">📋</div>
             <span>Sin intervenciones en este día.</span>
+          </div>
+          <div class="dp-footer">
+            <button onclick="cerrarDetallePreventivo()">Cerrar</button>
           </div>
         </div>
       </div>
@@ -15630,7 +15674,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.10.7
+            Versión V.13.10.8
           </div>
         </div>
         <div class="field" id="j-prov-row">
