@@ -1343,7 +1343,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.10.5 Loaded');
+    console.log('EmerCRE V.13.10.6 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7774,7 +7774,7 @@ ${dataContext}
           if (!window._oystaVehicleState[stateKey]) {
             const speedInit = parseFloat(oystaVeh.speed);
             const indicativo = localVeh.alias || localVeh.indicativo || oystaVeh.name;
-            // V.13.10.5: Detección profunda de estado tras recarga (Case-insensitive y detección de mensaje inicial)
+            // V.13.10.6: Detección profunda de estado tras recarga (Case-insensitive y detección de mensaje inicial más robusta)
             const comms = iData.comentarios || [];
             const alreadyDeparted = comms.some(c => {
               if (!c.texto) return false;
@@ -7784,7 +7784,8 @@ ${dataContext}
             const alreadyArrivedPlace = comms.some(c => {
               if (!c.texto) return false;
               const t = c.texto.toLowerCase();
-              return t.includes(indicativo.toLowerCase()) && t.includes("llega al lugar");
+              const ind = indicativo.toLowerCase();
+              return t.includes(ind) && (t.includes("llega al lugar") || (t.includes("✅") && t.split(ind)[1]?.includes("llega a")));
             });
 
             // Buscar último "sale de" para persistir seguimiento sin dirección
@@ -7925,13 +7926,27 @@ ${dataContext}
               }
             }
 
-            // 3. Seguimiento Paradas Intermedias (Seguimiento para casos sin dirección o cambios de ruta)
-            if (!isMovingNow) {
-              if (vs.isMovingOffsite) {
+            // 3. Seguimiento de Paradas e Inicios durante el trayecto (SOLO si ya salió y aún no llega)
+            if (vs.hasDeparted && !vs.hasArrived) {
+              if (isMovingNow && !vs.moving && vs.lastStopAddr && distToDest > 0.05) {
+                // Reinicio desde una parada intermedia
+                vs.moving = true;
+                vs.isMovingOffsite = true;
+                const saleTime = new Date(oystaTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                const text = `⚡️ ${indicativo} sale de ${vs.lastStopAddr} a las ${saleTime} hacia el lugar.`;
+                const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime)) };
+                updateDoc(iRef, { comentarios: arrayUnion(newComment) }).catch(e => {
+                   vs.isMovingOffsite = false;
+                   vs.moving = false;
+                });
+                vs.lastSaleDeTS = oystaTime;
+              } else if (!isMovingNow && vs.moving && distToDest > 0.05) {
+                // Parada intermedia detectada
+                vs.moving = false;
                 const currentPosStop = { ...pos };
-                vs.isMovingOffsite = false; // Sync flag BEFORE await
                 reverseGeocodeWithCache(currentPosStop, async (addr) => {
                   const newAddr = addr || 'posición desconocida';
+                  vs.lastStopAddr = newAddr;
                   const arrivalText = `✅ ${indicativo} llega a ${newAddr}.`;
                   const arrivalTS = Date.now();
                   const newArrComment = { texto: arrivalText, autor: 'Sist. Oysta', autorId: 'system', timestamp: arrivalTS, fecha: formatCommentFecha(new Date(arrivalTS)) };
@@ -7941,9 +7956,9 @@ ${dataContext}
                     if (snap.exists()) {
                       const comms = snap.data().comentarios || [];
                       const updatedComms = comms.map(c => {
-                        if (c.timestamp === vs.lastSaleDeTS && c.texto.includes(`⚡️ ${indicativo} sale de`)) {
-                          // Modificar el comentario anterior para incluir el "hacia"
-                          let base = c.texto.split(' hacia ')[0]; // Quitar destino anterior si existiera
+                        const t = (c.texto || "").toLowerCase();
+                        if (c.timestamp === vs.lastSaleDeTS && t.includes(`⚡️ ${indicativo.toLowerCase()} sale de`)) {
+                          let base = c.texto.split(' hacia ')[0]; 
                           if (base.endsWith('.')) base = base.slice(0, -1);
                           return { ...c, texto: `${base} hacia ${newAddr}.`, editado: true };
                         }
@@ -7953,30 +7968,16 @@ ${dataContext}
                       await updateDoc(iRef, { comentarios: updatedComms, actualizadoEn: serverTimestamp() });
                     }
                   } catch (e) {
-                    console.error("[Oysta] Error retro-modificación:", e);
-                    vs.isMovingOffsite = true;
+                    console.error("[Oysta] Error parada intermedia:", e);
                   }
-                  vs.lastStopAddr = newAddr;
                 });
               }
-              vs.lastStationaryPos = pos;
-              vs.moving = false;
-            } else {
-              if (!vs.moving) {
-                vs.moving = true;
-                vs.movingSince = Date.now();
-              }
-              const distOff = vs.lastStationaryPos ? calculateHaversineDist(pos, vs.lastStationaryPos) : 0;
-              // Solo activar "Sale de..." si ya ha salido del origen y no estamos ya en un tramo offsite
-              if (distOff > THRESHOLD_OFFSITE && !vs.isMovingOffsite && vs.hasDeparted && !vs.hasArrived) {
-                vs.isMovingOffsite = true; // Sync flag BEFORE await
-                const stationaryPos = { ...vs.lastStationaryPos };
-                reverseGeocodeWithCache(stationaryPos, async (addr) => {
-                  const originAddr = addr || 'posición conocida';
-                  vs.lastStopAddr = originAddr;
-                  // V.13.9.1: Cálculo de decalaje para tramos intermedios
-                  // Si sabemos cuándo empezó a moverse, usamos ese tiempo. Si no (reload), estimamos.
-                  let estMoveStart = vs.movingSince || (Date.now() - 60000); // fallback last min
+            }
+
+            vs.moving = isMovingNow;
+            vs.lastStationaryPos = pos;
+          }
+        }
                   if (speed > 5) {
                     const hoursAgo = (distOff / speed); // D=V*T -> T=D/V
                     const estTS = Date.now() - (hoursAgo * 3600000);
@@ -14327,7 +14328,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.10.5
+          Versión V.13.10.6
         </div>
       </div>
 
@@ -14756,7 +14757,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.10.5
+          Versión V.13.10.6
         </div>
       </div>
 
@@ -15643,7 +15644,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.10.5
+            Versión V.13.10.6
           </div>
         </div>
         <div class="field" id="j-prov-row">
