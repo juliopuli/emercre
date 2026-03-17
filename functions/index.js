@@ -724,30 +724,57 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                     vs.moving = false;
                     await stateRef.set(vs);
                 }
-                // 3. Seguimiento Intermedio
+                // 3. Seguimiento Intermedio (Trayecto)
                 else if (vs.hasDeparted && !vs.hasArrived) {
-                    if (isMoving && !vs.moving && vs.lastStopAddr && distToDest > 0.05) {
-                        const text = `⚡️ ${indicativo} reanuda la marcha hacia el lugar.`;
+                    if (isMoving && !vs.moving && distToDest > 0.05) {
+                        // Reanuda la marcha
+                        const saleTime = new Date(oystaTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+                        const origin = vs.lastStopAddr || "punto intermedio";
+                        const text = `⚡️ ${indicativo} sale de ${origin} a las ${saleTime} hacia el lugar.`;
                         await iRef.update({
                             comentarios: admin.firestore.FieldValue.arrayUnion({
                                 texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
                             })
                         });
                         vs.moving = true;
-                        vs.lastStopAddr = "";
+                        // No reseteamos lastStopAddr aún por si necesitamos editar este mensaje luego
                         await stateRef.set(vs);
                     } else if (!isMoving && vs.moving && distToDest > 0.05) {
-                        const text = `✅ ${indicativo} se ha detenido en el trayecto.`;
-                        await iRef.update({
-                            comentarios: admin.firestore.FieldValue.arrayUnion({
-                                texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
-                            })
+                        // Parada en trayecto
+                        const arrivalText = `✅ ${indicativo} se ha detenido en el trayecto.`;
+                        const comms = iData.comentarios || [];
+                        let foundIndex = -1;
+                        for(let k = comms.length - 1; k >= 0; k--) {
+                            const t = (comms[k].texto || "").toLowerCase();
+                            if (t.includes(indicativo.toLowerCase()) && (t.includes("sale") || t.includes("intervención iniciada"))) {
+                                foundIndex = k;
+                                break;
+                            }
+                        }
+
+                        if (foundIndex !== -1) {
+                            let cText = comms[foundIndex].texto || "";
+                            if (cText.includes("🚀 INTERVENCIÓN INICIADA")) {
+                                const lines = cText.split('\n');
+                                const idx = lines.findIndex(l => l.includes(indicativo));
+                                if (idx !== -1) {
+                                    lines[idx] = lines[idx].replace(" hacia el lugar", " hacia parada intermedia");
+                                    cText = lines.join('\n');
+                                }
+                            } else {
+                                cText = cText.replace(" hacia el lugar", " hacia parada intermedia");
+                            }
+                            comms[foundIndex].texto = cText;
+                            comms[foundIndex].editado = true;
+                        }
+
+                        comms.push({
+                            texto: arrivalText, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
                         });
+
+                        await iRef.update({ comentarios: comms, actualizadoEn: admin.firestore.FieldValue.serverTimestamp() });
                         vs.moving = false;
-                        vs.lastStopAddr = "punto intermedio";
-                        await stateRef.set(vs);
-                    } else if (isMoving !== vs.moving) {
-                        vs.moving = isMoving;
+                        vs.lastStopAddr = "parada anterior";
                         await stateRef.set(vs);
                     }
                 }

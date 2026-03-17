@@ -1343,7 +1343,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.10.6 Loaded');
+    console.log('EmerCRE V.13.10.7 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7931,12 +7931,10 @@ ${dataContext}
               if (isMovingNow && !vs.moving && vs.lastStopAddr && distToDest > 0.05) {
                 // Reinicio desde una parada intermedia
                 vs.moving = true;
-                vs.isMovingOffsite = true;
                 const saleTime = new Date(oystaTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
                 const text = `⚡️ ${indicativo} sale de ${vs.lastStopAddr} a las ${saleTime} hacia el lugar.`;
                 const newComment = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime)) };
                 updateDoc(iRef, { comentarios: arrayUnion(newComment) }).catch(e => {
-                   vs.isMovingOffsite = false;
                    vs.moving = false;
                 });
                 vs.lastSaleDeTS = oystaTime;
@@ -7946,7 +7944,6 @@ ${dataContext}
                 const currentPosStop = { ...pos };
                 reverseGeocodeWithCache(currentPosStop, async (addr) => {
                   const newAddr = addr || 'posición desconocida';
-                  vs.lastStopAddr = newAddr;
                   const arrivalText = `✅ ${indicativo} llega a ${newAddr}.`;
                   const arrivalTS = Date.now();
                   const newArrComment = { texto: arrivalText, autor: 'Sist. Oysta', autorId: 'system', timestamp: arrivalTS, fecha: formatCommentFecha(new Date(arrivalTS)) };
@@ -7955,21 +7952,43 @@ ${dataContext}
                     const snap = await getDoc(iRef);
                     if (snap.exists()) {
                       const comms = snap.data().comentarios || [];
-                      const updatedComms = comms.map(c => {
-                        const t = (c.texto || "").toLowerCase();
-                        if (c.timestamp === vs.lastSaleDeTS && t.includes(`⚡️ ${indicativo.toLowerCase()} sale de`)) {
-                          let base = c.texto.split(' hacia ')[0]; 
-                          if (base.endsWith('.')) base = base.slice(0, -1);
-                          return { ...c, texto: `${base} hacia ${newAddr}.`, editado: true };
+                      // V.13.10.7: Buscar el ÚLTIMO mensaje que mencione la salida de este vehículo para editarlo
+                      let foundIndex = -1;
+                      for(let k = comms.length - 1; k >= 0; k--) {
+                        const t = (comms[k].texto || "").toLowerCase();
+                        if (t.includes(indicativo.toLowerCase()) && (t.includes("sale") || t.includes("intervención iniciada"))) {
+                          foundIndex = k;
+                          break;
                         }
-                        return c;
-                      });
-                      updatedComms.push(newArrComment);
-                      await updateDoc(iRef, { comentarios: updatedComms, actualizadoEn: serverTimestamp() });
+                      }
+
+                      if (foundIndex !== -1) {
+                        const c = comms[foundIndex];
+                        let newTxt = c.texto || "";
+                        // Si es el bloque de inicio, buscamos la línea específica del vehículo
+                        if (newTxt.includes("🚀 INTERVENCIÓN INICIADA")) {
+                           const lines = newTxt.split('\n');
+                           const idx = lines.findIndex(l => l.includes(indicativo));
+                           if (idx !== -1) {
+                             lines[idx] = lines[idx].replace(" hacia el lugar", ` hacia ${newAddr}`);
+                             newTxt = lines.join('\n');
+                           }
+                        } else {
+                           // Si es un mensaje individual (⚡️ [Ind] sale de [Origen]...)
+                           newTxt = newTxt.replace(" hacia el lugar", ` hacia ${newAddr}`);
+                           if (!newTxt.includes(` hacia ${newAddr}`)) {
+                             // Fallback si no tenía "hacia el lugar"
+                             newTxt = newTxt.replace(/(\.|\!|\?|)$/, "") + ` hacia ${newAddr}.`;
+                           }
+                        }
+                        comms[foundIndex] = { ...c, texto: newTxt, editado: true };
+                      }
+                      
+                      comms.push(newArrComment);
+                      await updateDoc(iRef, { comentarios: comms, actualizadoEn: serverTimestamp() });
+                      vs.lastStopAddr = newAddr;
                     }
-                  } catch (e) {
-                    console.error("[Oysta] Error parada intermedia:", e);
-                  }
+                  } catch (e) { console.error("[Oysta] Error parada:", e); }
                 });
               }
             }
@@ -8500,14 +8519,15 @@ ${dataContext}
                       baseMsg += ` y ⚡️ SALE${origin} hacia el lugar (${speed} km/h)`;
                     }
 
-                    // V.13.10.4: Marcar como ya salido en el estado global para evitar duplicados del monitor automático
+                    // V.13.10.7: Asegurar estado inicial coincidente
                     const stateKey = `prev_${v.id}_${v.oystaId}`;
                     if (!window._oystaVehicleState) window._oystaVehicleState = {};
-                    if (!window._oystaVehicleState[stateKey]) {
-                      window._oystaVehicleState[stateKey] = { moving: true, hasDeparted: true, hasArrived: false };
-                    } else {
-                      window._oystaVehicleState[stateKey].hasDeparted = true;
-                    }
+                    window._oystaVehicleState[stateKey] = { 
+                      moving: true, 
+                      hasDeparted: true, 
+                      hasArrived: false,
+                      lastStopAddr: (globalLast && globalLast.addr) || origin.replace(" desde ", "") 
+                    };
                   }
                 }
                 return baseMsg;
@@ -14294,7 +14314,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.10.6
+          Versión V.13.10.7
         </div>
       </div>
 
@@ -14723,7 +14743,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.10.6
+          Versión V.13.10.7
         </div>
       </div>
 
@@ -15610,7 +15630,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.10.6
+            Versión V.13.10.7
           </div>
         </div>
         <div class="field" id="j-prov-row">
