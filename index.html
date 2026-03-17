@@ -1344,7 +1344,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.16.0 Loaded');
+    console.log('EmerCRE V.13.16.1 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7112,7 +7112,7 @@ ${dataContext}
         }
       });
 
-      // V.13.16.0: Cargar primero los vehículos y luego los subpreventivos para asegurar consistencia
+      // V.13.16.1: Cargar primero los vehículos y luego los subpreventivos para asegurar consistencia
       const qV = query(collection(db, 'vehiculos'), where('provincia', '==', p.provincia || 'Andalucía'));
       getDocs(qV).then(snapV => {
         snapV.docs.forEach(dv => {
@@ -7288,7 +7288,7 @@ ${dataContext}
     };
 
     window.renderResourceBadges = (recursos, occupiedResources) => {
-      // Función obsoleta tras V.13.16.0, ahora se usa renderHeaderResourceBadges para el banner
+      // Función obsoleta tras V.13.16.1, ahora se usa renderHeaderResourceBadges para el banner
       return '';
     };
 
@@ -7305,7 +7305,7 @@ ${dataContext}
       banner.classList.add('visible');
       
       const occupiedResources = new Set();
-      // V.13.16.0: Lógica robusta de disponibilidad basada en el snapshot actual
+      // V.13.16.1: Lógica robusta de disponibilidad basada en el snapshot actual
       if (typeof lastIntervencionesSnap !== 'undefined' && lastIntervencionesSnap) {
         lastIntervencionesSnap.docs.forEach(doc => {
           const i = doc.data();
@@ -7367,7 +7367,7 @@ ${dataContext}
       currentPreventivoId = d.preventivoId || currentPreventivoId;
       currentPreventivoDiaId = id;
       activeIntManageId = null;
-      window._prevIntSearch = ""; // V.13.16.0: Limpiar búsqueda al cambiar de día
+      window._prevIntSearch = ""; // V.13.16.1: Limpiar búsqueda al cambiar de día
       const sInput = document.getElementById('prev-int-search');
       if (sInput) sInput.value = "";
       if (side) side.classList.add('open');
@@ -7462,18 +7462,32 @@ ${dataContext}
           if (i.oculta === true && !mostrarCerradas) return '';
           if (isClosed && currentRole === 'usuario') return ''; 
           
-          const recBadges = (i.recursosAsignados || []).map(r => `<span class="badge-mini">${r}</span>`).join('');
+          const recBadges = (i.recursosAsignados || []).map(r => {
+            const v = window.globalVehiculos?.[r];
+            const name = v ? (v.alias || v.indicativo || r) : r;
+            return `<span class="badge-mini">${name}</span>`;
+          }).join('');
+
           const activeClass = activeIntManageId === markerId ? 'active' : '';
+
+          const createdTs = i.timestamp?.toDate ? i.timestamp.toDate().toLocaleString('es-ES', { day:'2-digit', month:'2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+          const updatedTs = i.actualizadoEn?.toDate ? i.actualizadoEn.toDate().toLocaleString('es-ES', { day:'2-digit', month:'2-digit', hour: '2-digit', minute: '2-digit' }) : createdTs;
 
           return `
             <div class="op-card-thin ${isClosed ? 'op-cerrada' : ''} ${activeClass}" 
-                 style="border-left: 3px solid ${prioColor}; margin-bottom: 2px;" 
+                 style="border-left: 3px solid ${prioColor}; margin-bottom: 2px; position:relative;" 
                  onclick="window.abrirGestionIntervencion('${markerId}')">
               <div class="card-row-top">
-                <div style="display:flex; gap:3px; flex-wrap:wrap;">${recBadges}</div>
+                <div style="display:flex; gap:3px; flex-wrap:wrap; max-width:120px;">${recBadges}</div>
                 <div class="card-desc-mini">${i.descripcion}</div>
               </div>
-              <div class="card-loc-mini">📍 ${i.direccion || 'Ubicación en mapa'}</div>
+              <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                 <div class="card-loc-mini">📍 ${i.direccion || 'Ubicación en mapa'}</div>
+                 <div style="display:flex; flex-direction:column; align-items:flex-end; gap:1px; flex-shrink:0;">
+                   <div style="font-size:7px; color:var(--text-4); font-weight:700;">🆕 ${createdTs}</div>
+                   <div style="font-size:7px; color:var(--accent); font-weight:700;">🕒 ${updatedTs}</div>
+                 </div>
+              </div>
             </div>`;
         }).join('');
         if (currentPreventivoDiaId) window.renderHeaderResourceBadges(currentPreventivoDiaId);
@@ -10395,7 +10409,7 @@ ${dataContext}
       white-space: nowrap;
     }
 
-    /* V.13.16.0: Estilos Faldón Operatividad (Compacto - Derecha - Iconos Grandes) */
+    /* V.13.16.1: Estilos Faldón Operatividad (Compacto - Derecha - Iconos Grandes) */
     .operability-banner {
       position: absolute;
       top: 10px;
@@ -10473,7 +10487,7 @@ ${dataContext}
       border-color: rgba(46, 204, 113, 0.7);
     }
     .op-resource-icon {
-      width: 28px; /* V.13.16.0: Iconos aún más grandes */
+      width: 28px; /* V.13.16.1: Iconos aún más grandes */
       height: 28px;
       object-fit: contain;
       filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));
@@ -11456,7 +11470,7 @@ ${dataContext}
       box-shadow: 10px 0 40px rgba(0,0,0,0.18);
       border-right: 1px solid var(--border-mid);
     }
-    /* V.13.16.0: Nuevo Panel de Gestión de Intervención (Lateral al Detalle) */
+    /* V.13.16.1: Nuevo Panel de Gestión de Intervención (Lateral al Detalle) */
     #preventivos-management-panel {
       left: 330px; /* Al lado del detalle-panel lateral */
       width: 0;
@@ -14344,7 +14358,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.16.0
+          Versión V.13.16.1
         </div>
       </div>
 
@@ -14773,7 +14787,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.16.0
+          Versión V.13.16.1
         </div>
       </div>
 
@@ -14818,7 +14832,7 @@ ${dataContext}
         </div>
       </div>
 
-      <!-- V.13.16.0: Panel de Gestión de Intervención (Lateral al Detalle) -->
+      <!-- V.13.16.1: Panel de Gestión de Intervención (Lateral al Detalle) -->
       <div class="detail-panel" id="preventivos-management-panel">
         <div class="dp-header" style="background:var(--bg-2); padding: 12px 14px 8px;">
            <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -14837,7 +14851,7 @@ ${dataContext}
       </div>
 
       <div class="panel-right">
-        <!-- V.13.16.0: Faldón de Operatividad -->
+        <!-- V.13.16.1: Faldón de Operatividad -->
         <div id="prev-operability-banner" class="operability-banner">
           <div id="op-row-ambulancias" class="op-banner-row">
             <div class="op-banner-label">🚑 Ambulancias</div>
