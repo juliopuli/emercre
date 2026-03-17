@@ -206,9 +206,12 @@
     let fastAssignLocation = null;
     let fastAssignAddress = "";
 
-    // ── SISTEMA DE CACHÉ Y OPTIMIZACIÓN DE API (V.12.4.1) ──────────────
+    // ── SISTEMA DE CACHÉ Y OPTIMIZACIÓN DE API (V.12.4.1 / V.13.17.0) ──────────────
     const geocodeCache = {};
-    const reverseGeocodeCache = {};
+    // V.13.17.0: reverseGeocodeCache persistido en sessionStorage para sobrevivir recargas suaves
+    const _rgcKey = 'emercre_rgc';
+    const reverseGeocodeCache = (() => { try { return JSON.parse(sessionStorage.getItem(_rgcKey) || '{}'); } catch(e) { return {}; } })();
+    function _saveRgcCache() { try { sessionStorage.setItem(_rgcKey, JSON.stringify(reverseGeocodeCache)); } catch(e) {} }
     const routeCache = {};
     let reverseGeocodeThrottle = false;
     let _geocoderInstance = null; // V.11.5.2: Instancia compartida
@@ -277,6 +280,7 @@
       gc.geocode({ location: { lat, lng } }, (results, status) => {
         if (status === 'OK' && results[0]) {
           reverseGeocodeCache[key] = results[0].formatted_address;
+          _saveRgcCache(); // V.13.17.0: Persistir en sessionStorage
           callback(results[0].formatted_address);
         } else {
           callback(null);
@@ -1344,7 +1348,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.16.4 Loaded');
+    console.log('EmerCRE V.13.17.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -5444,12 +5448,13 @@ ${dataContext}
     let editingVehiculoId = null;
 
     async function cargarVehiculos() {
-      const snap = await getDocs(collection(db, 'vehiculos'));
+      // V.13.17.0: Usar caché local en lugar de relanzar getDocs. localVehiclesById ya
+      // está poblado por el onSnapshot al cargar la app. Ahorra 1 lectura completa por apertura.
       const tbody = document.getElementById('vehiculos-tbody');
       if (!tbody) return;
       tbody.innerHTML = '';
 
-      const allVehs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const allVehs = Object.values(localVehiclesById);
       // Filtrado por ámbito (con fallback a Málaga)
       let visible = allVehs.filter(v => {
         const prov = v.provincia || 'Málaga';
@@ -6909,16 +6914,32 @@ ${dataContext}
       if (prov) window.cargarRecursoPreventivoMain(prov, preselected);
     };
 
+    // V.13.17.0: Caché de vehículos por provincia con TTL de 5 minutos para evitar getDocs repetidos
+    window._vehiculosProvCache = window._vehiculosProvCache || {};
+    async function getVehiculosByProvincia(prov) {
+      const now = Date.now();
+      const TTL = 5 * 60 * 1000; // 5 minutos
+      if (window._vehiculosProvCache[prov] && (now - window._vehiculosProvCache[prov].ts) < TTL) {
+        console.log(`[API Optimize] vehiculos cache hit: ${prov}`);
+        return window._vehiculosProvCache[prov].docs;
+      }
+      const q = query(collection(db, 'vehiculos'), where('provincia', '==', prov));
+      const snap = await getDocs(q);
+      window._vehiculosProvCache[prov] = { ts: now, docs: snap.docs.map(dv => ({ id: dv.id, ...dv.data() })) };
+      return window._vehiculosProvCache[prov].docs;
+    }
+    // Invalidar caché de provincia cuando el onSnapshot de vehiculos recibe cambios
+    // (se llama desde suscribirVehiculosLocales tras actualizar localVehiclesById)
+    window._invalidarVehiculosProvCache = (prov) => { if (prov && window._vehiculosProvCache) delete window._vehiculosProvCache[prov]; };
+
     window.cargarRecursoPreventivoMain = async (prov, preselected = []) => {
       const resList = document.getElementById('prev-main-recursos-list');
       resList.innerHTML = 'Cargando...';
-      const q = query(collection(db, 'vehiculos'), where('provincia', '==', prov));
-      const snap = await getDocs(q);
-      if (snap.empty) {
+      const vehs = await getVehiculosByProvincia(prov);
+      if (vehs.length === 0) {
         resList.innerHTML = '<div style="font-size:11px;color:var(--text-4);">No hay vehículos.</div>';
       } else {
-        resList.innerHTML = snap.docs.map(dv => {
-          const v = dv.data();
+        resList.innerHTML = vehs.map(v => {
           let iconUrl = 'assets/icons/icon_transp_personal.png';
           if (v.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
           else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
@@ -6927,10 +6948,10 @@ ${dataContext}
           else if (v.tipo?.includes('mixto')) iconUrl = 'assets/icons/icon_transp_mixto.png';
           else if (v.tipo?.includes('transporte')) iconUrl = 'assets/icons/icon_transp_personal.png';
 
-          const isChecked = preselected.includes(dv.id);
+          const isChecked = preselected.includes(v.id);
           return `
             <label style="display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer;">
-              <input type="checkbox" name="prev-main-recurso-v" value="${dv.id}" ${isChecked ? 'checked' : ''}>
+              <input type="checkbox" name="prev-main-recurso-v" value="${v.id}" ${isChecked ? 'checked' : ''}>
               <img src="${iconUrl}" style="width:14px; height:14px;">
               <span style="font-size:12px; font-weight:600;">${v.alias || v.indicativo || 'SIN IND'}</span>
             </label>
@@ -7112,12 +7133,9 @@ ${dataContext}
         }
       });
 
-      // V.13.16.4: Cargar primero los vehículos y luego los subpreventivos para asegurar consistencia
-      const qV = query(collection(db, 'vehiculos'), where('provincia', '==', p.provincia || 'Andalucía'));
-      getDocs(qV).then(snapV => {
-        snapV.docs.forEach(dv => {
-          window.globalVehiculos[dv.id] = dv.data();
-        });
+      // V.13.17.0: Usar caché con TTL en lugar de getDocs directo
+      getVehiculosByProvincia(p.provincia || 'Andalucía').then(vehs => {
+        vehs.forEach(v => { window.globalVehiculos[v.id] = v; });
         
         cargarSubpreventivos(id, (subIds) => {
           if (wrap) wrap.style.display = 'block';
@@ -7223,21 +7241,20 @@ ${dataContext}
       const recList = document.getElementById('prev-dia-recursos-list');
       recList.innerHTML = 'Cargando vehículos...';
       const p = preventivosCache[currentPreventivoId];
-      const qV = query(collection(db, 'vehiculos'), where('provincia', '==', p.provincia || 'Andalucía'));
-      const snapV = await getDocs(qV);
-      if (snapV.empty) {
+      // V.13.17.0: Usar caché con TTL en lugar de getDocs directo
+      const vehs = await getVehiculosByProvincia(p.provincia || 'Andalucía');
+      window.globalVehiculos = window.globalVehiculos || {};
+      if (vehs.length === 0) {
         recList.innerHTML = '<div style="font-size:11px; color:var(--text-4);">No hay vehículos en esta provincia.</div>';
       } else {
-        recList.innerHTML = snapV.docs.map(dv => {
-          const v = dv.data();
-          window.globalVehiculos = window.globalVehiculos || {};
-          window.globalVehiculos[dv.id] = v;
+        recList.innerHTML = vehs.map(v => {
+          window.globalVehiculos[v.id] = v;
           let iconUrl = 'assets/icons/icon_transp_personal.png';
           if (v.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
           else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
           else if (v.tipo?.includes('Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
-          const isSelected = editId && (subpreventivosCache[editId].recursos || []).includes(dv.id);
-          return `<label style="display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer;"><input type="checkbox" name="prev-recurso-v" value="${dv.id}" ${isSelected ? 'checked' : ''}><img src="${iconUrl}" style="width:16px; height:16px;"><span style="font-size:13px; font-weight:600;">${v.alias || v.indicativo || 'SIN IND'}</span></label>`;
+          const isSelected = editId && (subpreventivosCache[editId].recursos || []).includes(v.id);
+          return `<label style="display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer;"><input type="checkbox" name="prev-recurso-v" value="${v.id}" ${isSelected ? 'checked' : ''}><img src="${iconUrl}" style="width:16px; height:16px;"><span style="font-size:13px; font-weight:600;">${v.alias || v.indicativo || 'SIN IND'}</span></label>`;
         }).join('');
       }
       document.getElementById('overlay-preventivo-dia').style.display = 'flex';
@@ -7288,7 +7305,7 @@ ${dataContext}
     };
 
     window.renderResourceBadges = (recursos, occupiedResources) => {
-      // Función obsoleta tras V.13.16.4, ahora se usa renderHeaderResourceBadges para el banner
+      // Función obsoleta tras V.13.17.0, ahora se usa renderHeaderResourceBadges para el banner
       return '';
     };
 
@@ -7305,7 +7322,7 @@ ${dataContext}
       banner.classList.add('visible');
       
       const occupiedResources = new Set();
-      // V.13.16.4: Lógica robusta de disponibilidad basada en el snapshot actual
+      // V.13.17.0: Lógica robusta de disponibilidad basada en el snapshot actual
       if (typeof lastIntervencionesSnap !== 'undefined' && lastIntervencionesSnap) {
         lastIntervencionesSnap.docs.forEach(doc => {
           const i = doc.data();
@@ -7367,7 +7384,7 @@ ${dataContext}
       currentPreventivoId = d.preventivoId || currentPreventivoId;
       currentPreventivoDiaId = id;
       activeIntManageId = null;
-      window._prevIntSearch = ""; // V.13.16.4: Limpiar búsqueda al cambiar de día
+      window._prevIntSearch = ""; // V.13.17.0: Limpiar búsqueda al cambiar de día
       const sInput = document.getElementById('prev-int-search');
       if (sInput) sInput.value = "";
       if (side) side.classList.add('open');
@@ -8108,6 +8125,19 @@ ${dataContext}
         if (!destCoords || !window.google || !google.maps.DistanceMatrixService) return;
         const d = subpreventivosCache[currentPreventivoDiaId];
         if (!d || !d.recursos) return;
+
+        // V.13.17.0: Guard real — evitar llamadas si las coords no han cambiado >300m en <60s
+        const now = Date.now();
+        if (lastDistanceMatrixCoords && lastDistanceMatrixTime && (now - lastDistanceMatrixTime) < 60000) {
+          const dLat = Math.abs(destCoords.lat - lastDistanceMatrixCoords.lat);
+          const dLng = Math.abs(destCoords.lng - lastDistanceMatrixCoords.lng);
+          if (dLat < 0.003 && dLng < 0.003) { // ~300m
+            console.log('[API Optimize] DistanceMatrix guard: mismas coords recientes, omitiendo llamada.');
+            return;
+          }
+        }
+        lastDistanceMatrixCoords = { ...destCoords };
+        lastDistanceMatrixTime = now;
 
         const targetResources = d.recursos.filter(rvId => {
           const v = localVehiclesById[rvId];
@@ -10419,7 +10449,7 @@ ${dataContext}
       white-space: nowrap;
     }
 
-    /* V.13.16.4: Estilos Faldón Operatividad (Compacto - Derecha - Iconos Grandes) */
+    /* V.13.17.0: Estilos Faldón Operatividad (Compacto - Derecha - Iconos Grandes) */
     .operability-banner {
       position: absolute;
       top: 10px;
@@ -10497,7 +10527,7 @@ ${dataContext}
       border-color: rgba(46, 204, 113, 0.7);
     }
     .op-resource-icon {
-      width: 28px; /* V.13.16.4: Iconos aún más grandes */
+      width: 28px; /* V.13.17.0: Iconos aún más grandes */
       height: 28px;
       object-fit: contain;
       filter: drop-shadow(0 2px 2px rgba(0,0,0,0.3));
@@ -11480,7 +11510,7 @@ ${dataContext}
       box-shadow: 10px 0 40px rgba(0,0,0,0.18);
       border-right: 1px solid var(--border-mid);
     }
-    /* V.13.16.4: Nuevo Panel de Gestión de Intervención (Lateral al Detalle) */
+    /* V.13.17.0: Nuevo Panel de Gestión de Intervención (Lateral al Detalle) */
     #preventivos-management-panel {
       left: 330px; /* Al lado del detalle-panel lateral */
       width: 0;
@@ -14368,7 +14398,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.16.4
+          Versión V.13.17.0
         </div>
       </div>
 
@@ -14797,7 +14827,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.16.4
+          Versión V.13.17.0
         </div>
       </div>
 
@@ -14842,7 +14872,7 @@ ${dataContext}
         </div>
       </div>
 
-      <!-- V.13.16.4: Panel de Gestión de Intervención (Lateral al Detalle) -->
+      <!-- V.13.17.0: Panel de Gestión de Intervención (Lateral al Detalle) -->
       <div class="detail-panel" id="preventivos-management-panel">
         <div class="dp-header" style="background:var(--bg-2); padding: 12px 14px 8px;">
            <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -14861,7 +14891,7 @@ ${dataContext}
       </div>
 
       <div class="panel-right">
-        <!-- V.13.16.4: Faldón de Operatividad -->
+        <!-- V.13.17.0: Faldón de Operatividad -->
         <div id="prev-operability-banner" class="operability-banner">
           <div id="op-row-ambulancias" class="op-banner-row">
             <div class="op-banner-label">🚑 Ambulancias</div>
@@ -15716,7 +15746,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.16.4
+            Versión V.13.17.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
