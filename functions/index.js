@@ -769,7 +769,12 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                         }
 
                         comms.push({
-                            texto: arrivalText, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
+                            texto: arrivalText, 
+                            coords: pos, // V.13.11.0: Enviar coordenadas para hidratación en frontend
+                            autor: 'Sist. Oysta (BG)', 
+                            autorId: 'system', 
+                            timestamp: oystaTime, 
+                            fecha: formatCommentFecha(new Date(oystaTime))
                         });
 
                         await iRef.update({ comentarios: comms, actualizadoEn: admin.firestore.FieldValue.serverTimestamp() });
