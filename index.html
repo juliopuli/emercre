@@ -1343,7 +1343,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.11.0 Loaded');
+    console.log('EmerCRE V.13.12.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7112,7 +7112,6 @@ ${dataContext}
       });
 
       // Precargar vehículos de la provincia en cache
-      window.globalVehiculos = window.globalVehiculos || {};
       const qV = query(collection(db, 'vehiculos'), where('provincia', '==', p.provincia || 'Andalucía'));
       getDocs(qV).then(snapV => {
         snapV.docs.forEach(dv => {
@@ -7124,7 +7123,6 @@ ${dataContext}
         }
       }).catch(e => console.error("Error cargando vehículos:", e));
 
-      // V.12.4.1: Hacer zoom ajustado al interactuar
       window._preventivosNeedsZoom = true;
       if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
     };
@@ -7134,19 +7132,12 @@ ${dataContext}
       currentPreventivoDiaId = null;
       if (unsubSubpreventivos) unsubSubpreventivos();
       if (unsubIntervenciones) unsubIntervenciones();
-
-      window.clearPreventivoMapEffects(); // V.12.4.1
-
+      window.clearPreventivoMapEffects();
       document.querySelectorAll('[id^="prev-dias-wrap-"]').forEach(el => el.style.display = 'none');
       document.querySelectorAll('#preventivos-list .op-card').forEach(c => c.style.border = '');
-
-      // V.12.4.1: Cerrar panel lateral si estuviera abierto
       const side = document.getElementById('preventivos-detail-panel');
       if (side) side.classList.remove('open');
-
       document.getElementById('prev-breadcrumb').style.display = 'none';
-
-      // V.12.4.1: Refrescar suscripción global al volver a la raíz
       window.suscribirGlobalPreventivoIntervenciones();
     };
 
@@ -7162,9 +7153,7 @@ ${dataContext}
     function renderSubpreventivosList(snap, pId, callback) {
       const cont = document.getElementById(`prev-dias-container-${pId}`);
       if (!cont) return;
-
       const subIds = snap.docs.map(doc => doc.id);
-
       if (snap.empty) {
         cont.innerHTML = '<div style="padding:10px; text-align:center; color:var(--text-4); font-size:11px;">Aún no se han añadido días.</div>';
         if (callback) callback([]);
@@ -7174,19 +7163,14 @@ ${dataContext}
         const d = doc.data();
         const id = doc.id;
         subpreventivosCache[id] = d;
-
-        // V.12.4.1: Filtrar si está cerrado/oculto
         if (d.abierta === false && !canShowHidden()) return '';
         if (d.oculta === true && !mostrarCerradas) return '';
-
         const isSelected = (id === currentPreventivoDiaId);
         const isClosed = d.abierta === false;
-
         const canEdit = canEditSubpreventivo(d);
         const canDelete = canDeleteSubpreventivo();
-
         return `
-            <div class="op-card" style="padding:8px 12px; margin-bottom:0; box-shadow:none; border: 1px solid ${isSelected ? 'var(--accent)' : 'var(--border-mid)'}; background: ${isSelected ? 'var(--accent)10' : 'var(--bg-2)'}; cursor:pointer; ${isClosed ? 'opacity:0.7;' : ''}" onclick="event.stopPropagation(); selectSubpreventivo('${id}')">
+            <div class="op-card" style="padding:8px 12px; margin-bottom:0; box-shadow:none; border: 1px solid ${isSelected ? 'var(--accent)' : 'var(--border-mid)'}; background: ${isSelected ? 'var(--accent)10' : 'var(--bg-2)'}; cursor:pointer; ${isClosed ? 'opacity:0.7;' : ''}" onclick="event.stopPropagation(); window.selectSubpreventivo('${id}')">
               <div style="display:flex; justify-content:space-between; align-items:center;">
                 <div>
                   <div style="display:flex; align-items:center; gap:6px;">
@@ -7200,18 +7184,11 @@ ${dataContext}
                   ${!isClosed && currentRole !== 'usuario' ? `<span onclick="event.stopPropagation(); toggleSubpreventivoStatus('${id}')" style="cursor:pointer; font-size:14px;" title="Finalizar Día">🔒</span>` : ''}
                   ${canEdit ? `<span onclick="event.stopPropagation(); window.abrirModalPreventivoDia('${id}')" style="cursor:pointer; font-size:14px;" title="Editar">✏️</span>` : ''}
                   ${canDelete ? `<span onclick="event.stopPropagation(); window.borrarSubpreventivo('${id}')" style="cursor:pointer; opacity:0.7; font-size:14px;" title="Borrar">🗑️</span>` : ''}
-                  
                   ${isClosed ? `<span onclick="event.stopPropagation(); window.generarInformeIA_Preventivo('dia', '${id}', '${pId}')" style="cursor:pointer; font-size:14px;" title="Generar Informe IA del Día">✨</span>` : ''}
-                  
-                  <div style="font-size:11px; color:var(--accent); background:var(--accent)12; padding:2px 6px; border-radius:10px; font-weight:600;">
-                    🚗 ${d.recursos?.length || 0}
-                  </div>
                 </div>
               </div>
-            </div>
-            `;
+            </div>`;
       }).join('');
-
       if (callback) callback(subIds);
     }
 
@@ -7221,7 +7198,6 @@ ${dataContext}
       const title = document.querySelector('#overlay-preventivo-dia .modal-title');
       const inputNom = document.getElementById('prev-dia-nombre');
       const inputFec = document.getElementById('prev-dia-fecha');
-
       if (editId) {
         title.textContent = 'Editar Día / Subpreventivo';
         const d = subpreventivosCache[editId];
@@ -7232,11 +7208,8 @@ ${dataContext}
         inputNom.value = '';
         inputFec.value = '';
       }
-
       const recList = document.getElementById('prev-dia-recursos-list');
       recList.innerHTML = 'Cargando vehículos...';
-
-      // Cargar vehículos de la misma provincia
       const p = preventivosCache[currentPreventivoId];
       const qV = query(collection(db, 'vehiculos'), where('provincia', '==', p.provincia || 'Andalucía'));
       const snapV = await getDocs(qV);
@@ -7246,296 +7219,194 @@ ${dataContext}
         recList.innerHTML = snapV.docs.map(dv => {
           const v = dv.data();
           window.globalVehiculos = window.globalVehiculos || {};
-          window.globalVehiculos[dv.id] = v; // save to cache
-
-          let iconUrl = 'assets/icons/icon_transp_personal.png'; // default
+          window.globalVehiculos[dv.id] = v;
+          let iconUrl = 'assets/icons/icon_transp_personal.png';
           if (v.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
           else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
-          else if (v.tipo === 'Vehículo Todo terreno' || v.tipo === 'Todo Terreno') iconUrl = 'assets/icons/icon_todoterreno.png';
-          else if (v.tipo === 'Vehículo de transporte mixto') iconUrl = 'assets/icons/icon_transp_mixto.png';
-          else if (v.tipo === 'Turismo') iconUrl = 'assets/icons/icon_turismo.png';
-          else if (v.tipo === 'Vehículo transporte personal') iconUrl = 'assets/icons/icon_transp_personal.png';
-
+          else if (v.tipo?.includes('Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
           const isSelected = editId && (subpreventivosCache[editId].recursos || []).includes(dv.id);
-          return `
-            <label style="display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer;">
-              <input type="checkbox" name="prev-recurso-v" value="${dv.id}" ${isSelected ? 'checked' : ''}>
-              <img src="${iconUrl}" style="width:16px; height:16px;">
-              <span style="font-size:13px; font-weight:600;">${v.alias || v.indicativo || 'SIN IND'}</span>
-              <span style="font-size:11px; color:var(--text-3);">(${v.matricula || 'SIN MAT'})</span>
-            </label>
-          `;
+          return `<label style="display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer;"><input type="checkbox" name="prev-recurso-v" value="${dv.id}" ${isSelected ? 'checked' : ''}><img src="${iconUrl}" style="width:16px; height:16px;"><span style="font-size:13px; font-weight:600;">${v.alias || v.indicativo || 'SIN IND'}</span></label>`;
         }).join('');
       }
-
       document.getElementById('overlay-preventivo-dia').style.display = 'flex';
     };
 
     window.cerrarModalPreventivoDia = () => {
       document.getElementById('overlay-preventivo-dia').style.display = 'none';
-      editingDayId = null; // Reset editing state
-    };
-
-    window.cerrarDetallePreventivo = () => {
-      currentPreventivoDiaId = null;
-      activeIntManageId = null;
-      if (typeof window.clearPreventivoMapEffects === 'function') window.clearPreventivoMapEffects(); // V.12.4.1: Limpiar mapa al salir del día
-      document.getElementById('preventivos-detail-panel').classList.remove('open');
-      // Refrescar acordeón para quitar resaltado
-      if (currentPreventivoId) cargarSubpreventivos(currentPreventivoId);
-      window.renderHeaderResourceBadges(null); // Limpiar cabecera
-
-      if (window.innerWidth <= 900) {
-        const activeSec = document.querySelector('.nav-item.on')?.dataset.sec || 'operaciones';
-        if (activeSec === 'preventivos') {
-          const btn = document.getElementById('btn-mobile-map-toggle-prev');
-          if (btn) btn.style.display = 'block';
-        }
-      }
-
-      // V.12.4.1: Hacer zoom ajustado al interactuar
-      window._preventivosNeedsZoom = true;
-      if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
+      editingDayId = null;
     };
 
     window.guardarPreventivoDia = async () => {
       const nombre = document.getElementById('prev-dia-nombre').value.trim();
       const fecha = document.getElementById('prev-dia-fecha').value;
       if (!nombre || !fecha) return alert('Nombre y fecha son obligatorios');
-
       const recursos = Array.from(document.querySelectorAll('input[name="prev-recurso-v"]:checked')).map(cb => cb.value);
-
       try {
         if (editingDayId) {
-          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', editingDayId), {
-            nombre, fecha, recursos, actualizadoEn: serverTimestamp()
-          });
+          await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', editingDayId), { nombre, fecha, recursos, actualizadoEn: serverTimestamp() });
           mostrarToast('Día actualizado');
         } else {
-          await addDoc(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos'), {
-            nombre, fecha, recursos,
-            abierta: true, // V.12.4.1: Explícito
-            creadoEn: serverTimestamp()
-          });
+          await addDoc(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos'), { nombre, fecha, recursos, abierta: true, creadoEn: serverTimestamp() });
           mostrarToast('Día añadido');
         }
         window.cerrarModalPreventivoDia();
       } catch (e) { alert('Error: ' + e.message); }
     };
 
+    window.cerrarDetallePreventivo = () => {
+      currentPreventivoDiaId = null;
+      activeIntManageId = null;
+      if (typeof window.clearPreventivoMapEffects === 'function') window.clearPreventivoMapEffects();
+      document.getElementById('preventivos-detail-panel').classList.remove('open');
+      if (currentPreventivoId) cargarSubpreventivos(currentPreventivoId);
+      window.renderHeaderResourceBadges(null);
+      window._preventivosNeedsZoom = true;
+      if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
+    };
+
     window.renderResourceBadges = (recursos, occupiedResources) => {
-
-      const sortedRecs = (recursos || []).slice().sort((a, b) => {
-        const va = window.globalVehiculos && window.globalVehiculos[a];
-        const vb = window.globalVehiculos && window.globalVehiculos[b];
-        return getVehiclePriority(va?.tipo) - getVehiclePriority(vb?.tipo);
-      });
-
-      return sortedRecs.map(rvId => {
-        const v = window.globalVehiculos && window.globalVehiculos[rvId];
-        const isOccupied = occupiedResources.has(rvId);
-        const statusColor = isOccupied ? '#ff4d4d' : '#2ecc71';
-
-        if (v) {
+      const recList = (recursos || []).map(rvId => ({ id: rvId, data: window.globalVehiculos && window.globalVehiculos[rvId], isOccupied: occupiedResources.has(rvId) }));
+      const categories = [
+        { label: '🚑 AMBULANCIAS', filter: v => v?.tipo === 'Ambulancia' },
+        { label: '🛻 TODOTERRENOS', filter: v => v?.tipo?.includes('Terreno') },
+        { label: '🚒 OTROS RECURSOS', filter: v => v?.tipo !== 'Ambulancia' && !v?.tipo?.includes('Terreno') }
+      ];
+      return categories.map(cat => {
+        const filtered = recList.filter(item => cat.filter(item.data));
+        if (filtered.length === 0) return '';
+        const badges = filtered.map(item => {
+          const v = item.data;
+          const statusColor = item.isOccupied ? '#ff4d4d' : '#2ecc71';
           let iconUrl = 'assets/icons/icon_transp_personal.png';
-          if (v.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
-          else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
-          else if (v.tipo?.includes('Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
-          else if (v.tipo?.includes('Turismo')) iconUrl = 'assets/icons/icon_turismo.png';
-          else if (v.tipo?.includes('mixto')) iconUrl = 'assets/icons/icon_transp_mixto.png';
-
-          return `<span class="badge-tipo" style="background:var(--bg-3); color:var(--text-1); font-size:11px; display:inline-flex; align-items:center; gap:4px; margin-right:4px; padding:2px 6px; border-radius:4px; border:1px solid var(--border-mid); position:relative;">
-            <span style="width:6px; height:6px; background:${statusColor}; border-radius:50%; box-shadow:0 0 4px ${statusColor}a0;" title="${isOccupied ? 'Ocupado' : 'Disponible'}"></span>
-            <img src="${iconUrl}" style="width:14px; height:14px;">
-            ${v.alias || v.indicativo || 'SIN IND'}
-          </span>`;
-        }
-        return `<span class="badge-tipo" style="background:var(--bg-3); color:var(--text-1); font-size:10px;">🚗 ${rvId}</span>`;
+          if (v) {
+            if (v.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
+            else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
+            else if (v.tipo?.includes('Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
+          }
+          return `<span class="badge-tipo" style="background:var(--bg-3); color:var(--text-1); font-size:10px; display:inline-flex; align-items:center; gap:4px; margin: 0 4px 4px 0; padding:2px 6px; border-radius:4px; border:1px solid var(--border-mid);"><span style="width:6px; height:6px; background:${statusColor}; border-radius:50%;"></span>${v ? `<img src="${iconUrl}" style="width:12px; height:12px; opacity:0.8;"> ${v.alias || v.indicativo || 'SIN IND'}` : `🚗 ${item.id}`}</span>`;
+        }).join('');
+        return `<div style="margin-bottom:10px;"><div style="font-size:9px; font-weight:800; color:var(--text-3); margin-bottom:4px; border-left:2px solid var(--accent); padding-left:6px;">${cat.label}</div><div style="display:flex; flex-wrap:wrap;">${badges}</div></div>`;
       }).join('');
     };
 
     window.renderHeaderResourceBadges = (dayId) => {
       const d = subpreventivosCache[dayId];
       const recCont = document.getElementById('prev-recursos-dia-container');
-      if (!d || !recCont) return;
-
+      if (!dayId || !d || !recCont) { if (recCont) recCont.innerHTML = ''; return; }
       const occupiedResources = new Set();
-      // 1. De intervenciones de este día (cache local)
       Object.keys(intervencionesCache).forEach(k => {
         const i = intervencionesCache[k];
-        if (i.abierta !== false && !i.oculta) {
-          (i.recursosAsignados || []).forEach(r => occupiedResources.add(String(r)));
-        }
+        if (i.abierta !== false && !i.oculta) (i.recursosAsignados || []).forEach(r => occupiedResources.add(String(r)));
       });
-      // 2. De intervenciones globales abiertas (por si están asignados en otro día)
       if (typeof lastGlobalInterventionDocs !== 'undefined' && lastGlobalInterventionDocs) {
         lastGlobalInterventionDocs.forEach(doc => {
           const i = doc.data();
-          if (i.abierta !== false && !i.oculta) {
-            (i.recursosAsignados || []).forEach(r => occupiedResources.add(String(r)));
-          }
+          if (i.abierta !== false && !i.oculta) (i.recursosAsignados || []).forEach(r => occupiedResources.add(String(r)));
         });
       }
-
       recCont.innerHTML = window.renderResourceBadges(d.recursos, occupiedResources);
     };
 
     window.selectSubpreventivo = (id) => {
       const d = subpreventivosCache[id];
       const side = document.getElementById('preventivos-detail-panel');
-
-      if (side && side.classList.contains('open') && currentPreventivoDiaId === id) {
-        // V.12.4.1: Si ya estaba abierto este día y clicamos sobre él, lo cerramos
-        window.cerrarDetallePreventivo();
-        return;
-      }
-
-      // V.12.4.1: Permitir navegación aunque el día esté cerrado
-      // if (d && d.abierta === false) { ... }
-
-      currentPreventivoId = d?.preventivoId || currentPreventivoId;
+      if (!d) return;
+      if (side && side.classList.contains('open') && currentPreventivoDiaId === id) { window.cerrarDetallePreventivo(); return; }
+      currentPreventivoId = d.preventivoId || currentPreventivoId;
       currentPreventivoDiaId = id;
       activeIntManageId = null;
-
       if (side) side.classList.add('open');
       if (currentPreventivoId) cargarSubpreventivos(currentPreventivoId);
-
-      const bCont = document.getElementById('prev-dp-breadcrumb');
+      const titleCont = document.getElementById('prev-dp-title');
+      const controlsCont = document.getElementById('prev-dp-controls-row');
       if (preventivosCache[currentPreventivoId]) {
         const pMother = preventivosCache[currentPreventivoId];
         const isClosed = d.abierta === false;
-        bCont.innerHTML = `
-          <div style="display:flex; align-items:center; gap:10px;">
-            <div>
-              <span style="color:var(--accent); font-weight:700;">${pMother.nombre}</span> / ${d.nombre}
-            </div>
-            <div style="display:flex; align-items:center; gap:8px;">
-              ${(isClosed ? canReopenEverything() : canEditSubpreventivo(d)) && currentRole !== 'usuario' ? `
-              <span onclick="event.stopPropagation(); window.togglePreventivoDiaStatus('${id}')" style="cursor:pointer; font-size:14px;" title="${isClosed ? 'Reabrir' : 'Finalizar'}">
-                ${isClosed ? '🔓' : '🔒'}
-              </span>` : ''}
-              ${canDeleteSubpreventivo() ? `<span onclick="event.stopPropagation(); window.borrarPreventivoDia('${id}')" style="cursor:pointer; opacity:0.7; font-size:14px;" title="Borrar Día">🗑️</span>` : ''}
-              <button class="btn-nueva" style="background:var(--bg-3); color:var(--text-1); border:1px solid var(--border-mid); padding:2px 8px; font-size:10px; height:20px;" 
-                      onclick="abrirComentarios('${id}', 'dia')">
-                💬 Comentarios
-              </button>
-            </div>
-          </div>
-        `;
+        if (titleCont) titleCont.innerText = `${pMother.nombre} / ${d.nombre}`;
+        if (controlsCont) {
+          controlsCont.innerHTML = `<button class="btn-cancel-m" style="padding:4px 10px; font-size:11px; font-weight:700; height:28px; background:var(--bg-3); border-color:var(--border-mid); color:var(--text-1);" onclick="window.cerrarDetallePreventivo()">✕ Cerrar</button>
+            ${(isClosed ? canReopenEverything() : canEditSubpreventivo(d)) && currentRole !== 'usuario' ? `
+              <button class="btn-cancel-m" style="padding:4px 10px; font-size:11px; font-weight:700; height:28px; background:var(--bg-1); color:var(--text-1); border-color:var(--border-mid);" onclick="window.togglePreventivoDiaStatus('${id}')">${isClosed ? '🔓 Reabrir' : '🔒 Finalizar'}</button>` : ''}
+            ${canDeleteSubpreventivo() ? `<button class="btn-cancel-m" style="padding:4px 10px; font-size:11px; font-weight:700; height:28px; background:#fdd; color:#c00; border-color:#faa;" onclick="window.borrarPreventivoDia('${id}')">🗑️ Eliminar</button>` : ''}
+            <button class="btn-nueva" style="padding:4px 12px; font-size:11px; font-weight:700; height:28px; background:var(--accent); color:#fff;" onclick="abrirComentarios('${id}', 'dia')">💬 Comentarios</button>`;
+        }
       }
-
-      // Renderizar recursos del día
-      const recCont = document.getElementById('prev-recursos-dia-container');
-      if (recCont) {
-        const occupiedResources = new Set();
-        Object.keys(intervencionesCache).forEach(k => {
-          const other = intervencionesCache[k];
-          if (other.abierta !== false && !other.oculta) {
-            (other.recursosAsignados || []).forEach(r => occupiedResources.add(r));
-          }
-        });
-        recCont.innerHTML = window.renderResourceBadges(d.recursos, occupiedResources);
-      }
-
+      window.renderHeaderResourceBadges(id);
       cargarIntervenciones(currentPreventivoId, id);
-
-      // V.12.4.1: Hacer zoom ajustado al interactuar
       window._preventivosNeedsZoom = true;
       if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
     };
 
-    window.backToPreventivoDias = () => {
-      // V.12.4.1: Esto ahora solo cierra el detalle ya que el acordeón es permanente
-      window.cerrarDetallePreventivo();
-    };
+    window.backToPreventivoDias = () => { window.cerrarDetallePreventivo(); };
 
     function cargarIntervenciones(pId, dId) {
       if (unsubIntervenciones) unsubIntervenciones();
-      // V.12.4.1: Limitar a las últimas 50 intervenciones del día
       const q = query(collection(db, 'preventivos', pId, 'subpreventivos', dId, 'intervenciones'), orderBy('timestamp', 'desc'), limit(50));
       unsubIntervenciones = onSnapshot(q, snap => {
         lastIntervencionesSnap = snap;
         renderPreventivoIntervenciones(snap);
-        hydrateOystaComments(snap); // V.13.11.0: Ejecutar hidratación reactiva
+        hydrateOystaComments(snap);
       });
     }
-    
-    // V.13.11.0: Hidratación automática de direcciones Oysta desde el frontend
+
     async function hydrateOystaComments(snap) {
       if (!snap || snap.empty || currentRole === 'usuario') return; 
       if (!window._oystaHydrated) window._oystaHydrated = new Set();
-
       for (const d of snap.docs) {
         const data = d.data();
         const comments = data.comentarios || [];
         let modified = false;
-
         const newComms = await Promise.all(comments.map(async (c) => {
           const text = c.texto || "";
-          const needsHydration = text.includes('parada en trayecto') || text.includes('punto intermedio');
-          const hasCoords = c.coords && typeof c.coords.lat === 'number';
-
-          if (needsHydration && hasCoords && !window._oystaHydrated.has(c.timestamp)) {
+          if ((text.includes('parada en trayecto') || text.includes('punto intermedio')) && c.coords && !window._oystaHydrated.has(c.timestamp)) {
             const addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
             if (addr) {
               window._oystaHydrated.add(c.timestamp);
               modified = true;
-              let nt = text.replace('parada en trayecto', addr).replace('punto intermedio', addr);
-              return { ...c, texto: nt, hydrated: true };
+              return { ...c, texto: text.replace('parada en trayecto', addr).replace('punto intermedio', addr), hydrated: true };
             }
           }
           return c;
         }));
-
-        if (modified) {
-          updateDoc(d.ref, { comentarios: newComms }).catch(e => console.error("[Oysta] Hydration error:", e));
-        }
+        if (modified) updateDoc(d.ref, { comentarios: newComms }).catch(e => console.error("[Oysta] Hydration error:", e));
       }
     }
 
     function renderPreventivoIntervenciones(snap) {
       if (!snap) return;
       const cont = document.getElementById('prev-intervenciones-container');
+      const emptyMsg = document.getElementById('empty-msg-prev-int');
       if (!cont) return;
-
-      // V.13.0.2: Actualizar cache e indicadores antes de cualquier retorno
-      let intCache = {};
-      snap.forEach(doc => { intCache[doc.id] = doc.data(); });
-      intervencionesCache = intCache;
-      if (currentPreventivoDiaId) window.renderHeaderResourceBadges(currentPreventivoDiaId);
-
-      if (snap.empty) {
-        cont.innerHTML = '<div style="padding:20px; text-align:center; color:var(--text-4);">Sin intervenciones registradas este día.</div>';
+      let filteredDocs = snap.docs;
+      const search = (window._prevIntSearch || "").toLowerCase().trim();
+      if (search) {
+        filteredDocs = snap.docs.filter(doc => {
+          const i = doc.data();
+          return (i.descripcion || "").toLowerCase().includes(search) || (i.comentarios || []).some(c => (c.texto || "").toLowerCase().includes(search)) || doc.id.toLowerCase().includes(search);
+        });
+      }
+      if (filteredDocs.length === 0) {
+        cont.innerHTML = '';
+        if (emptyMsg) emptyMsg.style.display = 'flex';
         return;
       }
-
+      if (emptyMsg) emptyMsg.style.display = 'none';
       const bounds = new google.maps.LatLngBounds();
       let hasCoords = false;
-
-      cont.innerHTML = snap.docs.map(doc => {
+      cont.innerHTML = filteredDocs.map(doc => {
         const i = doc.data();
         const markerId = doc.id;
-        intCache[markerId] = i;
-
+        intervencionesCache[markerId] = i;
         const isClosed = i.abierta === false;
-
-        if (i.coords && i.oculta !== true && !(isClosed && currentRole === 'usuario')) {
-          hasCoords = true;
-          bounds.extend(i.coords);
-          // addInterventionMarker(markerId, i); // Removido V.12.4.1
-        }
-
-        if (i.oculta === true && !mostrarCerradas) return '';
-        if (isClosed && currentRole === 'usuario') return ''; // V.12.4.1: Usuarios no ven cerradas
-
         const prioColor = { azul: '#3498db', amarillo: '#f1c40f', rojo: '#e74c3c', negro: '#000' }[i.prioridad] || '#95a5a6';
-
-        return `
-        <div class="op-card ${isClosed ? 'op-cerrada' : ''}" style="border-left: 4px solid ${prioColor}; ${isClosed ? 'opacity:0.6;' : ''}" onclick="abrirGestionIntervencion('${markerId}')">
-                  <div class="card-top">
+        if (i.coords && i.oculta !== true && !(isClosed && currentRole === 'usuario')) { hasCoords = true; bounds.extend(i.coords); }
+        if (i.oculta === true && !mostrarCerradas) return '';
+        if (isClosed && currentRole === 'usuario') return ''; 
+        return `<div class="op-card ${isClosed ? 'op-cerrada' : ''}" style="border-left: 4px solid ${prioColor}; border-radius:4px; margin-bottom:10px; ${isClosed ? 'opacity:0.6;' : ''}" onclick="window.abrirGestionIntervencion('${markerId}')">
+                  <div class="card-top" style="padding:10px;">
                     <div style="flex:1">
                       <div style="display:flex; justify-content:space-between; align-items:start;">
-                        <div class="card-id">${markerId.substring(0, 6).toUpperCase()}</div>
+                        <div class="card-id" style="font-size:9px; opacity:0.6;">${markerId.substring(0, 6).toUpperCase()}</div>
                         <div style="display:flex; gap:8px; align-items:center;">
                            ${canEditIntervencion(i) ? `
                              <span onclick="event.stopPropagation(); window.abrirEditarIntervencion('${markerId}')" style="cursor:pointer; font-size:14px;" title="Editar">✏️</span>
@@ -7543,71 +7414,30 @@ ${dataContext}
                            ` : ''}
                            ${isClosed ? `
                              ${canReopenEverything() ? `<span onclick="event.stopPropagation(); window.toggleIntervencionStatus('${markerId}')" style="cursor:pointer; font-size:14px;" title="Reabrir">🔓</span>` : ''}
-                             <span onclick="event.stopPropagation(); window.generarInformeIA_Preventivo('intervencion', '${markerId}', '${currentPreventivoDiaId}', '${currentPreventivoId}')" style="cursor:pointer; font-size:14px;" title="Generar Informe IA">✨</span>
                              <span style="font-size:9px; background:#666; color:#fff; padding:1px 5px; border-radius:4px;">CERRADA</span>
                            ` : ''}
                            ${canDeleteIntervencion() ? `<span onclick="event.stopPropagation(); window.borrarIntervencion('${markerId}')" style="cursor:pointer; opacity:0.7; font-size:14px;" title="Borrar">🗑️</span>` : ''}
                         </div>
                       </div>
-                      <div class="card-name">${i.descripcion}</div>
+                      <div class="card-name" style="font-size:14px; font-weight:700; margin-top:2px;">${i.descripcion}</div>
                     </div>
                   </div>
-                  <div class="card-meta">
-                    <span class="card-loc">📍 ${i.direccion || 'Ubicación en mapa'}</span>
-                    <span style="font-size:10px; font-weight:700; color:var(--text-3);">${i.timestamp?.toDate ? i.timestamp.toDate().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                  <div class="card-meta" style="padding:0 10px 10px; display:flex; flex-direction:column; gap:4px;">
+                    <span class="card-loc" style="font-size:11px; opacity:0.8;">📍 ${i.direccion || 'Ubicación en mapa'}</span>
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                       <div style="display:flex; gap:4px; flex-wrap:wrap;">
+                         ${(i.recursosAsignados || []).map(r => `<span style="font-size:8px; background:var(--bg-3); padding:1px 4px; border-radius:3px;">${r}</span>`).join('')}
+                       </div>
+                       <span style="font-size:10px; font-weight:700; color:var(--text-3);">${i.timestamp?.toDate ? i.timestamp.toDate().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''}</span>
+                    </div>
                   </div>
-                  ${i.solicitadoPor ? `<div style="font-size:10px; color:var(--text-3); margin-top:4px;"><strong>Solicitado por:</strong> ${i.solicitadoPor}</div>` : ''}
-                  <div style="margin-top:8px; display:flex; gap:4px; flex-wrap:wrap;">
-                    ${(i.recursosAsignados || []).map(r => {
-          const v = window.globalVehiculos && window.globalVehiculos[r];
-          let iconUrl = 'assets/icons/icon_transp_personal.png';
-          let label = r;
-          if (v) {
-            if (v.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
-            else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
-            else if (v.tipo === 'Vehículo Todo terreno' || v.tipo === 'Todo Terreno') iconUrl = 'assets/icons/icon_todoterreno.png';
-            else if (v.tipo === 'Vehículo de transporte mixto') iconUrl = 'assets/icons/icon_transp_mixto.png';
-            else if (v.tipo === 'Turismo') iconUrl = 'assets/icons/icon_turismo.png';
-            else if (v.tipo === 'Vehículo transporte personal') iconUrl = 'assets/icons/icon_transp_personal.png';
-            label = v.alias || v.indicativo || 'SIN IND';
-          } else {
-            return `<span style="font-size:9px; background:var(--bg-2); padding:2px 6px; border:1px solid var(--border-mid); border-radius:3px; color:var(--text-2);">🚗 ${r}</span>`;
-          }
-          return `<span style="font-size:9px; background:var(--bg-2); padding:2px 4px; border:1px solid var(--border-mid); border-radius:3px; color:var(--text-2); display:inline-flex; align-items:center; gap:2px;">
-                               <img src="${iconUrl}" style="width:10px; height:10px;">
-                               ${label}
-                               ${canEditIntervencion(i) ? `<button onclick="event.stopPropagation(); window.retirarRecursoIntervencion('${markerId}', '${r}')" style="margin-left:2px; background:none; border:none; color:#c00; font-size:10px; font-weight:700; cursor:pointer; padding:0 2px;">×</button>` : ''}
-                             </span>`;
-        }).join('')}
-                  </div>
-                  </div>
-                  <!--V.12.4.1: Sección de gestión inline-->
-        <div id="prev-int-manage-${markerId}" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border-mid);" onclick="event.stopPropagation()">
-          <!-- Se rellena al abrir -->
-        </div>
-                </div>
-        `;
+                  <div id="prev-int-manage-${markerId}" style="display:none; padding:10px; border-top:1px solid var(--border-mid); background:var(--bg-1);" onclick="event.stopPropagation()"></div>
+                </div>`;
       }).join('');
-
-      intervencionesCache = intCache;
-
-      // V.12.4.1: Refrescar semáforos de la cabecera reactivamente
       if (currentPreventivoDiaId) window.renderHeaderResourceBadges(currentPreventivoDiaId);
-
-      // V.12.4.1: Si había un panel abierto, lo recuperamos (para que se vean los comentarios nuevos reactivamente)
-      if (activeIntManageId && intervencionesCache[activeIntManageId]) {
-        setTimeout(() => abrirGestionIntervencion(activeIntManageId, true), 10);
-      }
-
-      /* V.13.8.1: Desactivado auto-ajuste por petición usuario
-      if (hasCoords && mapPreventivos) {
-        mapPreventivos.fitBounds(bounds);
-        if (mapPreventivos.getZoom() > 16) mapPreventivos.setZoom(16);
-      }
-      */
+      if (activeIntManageId && intervencionesCache[activeIntManageId]) { setTimeout(() => window.abrirGestionIntervencion(activeIntManageId, true), 10); }
     }
-
-    window.suscribirGlobalPreventivoIntervenciones = function () {
+\n    window.suscribirGlobalPreventivoIntervenciones = function () {
       // Cancelar suscripción anterior si existe
       if (unsubGlobalPreventivoIntervenciones) {
         unsubGlobalPreventivoIntervenciones();
@@ -14389,7 +14219,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.11.0
+          Versión V.13.12.0
         </div>
       </div>
 
@@ -14818,52 +14648,50 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.11.0
+          Versión V.13.12.0
         </div>
       </div>
 
       <!-- V.12.4.1: Nuevo Panel de Detalle Deslizable -->
+      <!-- V.13.12.0: Rediseño Panel Detalle -->
       <div class="detail-panel" id="preventivos-detail-panel">
-        <div class="dp-header">
-          <div class="dp-scope-title">Detalle del Día</div>
-          <div class="dp-top-row">
-            <div id="prev-dp-breadcrumb" style="font-size: 13px; font-weight: 600; color: var(--text-2);"></div>
-            <div style="display:flex; align-items:center; gap:10px;">
-              <button class="btn-close-dp" onclick="cerrarDetallePreventivo()">✕</button>
-            </div>
+        <div class="dp-header" style="background:var(--bg-2); padding: 12px 16px;">
+          <div id="prev-dp-title" style="font-size: 14px; font-weight: 700; color: var(--accent); line-height:1.2;"></div>
+          <div id="prev-dp-controls-row" style="display:flex; align-items:center; gap:8px; margin-top:10px;"></div>
+        </div>
+
+        <div id="prev-recursos-dia-wrapper" style="padding: 10px 16px; border-bottom: 1px solid var(--border-mid); background:var(--bg-1);">
+          <div id="prev-recursos-dia-container" style="display: flex; flex-direction:column; gap:8px;"></div>
+        </div>
+
+        <div style="padding: 12px 16px; border-bottom: 1px solid var(--border-mid); background:var(--bg-2); display:flex; flex-direction:column; gap:10px;">
+          <div class="search-box">
+            <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input type="text" id="prev-int-search" class="search-input" placeholder="Buscar en intervenciones..." oninput="window._prevIntSearch = this.value; if(lastIntervencionesSnap) renderPreventivoIntervenciones(lastIntervencionesSnap);">
           </div>
-          <div id="prev-recursos-dia-wrapper"
-            style="margin-top:8px; padding-top:8px; border-top:1px solid var(--border-mid);">
-            <div
-              style="font-size:10px; font-weight:700; color:var(--text-3); text-transform:uppercase; margin-bottom:6px;">
-              Recursos:</div>
-            <div id="prev-recursos-dia-container" style="display: flex; flex-wrap: wrap; gap: 4px;"></div>
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
+            <button class="btn-nueva" style="padding: 6px 14px; font-size: 11px; flex:1;" onclick="abrirModalPreventivoIntervencion()">+ Intervención</button>
+            <div style="display:flex; align-items:center; gap:8px; font-size:10px; font-weight:700; color:var(--text-3); white-space:nowrap;">
+              <span>VER CERRADAS</span>
+              <label class="switch">
+                <input type="checkbox" id="check-show-cerradas-int" onchange="window.toggleGlobalCerradas(this.checked)">
+                <span class="slider"></span>
+              </label>
+            </div>
           </div>
         </div>
 
-        <div class="ops-list" id="preventivos-intervenciones-list"
-          style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
-          <div id="prev-sidebar-toggle-cerradas"
-            style="display:none; align-items:center; gap:8px; padding:4px 16px 8px; border-bottom:1px dashed var(--border-mid);">
-            <span style="font-size:10px; color:var(--text-3); font-weight:600;">Mostrar intervenciones cerradas</span>
-            <label class="switch">
-              <input type="checkbox" onchange="toggleGlobalCerradas(this.checked)">
-              <span class="slider"></span>
-            </label>
-          </div>
-          <div
-            style="padding: 12px 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border);">
-            <div style="font-weight: 600; color: var(--text-2);">Intervenciones</div>
-            <button class="btn-nueva" style="padding: 4px 10px; font-size: 12px;"
-              onclick="abrirModalPreventivoIntervencion()">+ Intervención</button>
-          </div>
+        <div class="ops-list" id="preventivos-intervenciones-list" style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
           <div id="prev-intervenciones-container" style="flex:1; overflow-y:auto;"></div>
-          <div class="empty-msg" id="empty-msg-prev-int" style="display:none;">
+          <div class="empty-msg" id="empty-msg-prev-int" style="display:none; padding:40px 20px;">
             <div style="font-size:28px;opacity:0.4">📋</div>
-            <span>Sin intervenciones en este día.</span>
+            <span>No se han encontrado intervenciones.</span>
           </div>
           <div class="dp-footer">
-            <button onclick="cerrarDetallePreventivo()">Cerrar</button>
+            <button onclick="cerrarDetallePreventivo()">Cerrar Panel</button>
           </div>
         </div>
       </div>
@@ -15708,7 +15536,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.11.0
+            Versión V.13.12.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
