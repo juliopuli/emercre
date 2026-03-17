@@ -178,7 +178,7 @@
     let unsubGlobalPreventivoIntervenciones = null; // V.12.4.1: Restaurado
     let unsubGlobalSubpreventivos = null; // V.12.4.1: Para seguimiento de recursos asignados a días
     let oystaMarkersPrev = {};
-    let globalVehiculos = {}; // V.13.12.2: Caché global para recursos de preventivos
+    window.globalVehiculos = {}; // V.13.13.0: Caché global para recursos de preventivos
     let searchMarkerEme = null;
     let searchMarkerPrev = null;
     let infoWindowSearch = null;
@@ -1344,7 +1344,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.12.2 Loaded');
+    console.log('EmerCRE V.13.13.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7112,17 +7112,28 @@ ${dataContext}
         }
       });
 
-      // Precargar vehículos de la provincia en cache
+      // V.13.13.0: Cargar primero los vehículos y luego los subpreventivos para asegurar consistencia
       const qV = query(collection(db, 'vehiculos'), where('provincia', '==', p.provincia || 'Andalucía'));
       getDocs(qV).then(snapV => {
         snapV.docs.forEach(dv => {
           window.globalVehiculos[dv.id] = dv.data();
         });
-        if (typeof currentPreventivoDiaId !== 'undefined' && currentPreventivoDiaId) {
-          const recCont = document.getElementById('prev-recursos-dia-container');
-          if (recCont) window.selectSubpreventivo(currentPreventivoDiaId);
-        }
-      }).catch(e => console.error("Error cargando vehículos:", e));
+        
+        cargarSubpreventivos(id, (subIds) => {
+          if (wrap) wrap.style.display = 'block';
+          // Atajo para 1 día
+          if ((p.dias || 1) === 1 && subIds && subIds.length > 0) {
+            window.selectSubpreventivo(subIds[0]);
+          } else if (currentPreventivoDiaId) {
+             // Si ya tenemos un día seleccionado (ej: por navegación directa), refrescamos sus badges
+             window.renderHeaderResourceBadges(currentPreventivoDiaId);
+          }
+        });
+
+      }).catch(e => {
+        console.error("Error cargando vehículos:", e);
+        cargarSubpreventivos(id, (subIds) => { if (wrap) wrap.style.display = 'block'; });
+      });
 
       window._preventivosNeedsZoom = true;
       if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
@@ -7266,45 +7277,20 @@ ${dataContext}
     };
 
     window.renderResourceBadges = (recursos, occupiedResources) => {
-      const recList = (recursos || []).map(rvId => ({ 
-        id: String(rvId), 
-        data: globalVehiculos[rvId] || window.globalVehiculos?.[rvId], 
-        isOccupied: occupiedResources.has(String(rvId)) 
-      }));
-      const categories = [
-        { label: '🚑 AMBULANCIAS', filter: v => v?.tipo?.toString().toUpperCase().includes('AMBULANCIA') },
-        { label: '🛻 TODOTERRENOS', filter: v => v?.tipo?.toString().toUpperCase().includes('TERRENO') },
-        { label: '🚒 OTROS RECURSOS', filter: v => {
-             if (!v) return true; // Si no hay datos, va a Otros temporalmente
-             const t = v.tipo?.toString().toUpperCase() || '';
-             return !t.includes('AMBULANCIA') && !t.includes('TERRENO');
-        }}
-      ];
-      return categories.map(cat => {
-        const filtered = recList.filter(item => cat.filter(item.data));
-        if (filtered.length === 0) return '';
-        const badges = filtered.map(item => {
-          const v = item.data;
-          const statusColor = item.isOccupied ? '#ff4d4d' : '#2ecc71';
-          let iconUrl = 'assets/icons/icon_transp_personal.png';
-          if (v && v.tipo) {
-            const t = v.tipo.toString().toUpperCase();
-            if (t.includes('AMBULANCIA')) iconUrl = 'assets/icons/icon_ambulancia.png';
-            else if (t.includes('TERRENO')) iconUrl = 'assets/icons/icon_todoterreno.png';
-            else if (t.includes('CAMI')) iconUrl = 'assets/icons/icon_camion.png';
-            else if (t.includes('MIXTO')) iconUrl = 'assets/icons/icon_transp_mixto.png';
-            else if (t.includes('TURISMO')) iconUrl = 'assets/icons/icon_turismo.png';
-          }
-          return `<span class="badge-tipo" style="background:var(--bg-3); color:var(--text-1); font-size:10px; display:inline-flex; align-items:center; gap:4px; margin: 0 4px 4px 0; padding:2px 6px; border-radius:4px; border:1px solid var(--border-mid); white-space:nowrap;"><span style="width:6px; height:6px; background:${statusColor}; border-radius:50%; flex-shrink:0;"></span>${v ? `<img src="${iconUrl}" style="width:12px; height:12px; opacity:0.8; flex-shrink:0;"> ${v.alias || v.indicativo || 'SIN IND'}` : `🚗 ${item.id}`}</span>`;
-        }).join('');
-        return `<div style="margin-bottom:8px;"><div style="font-size:9px; font-weight:800; color:var(--text-3); margin-bottom:4px; border-left:2px solid var(--accent); padding-left:6px;">${cat.label}</div><div style="display:flex; flex-wrap:wrap; align-items:center;">${badges}</div></div>`;
-      }).join('');
+      // Función obsoleta tras V.13.13.0, ahora se usa renderHeaderResourceBadges para el banner
+      return '';
     };
 
     window.renderHeaderResourceBadges = (dayId) => {
       const d = subpreventivosCache[dayId];
-      const recCont = document.getElementById('prev-recursos-dia-container');
-      if (!dayId || !d || !recCont) { if (recCont) recCont.innerHTML = ''; return; }
+      const banner = document.getElementById('prev-operability-banner');
+      if (!dayId || !d || !banner) { 
+        if (banner) banner.classList.remove('visible');
+        return; 
+      }
+      
+      banner.classList.add('visible');
+      
       const occupiedResources = new Set();
       Object.keys(intervencionesCache).forEach(k => {
         const i = intervencionesCache[k];
@@ -7316,7 +7302,49 @@ ${dataContext}
           if (i.abierta !== false && !i.oculta) (i.recursosAsignados || []).forEach(r => occupiedResources.add(String(r)));
         });
       }
-      recCont.innerHTML = window.renderResourceBadges(d.recursos, occupiedResources);
+
+      const recList = (d.recursos || []).map(rvId => ({ 
+        id: String(rvId), 
+        data: window.globalVehiculos?.[rvId], 
+        isOccupied: occupiedResources.has(String(rvId)) 
+      }));
+
+      const renderRow = (contentId, filterFn) => {
+        const cont = document.getElementById(contentId);
+        if (!cont) return;
+        const filtered = recList.filter(item => filterFn(item.data));
+        if (filtered.length === 0) {
+          cont.innerHTML = '<div style="font-size:8px; color:rgba(255,255,255,0.2); font-style:italic;">Sin recursos registrados</div>';
+          return;
+        }
+        cont.innerHTML = filtered.map(item => {
+          const v = item.data;
+          const statusClass = item.isOccupied ? 'occupied' : 'available';
+          let iconUrl = 'assets/icons/icon_transp_personal.png';
+          if (v && v.tipo) {
+            const t = v.tipo.toString().toUpperCase();
+            if (t.includes('AMBULANCIA')) iconUrl = 'assets/icons/icon_ambulancia.png';
+            else if (t.includes('TERRENO')) iconUrl = 'assets/icons/icon_todoterreno.png';
+            else if (t.includes('CAMI')) iconUrl = 'assets/icons/icon_camion.png';
+            else if (t.includes('TURISMO')) iconUrl = 'assets/icons/icon_turismo.png';
+            else if (t.includes('MIXTO')) iconUrl = 'assets/icons/icon_transp_mixto.png';
+          }
+          return `
+            <div class="op-resource-card ${statusClass}" title="${item.isOccupied ? 'OPERATIVO / EN INTERVENCIÓN' : 'DISPONIBLE EN BASE / PUNTO'}">
+              <div class="op-status-dot"></div>
+              <img src="${iconUrl}" class="op-resource-icon">
+              <div class="op-resource-name">${v ? (v.alias || v.indicativo || 'S.I.') : item.id}</div>
+            </div>`;
+        }).join('');
+      };
+
+      renderRow('op-content-ambulancias', v => v?.tipo?.toString().toUpperCase().includes('AMBULANCIA'));
+      renderRow('op-content-todoterrenos', v => v?.tipo?.toString().toUpperCase().includes('TERRENO'));
+      renderRow('op-content-otros', v => {
+        if (!v) return true;
+        const t = v.tipo?.toString().toUpperCase() || '';
+        return !t.includes('AMBULANCIA') && !t.includes('TERRENO');
+      });
     };
 
     window.selectSubpreventivo = (id) => {
@@ -10439,6 +10467,107 @@ ${dataContext}
       transition: all 0.2s;
       white-space: nowrap;
     }
+
+    /* V.13.13.0: Estilos Faldón Operatividad */
+    .operability-banner {
+      position: absolute;
+      top: 14px;
+      left: 170px;
+      right: 14px;
+      background: rgba(11, 34, 65, 0.95);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: 10px 16px;
+      z-index: 900;
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      backdrop-filter: blur(8px);
+      transition: all 0.3s ease;
+    }
+    .operability-banner.visible {
+      display: flex;
+    }
+    .op-banner-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 48px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+      padding-bottom: 6px;
+    }
+    .op-banner-row:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+    .op-banner-label {
+      font-size: 9px;
+      font-weight: 900;
+      color: var(--accent);
+      width: 90px;
+      flex-shrink: 0;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      line-height: 1.1;
+      text-align: right;
+      padding-right: 10px;
+      border-right: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .op-banner-content {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      flex: 1;
+    }
+    .op-resource-card {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      padding: 4px 8px;
+      min-width: 85px;
+      cursor: default;
+      transition: all 0.2s;
+      position: relative;
+    }
+    .op-resource-card.occupied {
+      background: rgba(231, 76, 60, 0.15);
+      border-color: #e74c3c;
+    }
+    .op-resource-card.available {
+      background: rgba(46, 204, 113, 0.15);
+      border-color: #2ecc71;
+    }
+    .op-resource-icon {
+      width: 22px;
+      height: 22px;
+      margin-bottom: 2px;
+      object-fit: contain;
+    }
+    .op-resource-name {
+      font-size: 9px;
+      font-weight: 800;
+      color: #fff;
+      text-align: center;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      width: 100%;
+    }
+    .op-status-dot {
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+    }
+    .op-resource-card.occupied .op-status-dot { background: #e74c3c; box-shadow: 0 0 5px #e74c3c; }
+    .op-resource-card.available .op-status-dot { background: #2ecc71; box-shadow: 0 0 5px #2ecc71; }
 
     .map-btn-float:hover {
       background: #fff;
@@ -14231,7 +14360,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.12.2
+          Versión V.13.13.0
         </div>
       </div>
 
@@ -14660,21 +14789,18 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.12.2
+          Versión V.13.13.0
         </div>
       </div>
 
       <!-- V.12.4.1: Nuevo Panel de Detalle Deslizable -->
-      <!-- V.13.12.2: Rediseño Panel Detalle -->
       <div class="detail-panel" id="preventivos-detail-panel">
         <div class="dp-header" style="background:var(--bg-2); padding: 12px 16px;">
           <div id="prev-dp-title" style="font-size: 14px; font-weight: 700; color: var(--accent); line-height:1.2;"></div>
           <div id="prev-dp-controls-row" style="display:flex; align-items:center; gap:8px; margin-top:10px;"></div>
         </div>
 
-        <div id="prev-recursos-dia-wrapper" style="padding: 10px 16px; border-bottom: 1px solid var(--border-mid); background:var(--bg-1); max-height: 180px; overflow-y: auto;">
-          <div id="prev-recursos-dia-container" style="display: flex; flex-direction:column; gap:4px;"></div>
-        </div>
+        <!-- Se ha eliminado el contenedor de recursos de aquí para moverlo al faldón superior -->
 
         <div style="padding: 12px 16px; border-bottom: 1px solid var(--border-mid); background:var(--bg-2); display:flex; flex-direction:column; gap:10px;">
           <div class="search-box">
@@ -14709,6 +14835,22 @@ ${dataContext}
       </div>
 
       <div class="panel-right">
+        <!-- V.13.13.0: Faldón de Operatividad -->
+        <div id="prev-operability-banner" class="operability-banner">
+          <div id="op-row-ambulancias" class="op-banner-row">
+            <div class="op-banner-label">🚑 Ambulancias</div>
+            <div class="op-banner-content" id="op-content-ambulancias"></div>
+          </div>
+          <div id="op-row-todoterrenos" class="op-banner-row">
+            <div class="op-banner-label">🛻 Todoterrenos</div>
+            <div class="op-banner-content" id="op-content-todoterrenos"></div>
+          </div>
+          <div id="op-row-otros" class="op-banner-row">
+            <div class="op-banner-label">🚒 Otros</div>
+            <div class="op-banner-content" id="op-content-otros"></div>
+          </div>
+        </div>
+
         <!-- Mapa Principal de Preventivos -->
         <div class="map-controls-floating">
           <!-- V.12.4.1: Status Oysta para Super Admin (Clickable) -->
@@ -15548,7 +15690,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.12.1
+            Versión V.13.13.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
