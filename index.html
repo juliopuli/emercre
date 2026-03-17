@@ -1344,7 +1344,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.13.0 Loaded');
+    console.log('EmerCRE V.13.13.1 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7112,7 +7112,7 @@ ${dataContext}
         }
       });
 
-      // V.13.13.0: Cargar primero los vehículos y luego los subpreventivos para asegurar consistencia
+      // V.13.13.1: Cargar primero los vehículos y luego los subpreventivos para asegurar consistencia
       const qV = query(collection(db, 'vehiculos'), where('provincia', '==', p.provincia || 'Andalucía'));
       getDocs(qV).then(snapV => {
         snapV.docs.forEach(dv => {
@@ -7277,7 +7277,7 @@ ${dataContext}
     };
 
     window.renderResourceBadges = (recursos, occupiedResources) => {
-      // Función obsoleta tras V.13.13.0, ahora se usa renderHeaderResourceBadges para el banner
+      // Función obsoleta tras V.13.13.1, ahora se usa renderHeaderResourceBadges para el banner
       return '';
     };
 
@@ -7292,16 +7292,14 @@ ${dataContext}
       banner.classList.add('visible');
       
       const occupiedResources = new Set();
+      // V.13.13.1: Escuchar todas las intervenciones de este subpreventivo para marcar ocupación
       Object.keys(intervencionesCache).forEach(k => {
         const i = intervencionesCache[k];
-        if (i.abierta !== false && !i.oculta) (i.recursosAsignados || []).forEach(r => occupiedResources.add(String(r)));
+        // Solo si pertenece al día actual
+        if (i.subpreventivoId === dayId && i.abierta !== false && !i.oculta) {
+            (i.recursosAsignados || []).forEach(r => occupiedResources.add(String(r)));
+        }
       });
-      if (typeof lastGlobalInterventionDocs !== 'undefined' && lastGlobalInterventionDocs) {
-        lastGlobalInterventionDocs.forEach(doc => {
-          const i = doc.data();
-          if (i.abierta !== false && !i.oculta) (i.recursosAsignados || []).forEach(r => occupiedResources.add(String(r)));
-        });
-      }
 
       const recList = (d.recursos || []).map(rvId => ({ 
         id: String(rvId), 
@@ -7314,7 +7312,7 @@ ${dataContext}
         if (!cont) return;
         const filtered = recList.filter(item => filterFn(item.data));
         if (filtered.length === 0) {
-          cont.innerHTML = '<div style="font-size:8px; color:rgba(255,255,255,0.2); font-style:italic;">Sin recursos registrados</div>';
+          cont.innerHTML = '<div style="font-size:8px; color:var(--text-4); font-style:italic;">Sin recursos registrados</div>';
           return;
         }
         cont.innerHTML = filtered.map(item => {
@@ -7330,10 +7328,10 @@ ${dataContext}
             else if (t.includes('MIXTO')) iconUrl = 'assets/icons/icon_transp_mixto.png';
           }
           return `
-            <div class="op-resource-card ${statusClass}" title="${item.isOccupied ? 'OPERATIVO / EN INTERVENCIÓN' : 'DISPONIBLE EN BASE / PUNTO'}">
-              <div class="op-status-dot"></div>
+            <div class="op-resource-card ${statusClass}" title="${item.isOccupied ? 'OPERATIVO / EN INTERVENCIÓN' : 'DISPONIBLE'}">
               <img src="${iconUrl}" class="op-resource-icon">
               <div class="op-resource-name">${v ? (v.alias || v.indicativo || 'S.I.') : item.id}</div>
+              <div class="op-status-dot"></div>
             </div>`;
         }).join('');
       };
@@ -7355,6 +7353,9 @@ ${dataContext}
       currentPreventivoId = d.preventivoId || currentPreventivoId;
       currentPreventivoDiaId = id;
       activeIntManageId = null;
+      window._prevIntSearch = ""; // V.13.13.1: Limpiar búsqueda al cambiar de día
+      const sInput = document.getElementById('prev-int-search');
+      if (sInput) sInput.value = "";
       if (side) side.classList.add('open');
       if (currentPreventivoId) cargarSubpreventivos(currentPreventivoId);
       const titleCont = document.getElementById('prev-dp-title');
@@ -7364,11 +7365,11 @@ ${dataContext}
         const isClosed = d.abierta === false;
         if (titleCont) titleCont.innerText = `${pMother.nombre} / ${d.nombre}`;
         if (controlsCont) {
-          controlsCont.innerHTML = `<button class="btn-cancel-m" style="padding:4px 10px; font-size:11px; font-weight:700; height:28px; background:var(--bg-3); border-color:var(--border-mid); color:var(--text-1);" onclick="window.cerrarDetallePreventivo()">✕ Cerrar</button>
+          controlsCont.innerHTML = `<button class="btn-cancel-m" style="padding:4px 8px; font-size:10px; font-weight:700; height:26px; min-width: 60px; background:var(--bg-3); border-color:var(--border-mid); color:var(--text-1);" onclick="window.cerrarDetallePreventivo()">✕ Cerrar</button>
             ${(isClosed ? canReopenEverything() : canEditSubpreventivo(d)) && currentRole !== 'usuario' ? `
-              <button class="btn-cancel-m" style="padding:4px 10px; font-size:11px; font-weight:700; height:28px; background:var(--bg-1); color:var(--text-1); border-color:var(--border-mid);" onclick="window.togglePreventivoDiaStatus('${id}')">${isClosed ? '🔓 Reabrir' : '🔒 Finalizar'}</button>` : ''}
-            ${canDeleteSubpreventivo() ? `<button class="btn-cancel-m" style="padding:4px 10px; font-size:11px; font-weight:700; height:28px; background:#fdd; color:#c00; border-color:#faa;" onclick="window.borrarPreventivoDia('${id}')">🗑️ Eliminar</button>` : ''}
-            <button class="btn-nueva" style="padding:4px 12px; font-size:11px; font-weight:700; height:28px; background:var(--accent); color:#fff;" onclick="abrirComentarios('${id}', 'dia')">💬 Comentarios</button>`;
+              <button class="btn-cancel-m" style="padding:4px 8px; font-size:10px; font-weight:700; height:26px; min-width: 80px; background:var(--bg-1); color:var(--text-1); border-color:var(--border-mid);" onclick="window.togglePreventivoDiaStatus('${id}')">${isClosed ? '🔓 Reabrir' : '🔒 Finalizar'}</button>` : ''}
+            ${canDeleteSubpreventivo() ? `<button class="btn-cancel-m" style="padding:4px 8px; font-size:10px; font-weight:700; height:26px; min-width: 80px; background:#fdd; color:#c00; border-color:#faa;" onclick="window.borrarPreventivoDia('${id}')">🗑️ Eliminar</button>` : ''}
+            <button class="btn-nueva" style="padding:4px 8px; font-size:10px; font-weight:700; height:26px; min-width: 90px; background:var(--accent); color:#fff;" onclick="abrirComentarios('${id}', 'dia')">💬 Comentarios</button>`;
         }
       }
       window.renderHeaderResourceBadges(id);
@@ -10468,21 +10469,21 @@ ${dataContext}
       white-space: nowrap;
     }
 
-    /* V.13.13.0: Estilos Faldón Operatividad */
+    /* V.13.13.1: Estilos Faldón Operatividad (Blanco y compacto) */
     .operability-banner {
       position: absolute;
       top: 14px;
-      left: 170px;
+      left: 175px;
       right: 14px;
-      background: rgba(11, 34, 65, 0.95);
-      border: 1px solid var(--accent);
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid var(--border-mid);
       border-radius: 8px;
-      padding: 10px 16px;
+      padding: 8px 14px;
       z-index: 900;
       display: none;
       flex-direction: column;
-      gap: 8px;
-      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+      gap: 4px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.1);
       backdrop-filter: blur(8px);
       transition: all 0.3s ease;
     }
@@ -10492,82 +10493,80 @@ ${dataContext}
     .op-banner-row {
       display: flex;
       align-items: center;
-      gap: 12px;
-      min-height: 48px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      padding-bottom: 6px;
+      gap: 10px;
+      min-height: 38px;
+      border-bottom: 1px solid var(--border-mid);
+      padding-bottom: 2px;
     }
     .op-banner-row:last-child {
       border-bottom: none;
       padding-bottom: 0;
     }
     .op-banner-label {
-      font-size: 9px;
-      font-weight: 900;
-      color: var(--accent);
-      width: 90px;
+      font-size: 8px;
+      font-weight: 800;
+      color: var(--text-3);
+      width: 75px;
       flex-shrink: 0;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.05em;
       line-height: 1.1;
       text-align: right;
-      padding-right: 10px;
-      border-right: 1px solid rgba(255, 255, 255, 0.2);
+      padding-right: 8px;
+      border-right: 1px solid var(--border-mid);
     }
     .op-banner-content {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 4px;
       flex: 1;
     }
     .op-resource-card {
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
       align-items: center;
-      justify-content: center;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      background: var(--bg-2);
+      border: 1px solid var(--border-mid);
       border-radius: 4px;
-      padding: 4px 8px;
-      min-width: 85px;
+      padding: 2px 8px;
+      min-width: 90px;
       cursor: default;
       transition: all 0.2s;
       position: relative;
+      gap: 6px;
     }
     .op-resource-card.occupied {
-      background: rgba(231, 76, 60, 0.15);
-      border-color: #e74c3c;
+      background: #fdf2f2;
+      border-color: #f8b4b4;
     }
     .op-resource-card.available {
-      background: rgba(46, 204, 113, 0.15);
-      border-color: #2ecc71;
+      background: #f2faf5;
+      border-color: #b3e6c9;
     }
     .op-resource-icon {
-      width: 22px;
-      height: 22px;
-      margin-bottom: 2px;
+      width: 16px;
+      height: 16px;
       object-fit: contain;
     }
     .op-resource-name {
-      font-size: 9px;
-      font-weight: 800;
-      color: #fff;
-      text-align: center;
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-2);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-      width: 100%;
+      max-width: 90px;
     }
     .op-status-dot {
-      position: absolute;
-      top: 4px;
-      right: 4px;
       width: 6px;
       height: 6px;
       border-radius: 50%;
+      flex-shrink: 0;
     }
-    .op-resource-card.occupied .op-status-dot { background: #e74c3c; box-shadow: 0 0 5px #e74c3c; }
-    .op-resource-card.available .op-status-dot { background: #2ecc71; box-shadow: 0 0 5px #2ecc71; }
+    .op-resource-card.occupied .op-status-dot { background: #e74c3c; }
+    .op-resource-card.available .op-status-dot { background: #2ecc71; }
+    .op-resource-card.occupied .op-resource-name { color: #c0392b; }
+    .op-resource-card.available .op-resource-name { color: #27ae60; }
 
     .map-btn-float:hover {
       background: #fff;
@@ -14360,7 +14359,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.13.0
+          Versión V.13.13.1
         </div>
       </div>
 
@@ -14789,15 +14788,15 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.13.0
+          Versión V.13.13.1
         </div>
       </div>
 
       <!-- V.12.4.1: Nuevo Panel de Detalle Deslizable -->
       <div class="detail-panel" id="preventivos-detail-panel">
-        <div class="dp-header" style="background:var(--bg-2); padding: 12px 16px;">
-          <div id="prev-dp-title" style="font-size: 14px; font-weight: 700; color: var(--accent); line-height:1.2;"></div>
-          <div id="prev-dp-controls-row" style="display:flex; align-items:center; gap:8px; margin-top:10px;"></div>
+        <div class="dp-header" style="background:var(--bg-2); padding: 12px 14px 8px;">
+          <div id="prev-dp-title" style="font-size: 13px; font-weight: 700; color: var(--accent); line-height:1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
+          <div id="prev-dp-controls-row" style="display:flex; align-items:center; gap:6px; margin-top:8px; flex-wrap: wrap;"></div>
         </div>
 
         <!-- Se ha eliminado el contenedor de recursos de aquí para moverlo al faldón superior -->
@@ -14835,7 +14834,7 @@ ${dataContext}
       </div>
 
       <div class="panel-right">
-        <!-- V.13.13.0: Faldón de Operatividad -->
+        <!-- V.13.13.1: Faldón de Operatividad -->
         <div id="prev-operability-banner" class="operability-banner">
           <div id="op-row-ambulancias" class="op-banner-row">
             <div class="op-banner-label">🚑 Ambulancias</div>
