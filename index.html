@@ -188,16 +188,18 @@
     let markersPreventivos = {};
     window._oystaLogCache = new Set(); // V.12.4.1: Registro de envíos para evitar duplicados en sesión
     window._emeRoutesMap = {};      // V.12.4.1: Rutas de Emergencias
-    window._prevRoutesMap = {};     // V.12.4.1: Rutas de Preventivos
-    window._prevLabelsMap = {};     // V.12.4.1: Etiquetas de Preventivos
-    window._oystaSentPreventivos = new Set(); // V.12.4.1: Registro de eventos de salida/llegada enviados
-    let lastGlobalInterventionDocs = []; // V.12.4.1: Cache de snapshot global para re-sincronía
-    let lastGlobalSubpreventivoDocs = []; // V.12.4.1
+    window._oystaLogCache = new Set(); // V.13.20.0: Registro de envíos para evitar duplicados en sesión
+    window._emeRoutesMap = {};      // V.13.20.0: Rutas de Emergencias
+    window._prevRoutesMap = {};     // V.13.20.0: Rutas de Preventivos
+    window._prevLabelsMap = {};     // V.13.20.0: Etiquetas de Preventivos
+    window._oystaSentPreventivos = new Set(); // V.13.20.0: Registro de eventos de salida/llegada enviados
+    let lastGlobalInterventionDocs = []; // V.13.20.0: Cache de snapshot global para re-sincronía
+    let lastGlobalSubpreventivoDocs = []; // V.13.20.0
     let prevMarkerInt = null; // Marcador temporal para nueva intervención en preventivos
-    let lastIntervencionesSnap = null; // V.12.4.1: Cache de snapshot para re-render reactivo
-    let lastPreventivosSnap = null; // V.12.4.1
+    let lastIntervencionesSnap = null; // V.13.20.0: Cache de snapshot para re-render reactivo
+    let lastPreventivosSnap = null; // V.13.20.0
     let pickedCoordsPrev = null;
-    let lastSubpreventivosSnap = null; // V.12.4.1
+    let lastSubpreventivosSnap = null; // V.13.20.0
     let currentChatId = null; // userId
     let unreadMessages = {}; // id -> count
     let jefeGuardiaActual = null;
@@ -1348,7 +1350,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.18.1 Loaded');
+    console.log('EmerCRE V.13.20.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2437,13 +2439,22 @@
       if (unsubJefes) { unsubJefes(); unsubJefes = null; }
       if (unsubGuardia) { unsubGuardia(); unsubGuardia = null; }
       if (unsubGlobalJefes) { unsubGlobalJefes(); unsubGlobalJefes = null; }
-      if (unsubVehiculos) { unsubVehiculos(); unsubVehiculos = null; } // V.12.4.1
-      // Clean chat listeners (V.12.4.1)
+      if (unsubVehiculos) { unsubVehiculos(); unsubVehiculos = null; }
       if (unsubChatPrivateGlobal) { unsubChatPrivateGlobal(); unsubChatPrivateGlobal = null; }
       if (unsubUserPresence) { unsubUserPresence(); unsubUserPresence = null; }
       if (unsubChatDetail) { unsubChatDetail(); unsubChatDetail = null; }
+      // V.13.19.0: Cleanup global listeners missing in previous versions
+      if (unsubPreventivos) { unsubPreventivos(); unsubPreventivos = null; }
+      if (unsubSubpreventivos) { unsubSubpreventivos(); unsubSubpreventivos = null; }
+      if (unsubIntervenciones) { unsubIntervenciones(); unsubIntervenciones = null; }
+      if (unsubGlobalPreventivoIntervenciones) { unsubGlobalPreventivoIntervenciones(); unsubGlobalPreventivoIntervenciones = null; }
+      if (unsubGlobalSubpreventivos) { unsubGlobalSubpreventivos(); unsubGlobalSubpreventivos = null; }
+      if (unsubUsuarios) { unsubUsuarios(); unsubUsuarios = null; }
+      if (unsubUserLog) { unsubUserLog(); unsubUserLog = null; }
+      if (unsubChatGlobal) { unsubChatGlobal(); unsubChatGlobal = null; }
+      
       ops = {};
-      localVehiclesByOystaId = {}; // V.12.4.1
+      localVehiclesByOystaId = {};
     }
 
     let unsubVehiculos = null;
@@ -4983,6 +4994,22 @@ ${dataContext}
           if (unsubGlobalPreventivoIntervenciones) {
             unsubGlobalPreventivoIntervenciones();
             unsubGlobalPreventivoIntervenciones = null;
+          }
+          if (unsubGlobalSubpreventivos) {
+            unsubGlobalSubpreventivos();
+            unsubGlobalSubpreventivos = null;
+          }
+          if (unsubPreventivos) {
+            unsubPreventivos();
+            unsubPreventivos = null;
+          }
+          if (unsubSubpreventivos) {
+            unsubSubpreventivos();
+            unsubSubpreventivos = null;
+          }
+          if (unsubIntervenciones) {
+            unsubIntervenciones();
+            unsubIntervenciones = null;
           }
         }
       }
@@ -14423,7 +14450,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.18.1
+          Versión V.13.20.0
         </div>
       </div>
 
@@ -14852,7 +14879,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.18.1
+          Versión V.13.20.0
         </div>
       </div>
 

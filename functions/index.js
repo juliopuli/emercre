@@ -568,12 +568,30 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         const vehiclesMap = {};
         oystaData.vehicles.forEach(v => { vehiclesMap[String(v.id)] = v; });
 
-        // 3. Obtener mapeo de vehículos locales (Lectura de flota completa sólo con actividad abierta)
-        const localVehiclesSnap = await db.collection("vehiculos").get();
+        // 3. Obtener mapeo de vehículos locales (V.13.19.1: Solo los asignados para ahorro extremo)
+        const assignedIds = new Set();
+        activeOpsSnap.forEach(doc => {
+            (doc.data().recursosAsignadosIds || []).forEach(rid => assignedIds.add(rid));
+        });
+        activeIntsSnap.forEach(doc => {
+            (doc.data().recursosAsignados || []).forEach(rid => assignedIds.add(rid));
+        });
+
+        if (assignedIds.size === 0) {
+            console.log("[Monitor] No hay recursos asignados en la actividad abierta. Finalizando.");
+            return null;
+        }
+
         const localVehiclesByOystaId = {};
-        localVehiclesSnap.forEach(doc => {
-            const data = doc.data();
-            if (data.oystaId) localVehiclesByOystaId[String(data.oystaId)] = { id: doc.id, ...data };
+        const vSnaps = await Promise.all(
+            Array.from(assignedIds).map(rid => db.collection("vehiculos").doc(rid).get())
+        );
+        
+        vSnaps.forEach(doc => {
+            if (doc.exists) {
+                const data = doc.data();
+                if (data.oystaId) localVehiclesByOystaId[String(data.oystaId)] = { id: doc.id, ...data };
+            }
         });
 
         const now = Date.now();
