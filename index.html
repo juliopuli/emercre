@@ -2759,7 +2759,9 @@
     // ── OYSTA INTEGRATION (V.12.4.1) ──────────────────────────────────
     async function cargarVehiculosOysta(force = false) {
       console.log(`[Oysta] cargarVehiculosOysta called (force=${force})`);
-      // V.12.4.1: Implementar pausa automática si no hay vehículos visibles, excepto en Preventivos (para rutas dinámicas)
+      // V.13.10.9: Implementar pausa automática si no hay vehículos visibles en el mapa.
+      // Se elimina la excepción de Preventivos para optimizar la cuota de Firebase:
+      // Solo se consulta si el usuario ha marcado al menos un vehículo para ver su posición.
       const anyVisibleGlobal = Object.values(visibleVehicles).some(v => v === true) || Object.values(visibleVehiclesPrev).some(v => v === true);
       const isOpsActive = document.getElementById('section-operaciones') && document.getElementById('section-operaciones').style.display === 'flex';
       const isPreventivosActive = document.getElementById('section-preventivos') && document.getElementById('section-preventivos').style.display === 'flex';
@@ -2771,7 +2773,7 @@
         return;
       }
 
-      if (!anyVisibleGlobal && !force && !isPreventivosActive) {
+      if (!anyVisibleGlobal && !force) {
         console.log("[Oysta] No vehicles visible and force=false, skipping fetch.");
         // Si no hay ninguno, aseguramos limpiar el indicador y salir
         const statusText = document.getElementById('oysta-status-text');

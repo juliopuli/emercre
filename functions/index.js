@@ -539,7 +539,7 @@ exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
     }
 });
 
-// 5. Monitor Oysta Vehicles (V.13.9.0)
+// 5. Monitor Oysta Vehicles (V.13.10.4)
 // Detecta llegadas y salidas en segundo plano cada 2 minutos.
 exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRun(async (context) => {
     const db = admin.firestore();
@@ -547,7 +547,19 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
     if (!bridgeUrl) return null;
 
     try {
-        // 1. Obtener datos de Oysta
+        // 1. Lectura inteligente: Verificar primero si hay actividad para ahorrar consultas
+        const [activeOpsSnap, activeIntsSnap] = await Promise.all([
+            db.collection("operaciones").where("estado", "==", "activa").get(),
+            db.collectionGroup("intervenciones").where("abierta", "==", true).get()
+        ]);
+
+        // Si no hay nada abierto ni emergencias activas, salimos inmediatamente sin gastar más
+        if (activeOpsSnap.empty && activeIntsSnap.empty) {
+            console.log("[Monitor] Sin actividad detectada (0 ops, 0 preventivos). Finalizando para ahorro de cuota Firebase.");
+            return null;
+        }
+
+        // 2. Solo si hay trabajo, consultamos Oysta para ver posiciones
         const resp = await fetch(`${bridgeUrl}?u=backend-monitor`);
         if (!resp.ok) throw new Error("Oysta GAS error");
         const oystaData = await resp.json();
@@ -556,19 +568,13 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         const vehiclesMap = {};
         oystaData.vehicles.forEach(v => { vehiclesMap[String(v.id)] = v; });
 
-        // 2. Obtener mapeo de vehículos locales
+        // 3. Obtener mapeo de vehículos locales (Lectura de flota completa sólo con actividad abierta)
         const localVehiclesSnap = await db.collection("vehiculos").get();
         const localVehiclesByOystaId = {};
         localVehiclesSnap.forEach(doc => {
             const data = doc.data();
             if (data.oystaId) localVehiclesByOystaId[String(data.oystaId)] = { id: doc.id, ...data };
         });
-
-        // 3. Obtener Operaciones Activas (Emergencias)
-        const activeOpsSnap = await db.collection("operaciones").where("estado", "==", "activa").get();
-
-        // 4. Obtener Intervenciones Abiertas (Preventivos)
-        const activeIntsSnap = await db.collectionGroup("intervenciones").where("abierta", "==", true).get();
 
         const now = Date.now();
 
