@@ -626,9 +626,9 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
 
                 // 1. Salida Inicial
                 if (isMoving && !vs.hasDeparted) {
-                    const exists = await checkExistingAction(db, opId, indicativo, "sale");
+                    const exists = await checkExistingAction(db, opId, indicativo, "SALE");
                     if (!exists) {
-                        const text = `⚡️ ${indicativo} sale hacia el lugar (${op.dir || 'sin dirección'}).`;
+                        const text = `⚡️ ${indicativo} SALE hacia el lugar (${op.dir || 'sin dirección'}).`;
                         await db.collection("operaciones").doc(opId).collection("acciones").add({
                             texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
                         });
@@ -639,9 +639,9 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 }
                 // 2. Llegada Final
                 else if (!isMoving && distToDest < 0.1 && !vs.hasArrived && vs.hasDeparted) {
-                    const exists = await checkExistingAction(db, opId, indicativo, "llega al lugar");
+                    const exists = await checkExistingAction(db, opId, indicativo, "LLEGADA al lugar");
                     if (!exists) {
-                        const text = `✅ ${indicativo} llega al lugar del aviso (${op.dir || 'sin dirección'}).`;
+                        const text = `✅ ${indicativo} LLEGADA al lugar del aviso (${op.dir || 'sin dirección'}).`;
                         await db.collection("operaciones").doc(opId).collection("acciones").add({
                             texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
                         });
@@ -652,9 +652,9 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 } 
                 // 3. Seguimiento Intermedio (Solo si ya salió y no ha llegado)
                 else if (vs.hasDeparted && !vs.hasArrived) {
-                    // Reinicio de marcha
+                    // Reanudo marcha
                     if (isMoving && !vs.moving && vs.lastStopAddr && distToDest > 0.1) {
-                        const text = `⚡️ ${indicativo} sale de ${vs.lastStopAddr} hacia el lugar del aviso.`;
+                        const text = `⚡️ ${indicativo} REANUDA marcha hacia el lugar del aviso.`;
                         await db.collection("operaciones").doc(opId).collection("acciones").add({
                             texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
                         });
@@ -714,11 +714,11 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 if (isMoving && !vs.hasDeparted) {
                     const exists = (iData.comentarios || []).some(c => {
                         if (!c.texto) return false;
-                        const t = c.texto.toLowerCase();
-                        return t.includes(indicativo.toLowerCase()) && (t.includes("sale") || t.includes("en movimiento") || t.includes("intervención iniciada"));
+                        const t = c.texto.toUpperCase();
+                        return t.includes(indicativo.toUpperCase()) && (t.includes("SALE") || t.includes("EN MOVIMIENTO") || t.includes("INTERVENCIÓN INICIADA"));
                     });
                     if (!exists) {
-                        const text = `⚡️ ${indicativo} sale hacia ${iData.direccion || 'el lugar'}.`;
+                        const text = `⚡️ ${indicativo} SALE hacia ${iData.direccion || 'el lugar'}.`;
                         await iRef.update({
                             comentarios: admin.firestore.FieldValue.arrayUnion({
                                 texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
@@ -733,11 +733,11 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 else if (!isMoving && distToDest < 0.05 && !vs.hasArrived && vs.hasDeparted) {
                     const exists = (iData.comentarios || []).some(c => {
                         if (!c.texto) return false;
-                        const t = c.texto.toLowerCase();
-                        return t.includes(indicativo.toLowerCase()) && t.includes("llega al lugar");
+                        const t = c.texto.toUpperCase();
+                        return t.includes(indicativo.toUpperCase()) && t.includes("LLEGADA AL LUGAR");
                     });
                     if (!exists) {
-                        const text = `✅ ${indicativo} llega al lugar (${iData.direccion || 'sin dirección'}).`;
+                        const text = `✅ ${indicativo} LLEGADA al lugar (${iData.direccion || 'sin dirección'}).`;
                         await iRef.update({
                             comentarios: admin.firestore.FieldValue.arrayUnion({
                                 texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
@@ -751,10 +751,8 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 // 3. Seguimiento Intermedio (Trayecto)
                 else if (vs.hasDeparted && !vs.hasArrived) {
                     if (isMoving && !vs.moving && distToDest > 0.05) {
-                        // Reanuda la marcha
-                        const saleTime = new Date(oystaTime).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-                        const origin = vs.lastStopAddr || "punto intermedio";
-                        const text = `⚡️ ${indicativo} sale de ${origin} a las ${saleTime} hacia el lugar.`;
+                        // REANUDA marcha
+                        const text = `⚡️ ${indicativo} REANUDA marcha hacia el lugar.`;
                         await iRef.update({
                             comentarios: admin.firestore.FieldValue.arrayUnion({
                                 texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
@@ -765,12 +763,12 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                         await stateRef.set(vs);
                     } else if (!isMoving && vs.moving && distToDest > 0.05) {
                         // Parada en trayecto
-                        const arrivalText = `⚡️ ${indicativo} efectúa parada en trayecto.`;
+                        const arrivalText = `⚡️ ${indicativo} PARADA en trayecto.`;
                         const comms = iData.comentarios || [];
                         let foundIndex = -1;
                         for(let k = comms.length - 1; k >= 0; k--) {
-                            const t = (comms[k].texto || "").toLowerCase();
-                            if (t.includes(indicativo.toLowerCase()) && (t.includes("sale") || t.includes("intervención iniciada"))) {
+                            const t = (comms[k].texto || "").toUpperCase();
+                            if (t.includes(indicativo.toUpperCase()) && (t.includes("SALE") || t.includes("INTERVENCIÓN INICIADA") || t.includes("REANUDA"))) {
                                 foundIndex = k;
                                 break;
                             }
