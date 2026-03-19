@@ -1350,7 +1350,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.22.0 Loaded');
+    console.log('EmerCRE V.13.22.1 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -7497,6 +7497,13 @@ ${dataContext}
         if (modified) updateDoc(d.ref, { comentarios: newComms }).catch(e => console.error("[Oysta] Hydration error:", e));
       }
     }
+
+    window.handlePrevIntSearch = (val) => {
+      window._prevIntSearch = val;
+      if (typeof lastIntervencionesSnap !== 'undefined' && lastIntervencionesSnap) {
+        renderPreventivoIntervenciones(lastIntervencionesSnap);
+      }
+    };
 
     function renderPreventivoIntervenciones(snap) {
       if (!snap) return;
@@ -14484,7 +14491,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.22.0
+          Versión V.13.22.1
         </div>
       </div>
 
@@ -14913,7 +14920,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.22.0
+          Versión V.13.22.1
         </div>
       </div>
 
@@ -14932,7 +14939,7 @@ ${dataContext}
               <circle cx="11" cy="11" r="8" />
               <line x1="21" y1="21" x2="16.65" y2="16.65" />
             </svg>
-            <input type="text" id="prev-int-search" class="search-input" placeholder="Buscar en intervenciones..." oninput="window._prevIntSearch = this.value; if(lastIntervencionesSnap) renderPreventivoIntervenciones(lastIntervencionesSnap);">
+            <input type="text" id="prev-int-search" class="search-input" placeholder="Buscar en intervenciones..." oninput="if(window.handlePrevIntSearch) window.handlePrevIntSearch(this.value);">
           </div>
           <div style="display:flex; align-items:center; justify-content:space-between; gap:10px;">
             <button class="btn-nueva" style="padding: 6px 14px; font-size: 11px; flex:1;" onclick="abrirModalPreventivoIntervencion()">+ Intervención</button>
