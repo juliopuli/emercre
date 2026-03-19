@@ -1350,7 +1350,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.20.0 Loaded');
+    console.log('EmerCRE V.13.21.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2965,7 +2965,8 @@
             // Sincronización proactiva con Firestore si acaba de "despertar" el front V.13.20.0
             if (isMovingNow !== vs.moving) {
                vs.moving = isMovingNow;
-               setDoc(doc(db, 'oysta_vehicle_states', stateKey), vs, { merge: true });
+               const docKey = `eme_${opId}`;
+               setDoc(doc(db, 'oysta_vehicle_states', docKey), { [mid]: vs }, { merge: true });
             }
 
             // 1. Detección de Salida Inicial / Salida de Parada Intermedia
@@ -3029,7 +3030,8 @@
                     texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
                   });
                   // Sincronizar estado con Firestore V.13.20.0
-                  setDoc(doc(db, 'oysta_vehicle_states', stateKey), vs, { merge: true });
+                  const docKey = `eme_${opId}`;
+                  setDoc(doc(db, 'oysta_vehicle_states', docKey), { [mid]: vs }, { merge: true });
                 });
               }
             }
@@ -7882,8 +7884,8 @@ ${dataContext}
                   const nc = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: correctedTS, fecha: formatCommentFecha(new Date(correctedTS)) };
                   updateDoc(iRef, { comentarios: arrayUnion(nc), actualizadoEn: serverTimestamp() }).then(() => {
                      // Sincronizar estado con Firestore V.13.20.0
-                     const stateKey = `prev_${iRef.id}_${localVeh.id}`;
-                     setDoc(doc(db, 'oysta_vehicle_states', stateKey), vs, { merge: true });
+                     const docKey = `prev_${iRef.id}`;
+                     setDoc(doc(db, 'oysta_vehicle_states', docKey), { [localVeh.id]: vs }, { merge: true });
                   }).catch(e => {
                     console.error('[Oysta] Error salida inicial:', e);
                     vs.hasDeparted = false;
@@ -7908,8 +7910,8 @@ ${dataContext}
                 vs.lastArrivedCoords = { ...iData.coords };
                 vs.isMovingOffsite = false;
                 // Sincronizar estado con Firestore V.13.20.0
-                const stateKey = `prev_${iRef.id}_${localVeh.id}`;
-                setDoc(doc(db, 'oysta_vehicle_states', stateKey), vs, { merge: true });
+                const docKey = `prev_${iRef.id}`;
+                setDoc(doc(db, 'oysta_vehicle_states', docKey), { [localVeh.id]: vs }, { merge: true });
               } catch (e) { console.error('[Oysta] Error llegada:', e); }
             } else {
               vs.hasArrived = true;
@@ -7925,8 +7927,8 @@ ${dataContext}
               const text = `⚡️ ${indicativo} sale hacia otro destino desde ${desdeDonde}.`;
               const nc = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime)) };
               updateDoc(iRef, { comentarios: arrayUnion(nc), actualizadoEn: serverTimestamp() }).then(() => {
-                const stateKey = `prev_${iRef.id}_${localVeh.id}`;
-                setDoc(doc(db, 'oysta_vehicle_states', stateKey), vs, { merge: true });
+                const docKey = `prev_${iRef.id}`;
+                setDoc(doc(db, 'oysta_vehicle_states', docKey), { [localVeh.id]: vs }, { merge: true });
               }).catch(e => {
                 console.error('[Oysta] Error salida offsite:', e);
                 vs.isMovingOffsite = false;
@@ -7957,8 +7959,8 @@ ${dataContext}
                   }
                   comms.push(arrivalComment);
                   await updateDoc(iRef, { comentarios: comms, actualizadoEn: serverTimestamp() });
-                  const stateKey = `prev_${iRef.id}_${localVeh.id}`;
-                  setDoc(doc(db, 'oysta_vehicle_states', stateKey), vs, { merge: true });
+                  const docKey = `prev_${iRef.id}`;
+                  setDoc(doc(db, 'oysta_vehicle_states', docKey), { [localVeh.id]: vs }, { merge: true });
                 }
               } catch (e) { console.error('[Oysta] Error llegada nuevo destino:', e); }
             });
@@ -7993,8 +7995,8 @@ ${dataContext}
                     }
                     comms.push(paraComment);
                     await updateDoc(iRef, { comentarios: comms, actualizadoEn: serverTimestamp() });
-                    const stateKey = `prev_${iRef.id}_${localVeh.id}`;
-                    setDoc(doc(db, 'oysta_vehicle_states', stateKey), vs, { merge: true });
+                    const docKey = `prev_${iRef.id}`;
+                    setDoc(doc(db, 'oysta_vehicle_states', docKey), { [localVeh.id]: vs }, { merge: true });
                   }
                 } catch (e) { console.error('[Oysta] Error parada intermedia:', e); }
               });
@@ -8007,8 +8009,8 @@ ${dataContext}
               const nc = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime)) };
               vs.lastSaleDeTS = oystaTime;
               updateDoc(iRef, { comentarios: arrayUnion(nc), actualizadoEn: serverTimestamp() }).then(() => {
-                const stateKey = `prev_${iRef.id}_${localVeh.id}`;
-                setDoc(doc(db, 'oysta_vehicle_states', stateKey), vs, { merge: true });
+                const docKey = `prev_${iRef.id}`;
+                setDoc(doc(db, 'oysta_vehicle_states', docKey), { [localVeh.id]: vs }, { merge: true });
               }).catch(e => {
                 console.error('[Oysta] Error reanuda marcha:', e);
                 vs.moving = false;
@@ -14476,7 +14478,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.20.0
+          Versión V.13.21.0
         </div>
       </div>
 
@@ -14905,7 +14907,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.20.0
+          Versión V.13.21.0
         </div>
       </div>
 

@@ -539,7 +539,11 @@ exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
     }
 });
 
-// 5. Monitor Oysta Vehicles (V.13.10.4)
+// Cache global para reducir lecturas de vehículos estáticos
+let vehiculosCache = {};
+let vehiculosCacheTime = {};
+
+// 5. Monitor Oysta Vehicles (V.13.10.5)
 // Detecta llegadas y salidas en segundo plano cada 2 minutos.
 exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRun(async (context) => {
     const db = admin.firestore();
@@ -583,27 +587,50 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         }
 
         const localVehiclesByOystaId = {};
-        const vSnaps = await Promise.all(
-            Array.from(assignedIds).map(rid => db.collection("vehiculos").doc(rid).get())
-        );
+        const missingIds = Array.from(assignedIds).filter(rid => !vehiculosCache[rid] || (Date.now() - vehiculosCacheTime[rid] > 3600000));
         
-        vSnaps.forEach(doc => {
-            if (doc.exists) {
-                const data = doc.data();
-                if (data.oystaId) localVehiclesByOystaId[String(data.oystaId)] = { id: doc.id, ...data };
+        if (missingIds.length > 0) {
+            // Firestore max "in" query limits or parallel reads. using promise.all reduces code path complexity.
+            const vSnaps = await Promise.all(missingIds.map(rid => db.collection("vehiculos").doc(rid).get()));
+            vSnaps.forEach(doc => {
+                if (doc.exists) {
+                    vehiculosCache[doc.id] = doc.data();
+                    vehiculosCacheTime[doc.id] = Date.now();
+                }
+            });
+        }
+        
+        assignedIds.forEach(rid => {
+            const data = vehiculosCache[rid];
+            if (data && data.oystaId) {
+                localVehiclesByOystaId[String(data.oystaId)] = { id: rid, ...data };
             }
         });
 
         const now = Date.now();
 
+        // 4. Obtener todos los estados agregados en batch
+        const opStateRefs = activeOpsSnap.docs.map(doc => db.collection("oysta_vehicle_states").doc(`eme_${doc.id}`));
+        const intStateRefs = activeIntsSnap.docs.map(doc => db.collection("oysta_vehicle_states").doc(`prev_${doc.id}`));
+        const allStateRefs = [...opStateRefs, ...intStateRefs];
+        const allStatesSnaps = allStateRefs.length > 0 ? await db.getAll(...allStateRefs) : [];
+        const statesMap = {};
+        allStatesSnaps.forEach(snap => {
+            statesMap[snap.id] = snap.exists ? snap.data() : {};
+        });
+
         // --- PROCESAR EMERGENCIAS ---
         for (const opDoc of activeOpsSnap.docs) {
             const op = opDoc.data();
             const opId = opDoc.id;
-            const opCoords = op.coords;
-            const assignedIds = op.recursosAsignadosIds || [];
+            const docKey = `eme_${opId}`;
+            const opStates = statesMap[docKey] || {};
+            let opStatesChanged = false;
 
-            for (const rid of assignedIds) {
+            const opCoords = op.coords;
+            const opAssignedIds = op.recursosAsignadosIds || [];
+
+            for (const rid of opAssignedIds) {
                 const oystaId = Object.keys(localVehiclesByOystaId).find(key => localVehiclesByOystaId[key].id === rid);
                 const v = oystaId ? vehiclesMap[oystaId] : null;
                 if (!v) continue;
@@ -611,18 +638,14 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 const pos = { lat: parseFloat(v.lat), lng: parseFloat(v.lng) };
                 const speed = parseFloat(v.speed);
                 const isMoving = speed > 5;
-                const stateKey = `eme_${opId}_${oystaId}`;
                 const indicativo = localVehiclesByOystaId[oystaId].alias || localVehiclesByOystaId[oystaId].indicativo || v.name;
 
                 const oystaTsStr = v.last_pos ? v.last_pos.replace(' ', 'T') : null;
                 const oystaTime = oystaTsStr ? new Date(oystaTsStr).getTime() : now;
 
-                const stateRef = db.collection("oysta_vehicle_states").doc(stateKey);
-                const stateSnap = await stateRef.get();
-                // hasDeparted = ya salió del origen. hasArrived = ya llegó al destino final.
-                const vs = stateSnap.exists ? stateSnap.data() : { moving: isMoving, hasDeparted: false, hasArrived: false, lastStopAddr: "" };
-
+                const vs = opStates[oystaId] || { moving: isMoving, hasDeparted: false, hasArrived: false, lastStopAddr: "" };
                 const distToDest = opCoords ? calculateHaversineDist(pos, opCoords) : 999;
+                let vehicleStateChanged = false;
 
                 // 1. Salida Inicial
                 if (isMoving && !vs.hasDeparted) {
@@ -635,7 +658,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                     }
                     vs.hasDeparted = true;
                     vs.moving = true;
-                    await stateRef.set(vs);
+                    vehicleStateChanged = true;
                 }
                 // 2. Llegada Final
                 else if (!isMoving && distToDest < 0.1 && !vs.hasArrived && vs.hasDeparted) {
@@ -648,7 +671,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                     }
                     vs.hasArrived = true;
                     vs.moving = false;
-                    await stateRef.set(vs);
+                    vehicleStateChanged = true;
                 } 
                 // 3. Seguimiento Intermedio (Solo si ya salió y no ha llegado)
                 else if (vs.hasDeparted && !vs.hasArrived) {
@@ -660,25 +683,31 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                         });
                         vs.moving = true;
                         vs.lastStopAddr = "";
-                        await stateRef.set(vs);
+                        vehicleStateChanged = true;
                     }
                     // Parada en el camino
                     else if (!isMoving && vs.moving && distToDest > 0.1) {
-                        // Nota: En Cloud Function no tenemos el geocoder de Google Maps JS SDK directamente. 
-                        // Usamos una aproximación o esperamos a que el front lo geocodifique si es posible, 
-                        // pero para el log de BG usamos lat/lng o mensaje genérico si no hay cache.
                         const text = `✅ ${indicativo} se ha detenido en el trayecto.`;
                         await db.collection("operaciones").doc(opId).collection("acciones").add({
                             texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
                         });
                         vs.moving = false;
                         vs.lastStopAddr = "punto intermedio";
-                        await stateRef.set(vs);
+                        vehicleStateChanged = true;
                     } else if (isMoving !== vs.moving) {
                         vs.moving = isMoving;
-                        await stateRef.set(vs);
+                        vehicleStateChanged = true;
                     }
                 }
+
+                if (vehicleStateChanged) {
+                    opStates[oystaId] = vs;
+                    opStatesChanged = true;
+                }
+            }
+
+            if (opStatesChanged) {
+                await db.collection("oysta_vehicle_states").doc(docKey).set(opStates, { merge: true });
             }
         }
 
@@ -686,10 +715,14 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         for (const intDoc of activeIntsSnap.docs) {
             const iData = intDoc.data();
             const iRef = intDoc.ref;
-            const iCoords = iData.coords;
-            const assignedIds = iData.recursosAsignados || [];
+            const docKey = `prev_${iRef.id}`;
+            const intStates = statesMap[docKey] || {};
+            let intStatesChanged = false;
 
-            for (const rid of assignedIds) {
+            const iCoords = iData.coords;
+            const intAssignedIds = iData.recursosAsignados || [];
+
+            for (const rid of intAssignedIds) {
                 const oystaId = Object.keys(localVehiclesByOystaId).find(key => localVehiclesByOystaId[key].id === rid);
                 const v = oystaId ? vehiclesMap[oystaId] : null;
                 if (!v) continue;
@@ -697,18 +730,14 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 const pos = { lat: parseFloat(v.lat), lng: parseFloat(v.lng) };
                 const speed = parseFloat(v.speed);
                 const isMoving = speed > 5;
-                // Estandarizar clave con el frontend: prev_INTID_LOCALID
-                const stateKey = `prev_${intDoc.id}_${rid}`; 
                 const indicativo = localVehiclesByOystaId[oystaId].alias || localVehiclesByOystaId[oystaId].indicativo || v.name;
 
                 const oystaTsStr = v.last_pos ? v.last_pos.replace(' ', 'T') : null;
                 const oystaTime = oystaTsStr ? new Date(oystaTsStr).getTime() : now;
 
-                const stateRef = db.collection("oysta_vehicle_states").doc(stateKey);
-                const stateSnap = await stateRef.get();
-                const vs = stateSnap.exists ? stateSnap.data() : { moving: isMoving, hasDeparted: false, hasArrived: false, lastStopAddr: "" };
-
+                const vs = intStates[rid] || { moving: isMoving, hasDeparted: false, hasArrived: false, lastStopAddr: "" };
                 const distToDest = iCoords ? calculateHaversineDist(pos, iCoords) : 999;
+                let vehicleStateChanged = false;
 
                 // 1. Salida Inicial
                 if (isMoving && !vs.hasDeparted) {
@@ -727,7 +756,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                     }
                     vs.hasDeparted = true;
                     vs.moving = true;
-                    await stateRef.set(vs);
+                    vehicleStateChanged = true;
                 }
                 // 2. Llegada Final
                 else if (!isMoving && distToDest < 0.05 && !vs.hasArrived && vs.hasDeparted) {
@@ -746,7 +775,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                     }
                     vs.hasArrived = true;
                     vs.moving = false;
-                    await stateRef.set(vs);
+                    vehicleStateChanged = true;
                 }
                 // 3. Seguimiento Intermedio (Trayecto)
                 else if (vs.hasDeparted && !vs.hasArrived) {
@@ -759,8 +788,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                             })
                         });
                         vs.moving = true;
-                        // No reseteamos lastStopAddr aún por si necesitamos editar este mensaje luego
-                        await stateRef.set(vs);
+                        vehicleStateChanged = true;
                     } else if (!isMoving && vs.moving && distToDest > 0.05) {
                         // Parada en trayecto
                         const arrivalText = `⚡️ ${indicativo} PARADA en trayecto.`;
@@ -802,9 +830,21 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                         await iRef.update({ comentarios: comms, actualizadoEn: admin.firestore.FieldValue.serverTimestamp() });
                         vs.moving = false;
                         vs.lastStopAddr = "parada anterior";
-                        await stateRef.set(vs);
+                        vehicleStateChanged = true;
+                    } else if (isMoving !== vs.moving) {
+                        vs.moving = isMoving;
+                        vehicleStateChanged = true;
                     }
                 }
+
+                if (vehicleStateChanged) {
+                    intStates[rid] = vs;
+                    intStatesChanged = true;
+                }
+            }
+
+            if (intStatesChanged) {
+                await db.collection("oysta_vehicle_states").doc(docKey).set(intStates, { merge: true });
             }
         }
 
