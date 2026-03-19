@@ -675,22 +675,34 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 } 
                 // 3. Seguimiento Intermedio (Solo si ya salió y no ha llegado)
                 else if (vs.hasDeparted && !vs.hasArrived) {
+                    
+                    // Extraer último estado de Emergencias para chequeo inteligente
+                    const logSnap = await db.collection("operaciones").doc(opId).collection("acciones").get();
+                    const sortedDocs = logSnap.docs.sort((a, b) => (b.data().timestamp || 0) - (a.data().timestamp || 0));
+                    const lastDoc = sortedDocs.find(d => (d.data().texto || "").toUpperCase().includes(indicativo.toUpperCase()));
+                    const lastActionStr = lastDoc ? (lastDoc.data().texto || "").toUpperCase() : "";
+
                     // Reanudo marcha
                     if (isMoving && !vs.moving && vs.lastStopAddr && distToDest > 0.1) {
-                        const text = `⚡️ ${indicativo} REANUDA marcha hacia el lugar del aviso.`;
-                        await db.collection("operaciones").doc(opId).collection("acciones").add({
-                            texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
-                        });
+                        // Solo añadimos log si el último log no fue de ponerse de nuevo en marcha/salir
+                        if (!lastActionStr.includes("SALE") && !lastActionStr.includes("REANUDA") && !lastActionStr.includes("EN MOVIMIENTO")) {
+                            const text = `⚡️ ${indicativo} REANUDA marcha hacia el lugar del aviso.`;
+                            await db.collection("operaciones").doc(opId).collection("acciones").add({
+                                texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
+                            });
+                        }
                         vs.moving = true;
                         vs.lastStopAddr = "";
                         vehicleStateChanged = true;
                     }
                     // Parada en el camino
                     else if (!isMoving && vs.moving && distToDest > 0.1) {
-                        const text = `✅ ${indicativo} se ha detenido en el trayecto.`;
-                        await db.collection("operaciones").doc(opId).collection("acciones").add({
-                            texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
-                        });
+                        if (!lastActionStr.includes("PARADA") && !lastActionStr.includes("DETENIDO") && !lastActionStr.includes("LLEGADA")) {
+                            const text = `✅ ${indicativo} se ha detenido en el trayecto.`;
+                            await db.collection("operaciones").doc(opId).collection("acciones").add({
+                                texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
+                            });
+                        }
                         vs.moving = false;
                         vs.lastStopAddr = "punto intermedio";
                         vehicleStateChanged = true;
@@ -779,55 +791,44 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 }
                 // 3. Seguimiento Intermedio (Trayecto)
                 else if (vs.hasDeparted && !vs.hasArrived) {
+                    const comms = iData.comentarios || [];
+                    let lastActionStr = "";
+                    for (let k = comms.length - 1; k >= 0; k--) {
+                        const t = (comms[k].texto || "").toUpperCase();
+                        if (t.includes(indicativo.toUpperCase())) {
+                            lastActionStr = t;
+                            break;
+                        }
+                    }
+
                     if (isMoving && !vs.moving && distToDest > 0.05) {
                         // REANUDA marcha
-                        const text = `⚡️ ${indicativo} REANUDA marcha hacia el lugar.`;
-                        await iRef.update({
-                            comentarios: admin.firestore.FieldValue.arrayUnion({
-                                texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
-                            })
-                        });
+                        if (!lastActionStr.includes("SALE") && !lastActionStr.includes("REANUDA") && !lastActionStr.includes("EN MOVIMIENTO") && !lastActionStr.includes("INTERVENCIÓN INICIADA")) {
+                            const text = `⚡️ ${indicativo} REANUDA marcha hacia el lugar.`;
+                            await iRef.update({
+                                comentarios: admin.firestore.FieldValue.arrayUnion({
+                                    texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
+                                })
+                            });
+                        }
                         vs.moving = true;
                         vehicleStateChanged = true;
                     } else if (!isMoving && vs.moving && distToDest > 0.05) {
                         // Parada en trayecto
-                        const arrivalText = `⚡️ ${indicativo} PARADA en trayecto.`;
-                        const comms = iData.comentarios || [];
-                        let foundIndex = -1;
-                        for(let k = comms.length - 1; k >= 0; k--) {
-                            const t = (comms[k].texto || "").toUpperCase();
-                            if (t.includes(indicativo.toUpperCase()) && (t.includes("SALE") || t.includes("INTERVENCIÓN INICIADA") || t.includes("REANUDA"))) {
-                                foundIndex = k;
-                                break;
-                            }
+                        if (!lastActionStr.includes("PARADA") && !lastActionStr.includes("LLEGADA") && !lastActionStr.includes("SE HA DETENIDO")) {
+                            const arrivalText = `⚡️ ${indicativo} PARADA en trayecto.`;
+                            await iRef.update({ 
+                                comentarios: admin.firestore.FieldValue.arrayUnion({
+                                    texto: arrivalText, 
+                                    coords: pos, 
+                                    autor: 'Sist. Oysta (BG)', 
+                                    autorId: 'system', 
+                                    timestamp: oystaTime, 
+                                    fecha: formatCommentFecha(new Date(oystaTime))
+                                }),
+                                actualizadoEn: admin.firestore.FieldValue.serverTimestamp() 
+                            });
                         }
-
-                        if (foundIndex !== -1) {
-                            let cText = comms[foundIndex].texto || "";
-                            if (cText.includes("🚀 INTERVENCIÓN INICIADA")) {
-                                const lines = cText.split('\n');
-                                const idx = lines.findIndex(l => l.includes(indicativo));
-                                if (idx !== -1) {
-                                    lines[idx] = lines[idx].replace(" hacia el lugar", " hacia parada en trayecto");
-                                    cText = lines.join('\n');
-                                }
-                            } else {
-                                cText = cText.replace(" hacia el lugar", " hacia parada en trayecto");
-                            }
-                            comms[foundIndex].texto = cText;
-                            comms[foundIndex].editado = true;
-                        }
-
-                        comms.push({
-                            texto: arrivalText, 
-                            coords: pos, // V.13.11.0: Enviar coordenadas para hidratación en frontend
-                            autor: 'Sist. Oysta (BG)', 
-                            autorId: 'system', 
-                            timestamp: oystaTime, 
-                            fecha: formatCommentFecha(new Date(oystaTime))
-                        });
-
-                        await iRef.update({ comentarios: comms, actualizadoEn: admin.firestore.FieldValue.serverTimestamp() });
                         vs.moving = false;
                         vs.lastStopAddr = "parada anterior";
                         vehicleStateChanged = true;
