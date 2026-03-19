@@ -543,7 +543,7 @@ exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
 let vehiculosCache = {};
 let vehiculosCacheTime = {};
 
-// 5. Monitor Oysta Vehicles (V.13.10.5)
+// 5. Monitor Oysta Vehicles (V.13.23.0)
 // Detecta llegadas y salidas en segundo plano cada 2 minutos.
 exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRun(async (context) => {
     const db = admin.firestore();
@@ -698,9 +698,14 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                     // Parada en el camino
                     else if (!isMoving && vs.moving && distToDest > 0.1) {
                         if (!lastActionStr.includes("PARADA") && !lastActionStr.includes("DETENIDO") && !lastActionStr.includes("LLEGADA")) {
-                            const text = `✅ ${indicativo} se ha detenido en el trayecto.`;
+                            const text = `⚡️ ${indicativo} PARADA en trayecto.`;
                             await db.collection("operaciones").doc(opId).collection("acciones").add({
-                                texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
+                                texto: text, 
+                                coords: pos,
+                                autor: 'Sist. Oysta (BG)', 
+                                autorId: 'system', 
+                                timestamp: oystaTime, 
+                                prioridad: 'Baja'
                             });
                         }
                         vs.moving = false;

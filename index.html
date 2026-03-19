@@ -1350,7 +1350,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.22.1 Loaded');
+    console.log('EmerCRE V.13.23.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3505,7 +3505,27 @@
         currentAcciones = {};
         acciones.forEach(a => currentAcciones[a.id] = a);
         renderTimeline(acciones, ops[opId]);
+        hydrateOystaActions(snap, opId);
       });
+    }
+
+    async function hydrateOystaActions(snap, opId) {
+      if (!snap || snap.empty || currentRole === 'usuario') return;
+      if (!window._oystaHydrated) window._oystaHydrated = new Set();
+      for (const d of snap.docs) {
+        const a = d.data();
+        const utext = (a.texto || "").toUpperCase();
+        if ((utext.includes('PARADA EN TRAYECTO') || utext.includes('PUNTO INTERMEDIO') || utext.includes('SE HA DETENIDO')) && a.coords && !window._oystaHydrated.has(a.timestamp)) {
+          const addr = await new Promise(res => reverseGeocodeWithCache(a.coords, res));
+          if (addr) {
+            window._oystaHydrated.add(a.timestamp);
+            let newTexto = a.texto.replace(/parada en trayecto/i, addr)
+              .replace(/punto intermedio/i, addr)
+              .replace(/se ha detenido en el trayecto/i, addr);
+            updateDoc(d.ref, { texto: newTexto, hydrated: true }).catch(e => console.error("[Oysta] Hydration error:", e));
+          }
+        }
+      }
     }
 
     let currentAssignedIds = [];
@@ -7483,13 +7503,16 @@ ${dataContext}
         const comments = data.comentarios || [];
         let modified = false;
         const newComms = await Promise.all(comments.map(async (c) => {
-          const utext = text.toUpperCase();
-          if ((utext.includes('PARADA EN TRAYECTO') || utext.includes('PUNTO INTERMEDIO')) && c.coords && !window._oystaHydrated.has(c.timestamp)) {
+          const utext = (c.texto || "").toUpperCase();
+          if ((utext.includes('PARADA EN TRAYECTO') || utext.includes('PUNTO INTERMEDIO') || utext.includes('SE HA DETENIDO')) && c.coords && !window._oystaHydrated.has(c.timestamp)) {
             const addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
             if (addr) {
               window._oystaHydrated.add(c.timestamp);
               modified = true;
-              return { ...c, texto: text.replace('parada en trayecto', addr).replace('punto intermedio', addr), hydrated: true };
+              let newTexto = c.texto.replace(/parada en trayecto/i, addr)
+                .replace(/punto intermedio/i, addr)
+                .replace(/se ha detenido en el trayecto/i, addr);
+              return { ...c, texto: newTexto, hydrated: true };
             }
           }
           return c;
@@ -14491,7 +14514,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.22.1
+          Versión V.13.23.0
         </div>
       </div>
 
@@ -14920,7 +14943,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.22.1
+          Versión V.13.23.0
         </div>
       </div>
 
