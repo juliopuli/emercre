@@ -1350,7 +1350,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.21.0 Loaded');
+    console.log('EmerCRE V.13.22.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3909,18 +3909,22 @@
           ? `<button class="btn-cancel-m" style="padding: 2px 8px; font-size: 11px; margin-left: auto;" onclick="abrirModalEditAccion('${a.id}')">✏️ Editar</button>`
           : '';
 
-        return `<div class="tl-entry">
-      <div class="tl-node tl-node-${nivel}">${t.emoji}</div>
-      <div class="tl-body">
-        <div class="tl-meta" style="display:flex; align-items:center;">
-          <span class="tl-ts">${ts}</span>
-          <span class="tl-prio prio-${a.prioridad}">${a.prioridad}</span>
+        return `<div class="comment-card" style="margin-bottom:12px; background:var(--bg-1); border:1px solid var(--border-mid); border-radius:6px; padding:10px; width:100%; box-sizing:border-box; display:flex; flex-direction:column; gap:8px; align-items: stretch;">
+      <div class="tl-meta" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-light); padding-bottom:6px;">
+        <span class="tl-ts" style="font-size:10px; font-weight:700; color:var(--text-2); display:flex; align-items:center; gap:6px;">
+          <span class="tl-node tl-node-${nivel}" style="position:static; width:16px; height:16px; font-size:12px; transform:none; flex-shrink:0; display:flex; align-items:center; justify-content:center;">${t.emoji}</span>
+          ${ts}
+        </span>
+        <div style="display:flex; gap:6px; align-items:center;">
+          <span class="tl-prio prio-${a.prioridad}" style="font-size:9px; padding:2px 4px; border-radius:4px; font-weight:bold;">${a.prioridad}</span>
           ${editBtn}
         </div>
-        <div class="tl-text">${escapeHTML(a.texto)}</div>
-        <div class="tl-author">— ${escapeHTML(a.autor || '—')}</div>
       </div>
-    </div> `;
+      <div class="tl-text" style="font-size:12px; color:var(--text); line-height:1.4;">${escapeHTML(a.texto)}</div>
+      <div class="tl-author" style="font-size:10px; font-style:italic; color:var(--text-4); border-top:1px dashed var(--border-mid); padding-top:6px; text-align:right;">
+        — ${escapeHTML(a.autor || '—')}
+      </div>
+    </div>`;
       }).join('');
     }
 
@@ -9240,16 +9244,18 @@ ${dataContext}
                   const isPowerUser = (currentRole === 'admin' || currentRole === 'manager' || currentRole === 'super_admin');
                   const canManageCom = canEdit && (!isOysta ? isPowerUser : (currentRole === 'super_admin'));
                   return `
-                    <div class="tl-entry" style="margin-bottom:12px; border:none; padding:0; background:transparent;">
-                      <div class="tl-meta" style="display:flex; align-items:center; margin-bottom:2px;">
-                        <span class="tl-ts" style="font-size:9px;">${c.fecha || ''}</span>
-                        <div style="margin-left:auto; display:flex; gap:4px;">
-                          ${canManageCom ? `<button class="btn-cancel-m" style="padding: 2px 6px; font-size: 9px; height:20px;" onclick="editarComentarioInline('${id}', ${originalIdx})">✏️</button>` : ''}
-                          ${canManageCom ? `<button class="btn-cancel-m" style="padding: 2px 6px; font-size: 9px; height:20px; background:#fdd; color:#c00; border-color:#faa;" onclick="borrarComentarioInline('${id}', ${originalIdx})">🗑️</button>` : ''}
+                    <div class="comment-card" style="margin-bottom:12px; background:var(--bg-1); border:1px solid var(--border-mid); border-radius:6px; padding:10px; width:100%; box-sizing:border-box; display:flex; flex-direction:column; gap:8px; align-items: stretch;">
+                      <div class="tl-meta" style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid var(--border-light); padding-bottom:6px;">
+                        <span class="tl-ts" style="font-size:10px; font-weight:700; color:var(--text-2);">${c.fecha || ''}</span>
+                        <div style="display:flex; gap:6px;">
+                          ${canManageCom ? `<button class="btn-cancel-m" style="padding: 3px 8px; font-size: 10px; height:24px; border-radius:4px;" onclick="editarComentarioInline('${id}', ${originalIdx})">✏️ Editar</button>` : ''}
+                          ${canManageCom ? `<button class="btn-cancel-m" style="padding: 3px 8px; font-size: 10px; height:24px; border-radius:4px; background:#fef2f2; color:#dc2626; border-color:#fca5a5;" onclick="borrarComentarioInline('${id}', ${originalIdx})">🗑️ Borrar</button>` : ''}
                         </div>
                       </div>
-                      <div class="tl-text" style="font-size:11px; background:var(--bg-2); padding:8px; border-radius:4px; border:1px solid var(--border-mid);">${c.texto}</div>
-                      <div class="tl-author" style="font-size:9px; margin-top:2px; opacity:0.7;">— ${c.autor || 'Usuario'}</div>
+                      <div class="tl-text" style="font-size:12px; color:var(--text); line-height:1.4;">${c.texto}</div>
+                      <div class="tl-author" style="font-size:10px; font-style:italic; color:var(--text-4); border-top:1px dashed var(--border-mid); padding-top:6px; text-align:right;">
+                        — ${c.autor || 'Usuario'}
+                      </div>
                     </div>
                   `;
               }).join('')}
@@ -14478,7 +14484,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.21.0
+          Versión V.13.22.0
         </div>
       </div>
 
@@ -14907,7 +14913,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.21.0
+          Versión V.13.22.0
         </div>
       </div>
 
