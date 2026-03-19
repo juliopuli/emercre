@@ -1350,7 +1350,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.23.0 Loaded');
+    console.log('EmerCRE V.13.24.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3512,18 +3512,41 @@
     async function hydrateOystaActions(snap, opId) {
       if (!snap || snap.empty || currentRole === 'usuario') return;
       if (!window._oystaHydrated) window._oystaHydrated = new Set();
+      
+      const op = ops[opId];
+      const opAddr = op ? (op.dir || op.loc) : null;
+
       for (const d of snap.docs) {
         const a = d.data();
-        const utext = (a.texto || "").toUpperCase();
-        if ((utext.includes('PARADA EN TRAYECTO') || utext.includes('PUNTO INTERMEDIO') || utext.includes('SE HA DETENIDO')) && a.coords && !window._oystaHydrated.has(a.timestamp)) {
+        let modified = false;
+        let newTexto = a.texto || "";
+        const utext = newTexto.toUpperCase();
+
+        // 1. Hydrate Stops (Intermediate stops with coordinates)
+        if ((utext.includes('PARADA EN TRAYECTO') || utext.includes('PUNTO INTERMEDIO') || utext.includes('SE HA DETENIDO')) && a.coords && !window._oystaHydrated.has(d.id)) {
           const addr = await new Promise(res => reverseGeocodeWithCache(a.coords, res));
           if (addr) {
-            window._oystaHydrated.add(a.timestamp);
-            let newTexto = a.texto.replace(/parada en trayecto/i, addr)
-              .replace(/punto intermedio/i, addr)
-              .replace(/se ha detenido en el trayecto/i, addr);
-            updateDoc(d.ref, { texto: newTexto, hydrated: true }).catch(e => console.error("[Oysta] Hydration error:", e));
+            window._oystaHydrated.add(d.id);
+            newTexto = newTexto.replace(/parada en trayecto/i, "PARADA en " + addr)
+              .replace(/punto intermedio/i, "PARADA en " + addr)
+              .replace(/se ha detenido en el trayecto/i, "detenido en " + addr);
+            modified = true;
           }
+        }
+        
+        // 2. Hydrate "SALE" or "REANUDA" with missing destination address
+        if ((utext.includes('SIN DIRECCIÓN') || utext.includes('HACIA EL LUGAR')) && opAddr && !window._oystaHydrated.has(d.id + "_sale")) {
+          const oldTexto = newTexto;
+          newTexto = newTexto.replace(/sin dirección/i, opAddr)
+                            .replace(/hacia el lugar/i, "hacia " + opAddr);
+          if (newTexto !== oldTexto) {
+            window._oystaHydrated.add(d.id + "_sale");
+            modified = true;
+          }
+        }
+
+        if (modified) {
+          updateDoc(d.ref, { texto: newTexto, hydrated: true }).catch(e => console.error("[Oysta] Hydration error:", e));
         }
       }
     }
@@ -7501,22 +7524,44 @@ ${dataContext}
       for (const d of snap.docs) {
         const data = d.data();
         const comments = data.comentarios || [];
+        const iAddr = data.direccion || null;
         let modified = false;
+        
         const newComms = await Promise.all(comments.map(async (c) => {
-          const utext = (c.texto || "").toUpperCase();
+          let itemModified = false;
+          let newTexto = c.texto || "";
+          const utext = newTexto.toUpperCase();
+
+          // 1. Hydrate Stops
           if ((utext.includes('PARADA EN TRAYECTO') || utext.includes('PUNTO INTERMEDIO') || utext.includes('SE HA DETENIDO')) && c.coords && !window._oystaHydrated.has(c.timestamp)) {
             const addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
             if (addr) {
               window._oystaHydrated.add(c.timestamp);
-              modified = true;
-              let newTexto = c.texto.replace(/parada en trayecto/i, addr)
-                .replace(/punto intermedio/i, addr)
-                .replace(/se ha detenido en el trayecto/i, addr);
-              return { ...c, texto: newTexto, hydrated: true };
+              newTexto = newTexto.replace(/parada en trayecto/i, "PARADA en " + addr)
+                .replace(/punto intermedio/i, "PARADA en " + addr)
+                .replace(/se ha detenido en el trayecto/i, "detenido en " + addr);
+              itemModified = true;
             }
+          }
+          
+          // 2. Hydrate "SALE" or "REANUDA" with destination address
+          if ((utext.includes('EL LUGAR') || utext.includes('SIN DIRECCIÓN')) && iAddr && !window._oystaHydrated.has((c.timestamp || 0) + "_sale")) {
+            const oldTexto = newTexto;
+            newTexto = newTexto.replace(/el lugar/i, iAddr)
+                              .replace(/sin dirección/i, iAddr);
+            if (newTexto !== oldTexto) {
+                window._oystaHydrated.add((c.timestamp || 0) + "_sale");
+                itemModified = true;
+            }
+          }
+
+          if (itemModified) {
+            modified = true;
+            return { ...c, texto: newTexto, hydrated: true };
           }
           return c;
         }));
+        
         if (modified) updateDoc(d.ref, { comentarios: newComms }).catch(e => console.error("[Oysta] Hydration error:", e));
       }
     }
@@ -14514,7 +14559,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.23.0
+          Versión V.13.24.0
         </div>
       </div>
 
