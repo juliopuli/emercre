@@ -1350,7 +1350,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.24.0 Loaded');
+    console.log('EmerCRE V.13.25.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3509,24 +3509,27 @@
       });
     }
 
-    async function hydrateOystaActions(snap, opId) { // V.13.24.0: Hydration for Emergencies
+    async function hydrateOystaActions(snap, opId) { // V.13.25.0: Hydration with REANUDA back-propagation
       if (!snap || snap.empty || currentRole === 'usuario') return;
       if (!window._oystaHydrated) window._oystaHydrated = new Set();
       
       const op = ops[opId];
       const opAddr = op ? (op.dir || op.loc) : null;
+      const allDocs = snap.docs;
 
       for (const d of snap.docs) {
         const a = d.data();
         let modified = false;
         let newTexto = a.texto || "";
         const utext = newTexto.toUpperCase();
+        let solvedAddr = null;
 
         // 1. Hydrate Stops (Intermediate stops with coordinates)
         if ((utext.includes('PARADA EN TRAYECTO') || utext.includes('PUNTO INTERMEDIO') || utext.includes('SE HA DETENIDO')) && a.coords && !window._oystaHydrated.has(d.id)) {
           const addr = await new Promise(res => reverseGeocodeWithCache(a.coords, res));
           if (addr) {
             window._oystaHydrated.add(d.id);
+            solvedAddr = addr;
             newTexto = newTexto.replace(/parada en trayecto/i, "PARADA en " + addr)
               .replace(/punto intermedio/i, "PARADA en " + addr)
               .replace(/se ha detenido en el trayecto/i, "detenido en " + addr);
@@ -3547,6 +3550,32 @@
 
         if (modified) {
           updateDoc(d.ref, { texto: newTexto, hydrated: true }).catch(e => console.error("[Oysta] Hydration error:", e));
+        }
+
+        // 3. Back-propagate address to previous REANUDA (V.13.25.0)
+        if (solvedAddr || (a.coords && utext.includes('LLEGADA'))) {
+           const addrToPropagate = solvedAddr || (utext.includes('LLEGADA') ? opAddr : null);
+           if (addrToPropagate) {
+              const parts = (a.texto || "").split(' ');
+              const indicativo = parts[1]; // ⚡️ [INDICATIVO]
+              if (indicativo && indicativo.length > 2) {
+                 const prevReanuda = allDocs.find(doc => {
+                    const da = doc.data();
+                    const dat = (da.texto || "").toUpperCase();
+                    return da.timestamp < a.timestamp && 
+                           dat.includes(indicativo.toUpperCase()) && 
+                           dat.includes('REANUDA') &&
+                           (dat.includes('EL LUGAR') || dat.includes('SIN DIRECCIÓN'));
+                 });
+                 if (prevReanuda) {
+                    const prText = prevReanuda.data().texto;
+                    const upgradedText = prText.replace(/el lugar/i, addrToPropagate).replace(/sin dirección/i, addrToPropagate);
+                    if (upgradedText !== prText) {
+                       updateDoc(prevReanuda.ref, { texto: upgradedText, hydrated: true }).catch(e => { });
+                    }
+                 }
+              }
+           }
         }
       }
     }
@@ -7518,7 +7547,7 @@ ${dataContext}
       });
     }
 
-    async function hydrateOystaComments(snap) { // V.13.24.0: Improved Hydration for Preventives
+    async function hydrateOystaComments(snap) { // V.13.25.0: Improved Hydration with back-propagation
       if (!snap || snap.empty || currentRole === 'usuario') return; 
       if (!window._oystaHydrated) window._oystaHydrated = new Set();
       for (const d of snap.docs) {
@@ -7527,16 +7556,18 @@ ${dataContext}
         const iAddr = data.direccion || null;
         let modified = false;
         
-        const newComms = await Promise.all(comments.map(async (c) => {
+        const newComms = await Promise.all(comments.map(async (c, idx) => {
           let itemModified = false;
           let newTexto = c.texto || "";
           const utext = newTexto.toUpperCase();
+          let solvedAddr = null;
 
           // 1. Hydrate Stops
           if ((utext.includes('PARADA EN TRAYECTO') || utext.includes('PUNTO INTERMEDIO') || utext.includes('SE HA DETENIDO')) && c.coords && !window._oystaHydrated.has(c.timestamp)) {
             const addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
             if (addr) {
               window._oystaHydrated.add(c.timestamp);
+              solvedAddr = addr;
               newTexto = newTexto.replace(/parada en trayecto/i, "PARADA en " + addr)
                 .replace(/punto intermedio/i, "PARADA en " + addr)
                 .replace(/se ha detenido en el trayecto/i, "detenido en " + addr);
@@ -7553,6 +7584,27 @@ ${dataContext}
                 window._oystaHydrated.add((c.timestamp || 0) + "_sale");
                 itemModified = true;
             }
+          }
+
+          // 3. Back-propagate stop address to previous REANUDA in same array
+          if (solvedAddr || (c.coords && utext.includes('LLEGADA'))) {
+             const addrToPropagate = solvedAddr || (utext.includes('LLEGADA') ? iAddr : null);
+             if (addrToPropagate) {
+                const parts = (c.texto || "").split(' ');
+                const indicativo = parts[1];
+                if (indicativo && indicativo.length > 2) {
+                   // Look back in comments array
+                   for (let k = idx + 1; k < comments.length; k++) { // comments are usually sorted by timestamp desc, so idx+1 is "older"
+                      const prevC = comments[k];
+                      const prevUText = (prevC.texto || "").toUpperCase();
+                      if (prevUText.includes(indicativo.toUpperCase()) && prevUText.includes('REANUDA') && (prevUText.includes('EL LUGAR') || prevUText.includes('SIN DIRECCIÓN'))) {
+                         prevC.texto = prevC.texto.replace(/el lugar/i, addrToPropagate).replace(/sin dirección/i, addrToPropagate);
+                         modified = true;
+                         break;
+                      }
+                   }
+                }
+             }
           }
 
           if (itemModified) {
@@ -14559,7 +14611,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.24.0
+          Versión V.13.25.0
         </div>
       </div>
 
