@@ -1350,7 +1350,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.25.0 Loaded');
+    console.log('EmerCRE V.13.25.1 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3509,7 +3509,7 @@
       });
     }
 
-    async function hydrateOystaActions(snap, opId) { // V.13.25.0: Hydration with REANUDA back-propagation
+    async function hydrateOystaActions(snap, opId) { // V.13.25.1: Fixed REANUDA back-propagation ordering
       if (!snap || snap.empty || currentRole === 'usuario') return;
       if (!window._oystaHydrated) window._oystaHydrated = new Set();
       
@@ -3536,12 +3536,50 @@
             modified = true;
           }
         }
+
+        // 3. Back-propagate stop address to nearest previous REANUDA (V.13.25.1 — runs BEFORE step 2)
+        // so REANUDA text still says "el lugar" and can be found and overwritten with actual destination.
+        if (solvedAddr) {
+          const parts = (a.texto || "").split(' ');
+          const indicativo = parts[1]; // ⚡️ [INDICATIVO]
+          if (indicativo && indicativo.length > 2) {
+            // Find the most-recent REANUDA for this vehicle that is older than this PARADA
+            // and has NOT yet been back-propagated to a specific stop address (no editadoBack flag)
+            const candidateReanudas = allDocs
+              .filter(doc => {
+                const da = doc.data();
+                const dat = (da.texto || "").toUpperCase();
+                return da.timestamp < a.timestamp &&
+                       dat.includes(indicativo.toUpperCase()) &&
+                       dat.includes('REANUDA') &&
+                       !da.editadoBack; // not already back-propagated
+              })
+              .sort((x, y) => (y.data().timestamp || 0) - (x.data().timestamp || 0)); // most recent first
+            const prevReanuda = candidateReanudas[0];
+            if (prevReanuda) {
+              const prData = prevReanuda.data();
+              const prText = prData.texto || '';
+              // Replace the destination clause: "hacia [anything]" or "sin dirección" with actual stop addr
+              let upgradedText = prText
+                .replace(/hacia el lugar(?: del aviso)?/i, `hacia ${solvedAddr}`)
+                .replace(/sin dirección/i, solvedAddr);
+              // Also handle case where step 2 already replaced "el lugar" with opAddr in a previous pass
+              if (upgradedText === prText && opAddr && prText.includes(opAddr)) {
+                upgradedText = prText.replace(opAddr, solvedAddr);
+              }
+              if (upgradedText !== prText) {
+                updateDoc(prevReanuda.ref, { texto: upgradedText, hydrated: true, editadoBack: true }).catch(e => console.error('[Oysta] Back-prop error:', e));
+              }
+            }
+          }
+        }
         
-        // 2. Hydrate "SALE" or "REANUDA" with missing destination address
-        if ((utext.includes('SIN DIRECCIÓN') || utext.includes('HACIA EL LUGAR')) && opAddr && !window._oystaHydrated.has(d.id + "_sale")) {
+        // 2. Hydrate "SALE" or "REANUDA" with missing destination address (op address fallback)
+        // Only runs if this message still says "el lugar" (not yet back-propagated above)
+        if ((utext.includes('SIN DIRECCIÓN') || utext.includes('HACIA EL LUGAR')) && opAddr && !window._oystaHydrated.has(d.id + "_sale") && !a.editadoBack) {
           const oldTexto = newTexto;
           newTexto = newTexto.replace(/sin dirección/i, opAddr)
-                            .replace(/hacia el lugar/i, "hacia " + opAddr);
+                            .replace(/hacia el lugar(?: del aviso)?/i, "hacia " + opAddr);
           if (newTexto !== oldTexto) {
             window._oystaHydrated.add(d.id + "_sale");
             modified = true;
@@ -3550,32 +3588,6 @@
 
         if (modified) {
           updateDoc(d.ref, { texto: newTexto, hydrated: true }).catch(e => console.error("[Oysta] Hydration error:", e));
-        }
-
-        // 3. Back-propagate address to previous REANUDA (V.13.25.0)
-        if (solvedAddr || (a.coords && utext.includes('LLEGADA'))) {
-           const addrToPropagate = solvedAddr || (utext.includes('LLEGADA') ? opAddr : null);
-           if (addrToPropagate) {
-              const parts = (a.texto || "").split(' ');
-              const indicativo = parts[1]; // ⚡️ [INDICATIVO]
-              if (indicativo && indicativo.length > 2) {
-                 const prevReanuda = allDocs.find(doc => {
-                    const da = doc.data();
-                    const dat = (da.texto || "").toUpperCase();
-                    return da.timestamp < a.timestamp && 
-                           dat.includes(indicativo.toUpperCase()) && 
-                           dat.includes('REANUDA') &&
-                           (dat.includes('EL LUGAR') || dat.includes('SIN DIRECCIÓN'));
-                 });
-                 if (prevReanuda) {
-                    const prText = prevReanuda.data().texto;
-                    const upgradedText = prText.replace(/el lugar/i, addrToPropagate).replace(/sin dirección/i, addrToPropagate);
-                    if (upgradedText !== prText) {
-                       updateDoc(prevReanuda.ref, { texto: upgradedText, hydrated: true }).catch(e => { });
-                    }
-                 }
-              }
-           }
         }
       }
     }
@@ -7547,7 +7559,7 @@ ${dataContext}
       });
     }
 
-    async function hydrateOystaComments(snap) { // V.13.25.0: Improved Hydration with back-propagation
+    async function hydrateOystaComments(snap) { // V.13.25.1: Fixed REANUDA back-propagation ordering
       if (!snap || snap.empty || currentRole === 'usuario') return; 
       if (!window._oystaHydrated) window._oystaHydrated = new Set();
       for (const d of snap.docs) {
@@ -7574,37 +7586,49 @@ ${dataContext}
               itemModified = true;
             }
           }
+
+          // 3. Back-propagate stop address to nearest previous REANUDA (V.13.25.1 — runs BEFORE step 2)
+          // Comments array is sorted desc (newest first), so idx+1 is always older.
+          if (solvedAddr) {
+            const parts = (c.texto || "").split(' ');
+            const indicativo = parts[1];
+            if (indicativo && indicativo.length > 2) {
+              for (let k = idx + 1; k < comments.length; k++) {
+                const prevC = comments[k];
+                if (prevC.editadoBack) continue; // already back-propagated, skip
+                const prevUText = (prevC.texto || "").toUpperCase();
+                if (prevUText.includes(indicativo.toUpperCase()) && prevUText.includes('REANUDA')) {
+                  // Replace destination clause with actual stop address
+                  let upgraded = prevC.texto
+                    .replace(/hacia el lugar(?: del aviso)?/i, `hacia ${solvedAddr}`)
+                    .replace(/sin dirección/i, solvedAddr);
+                  // Also handle case where step 2 previously replaced "el lugar" with iAddr
+                  if (upgraded === prevC.texto && iAddr && prevC.texto.includes(iAddr)) {
+                    upgraded = prevC.texto.replace(iAddr, solvedAddr);
+                  }
+                  if (upgraded !== prevC.texto) {
+                    prevC.texto = upgraded;
+                    prevC.editadoBack = true;
+                    prevC.hydrated = true;
+                    modified = true;
+                  }
+                  break;
+                }
+              }
+            }
+          }
           
-          // 2. Hydrate "SALE" or "REANUDA" with destination address
-          if ((utext.includes('EL LUGAR') || utext.includes('SIN DIRECCIÓN')) && iAddr && !window._oystaHydrated.has((c.timestamp || 0) + "_sale")) {
+          // 2. Hydrate "SALE" or "REANUDA" with destination address (fallback to intervention address)
+          // Only runs if NOT already back-propagated to a specific stop
+          if ((utext.includes('EL LUGAR') || utext.includes('SIN DIRECCIÓN')) && iAddr && !c.editadoBack && !window._oystaHydrated.has((c.timestamp || 0) + "_sale")) {
             const oldTexto = newTexto;
-            newTexto = newTexto.replace(/el lugar/i, iAddr)
+            newTexto = newTexto.replace(/hacia el lugar(?: del aviso)?/i, "hacia " + iAddr)
+                              .replace(/el lugar/i, iAddr)
                               .replace(/sin dirección/i, iAddr);
             if (newTexto !== oldTexto) {
                 window._oystaHydrated.add((c.timestamp || 0) + "_sale");
                 itemModified = true;
             }
-          }
-
-          // 3. Back-propagate stop address to previous REANUDA in same array
-          if (solvedAddr || (c.coords && utext.includes('LLEGADA'))) {
-             const addrToPropagate = solvedAddr || (utext.includes('LLEGADA') ? iAddr : null);
-             if (addrToPropagate) {
-                const parts = (c.texto || "").split(' ');
-                const indicativo = parts[1];
-                if (indicativo && indicativo.length > 2) {
-                   // Look back in comments array
-                   for (let k = idx + 1; k < comments.length; k++) { // comments are usually sorted by timestamp desc, so idx+1 is "older"
-                      const prevC = comments[k];
-                      const prevUText = (prevC.texto || "").toUpperCase();
-                      if (prevUText.includes(indicativo.toUpperCase()) && prevUText.includes('REANUDA') && (prevUText.includes('EL LUGAR') || prevUText.includes('SIN DIRECCIÓN'))) {
-                         prevC.texto = prevC.texto.replace(/el lugar/i, addrToPropagate).replace(/sin dirección/i, addrToPropagate);
-                         modified = true;
-                         break;
-                      }
-                   }
-                }
-             }
           }
 
           if (itemModified) {
@@ -14611,7 +14635,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.25.0
+          Versión V.13.25.1
         </div>
       </div>
 
