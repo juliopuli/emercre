@@ -543,7 +543,7 @@ exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
 let vehiculosCache = {};
 let vehiculosCacheTime = {};
 
-// 5. Monitor Oysta Vehicles (V.13.25.0)
+// 5. Monitor Oysta Vehicles (V.13.27.0)
 // Detecta llegadas y salidas en segundo plano cada 2 minutos.
 exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRun(async (context) => {
     const db = admin.firestore();
@@ -567,6 +567,17 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         const resp = await fetch(`${bridgeUrl}?u=backend-monitor`);
         if (!resp.ok) throw new Error("Oysta GAS error");
         const oystaData = await resp.json();
+
+        // V.13.27.0: Log de login en segundo plano si el puente lo indica
+        if (oystaData.loginPerformed) {
+            await db.collection("oysta_logs").add({
+                fecha: admin.firestore.FieldValue.serverTimestamp(),
+                usuario: "Oysta (BG)",
+                tipo: "Oysta",
+                info: oystaData.loginInfo || "Login automático por monitor de fondo"
+            });
+        }
+
         if (!oystaData.vehicles) return null;
 
         const vehiclesMap = {};
@@ -653,7 +664,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                     if (!exists) {
                         const text = `⚡️ ${indicativo} SALE hacia el lugar (${op.dir || 'sin dirección'}).`;
                         await db.collection("operaciones").doc(opId).collection("acciones").add({
-                            texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
+                            texto: text, coords: pos, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
                         });
                     }
                     vs.hasDeparted = true;
@@ -688,7 +699,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                         if (!lastActionStr.includes("SALE") && !lastActionStr.includes("REANUDA") && !lastActionStr.includes("EN MOVIMIENTO")) {
                             const text = `⚡️ ${indicativo} REANUDA marcha hacia el lugar del aviso.`;
                             await db.collection("operaciones").doc(opId).collection("acciones").add({
-                                texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
+                                texto: text, coords: pos, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
                             });
                         }
                         vs.moving = true;
@@ -812,7 +823,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                             const text = `⚡️ ${indicativo} REANUDA marcha hacia el lugar.`;
                             await iRef.update({
                                 comentarios: admin.firestore.FieldValue.arrayUnion({
-                                    texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
+                                    texto: text, coords: pos, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
                                 })
                             });
                         }

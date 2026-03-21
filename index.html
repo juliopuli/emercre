@@ -1350,7 +1350,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.25.1 Loaded');
+    console.log('EmerCRE V.13.27.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3509,7 +3509,7 @@
       });
     }
 
-    async function hydrateOystaActions(snap, opId) { // V.13.25.1: Fixed REANUDA back-propagation ordering
+    async function hydrateOystaActions(snap, opId) { // V.13.27.0: Improved forward/back propagation & SALE conversion
       if (!snap || snap.empty || currentRole === 'usuario') return;
       if (!window._oystaHydrated) window._oystaHydrated = new Set();
       
@@ -3537,45 +3537,95 @@
           }
         }
 
-        // 3. Back-propagate stop address to nearest previous REANUDA (V.13.25.1 — runs BEFORE step 2)
-        // so REANUDA text still says "el lugar" and can be found and overwritten with actual destination.
+        // 0. Direct "desde" hydration from coordinates [V.13.27.0]
+        if ((utext.includes('SALE') || utext.includes('REANUDA')) && a.coords && !window._oystaHydrated.has(d.id + "_desde")) {
+          const addr = await new Promise(res => reverseGeocodeWithCache(a.coords, res));
+          if (addr) {
+            const parts = (a.texto || "").split(' ');
+            const indicativo = parts[1];
+            if (indicativo) {
+              const upperIndicativo = indicativo.toUpperCase();
+              window._oystaHydrated.add(d.id + "_desde");
+              const regexReanuda = new RegExp(`(${upperIndicativo}.*?)REANUDA marcha`, 'i');
+              const regexDesde = new RegExp(`(${upperIndicativo}.*?)desde ([^hacia\\n]+)`, 'i');
+              newTexto = newTexto
+                .replace(regexReanuda, `$1SALE desde ${addr}`)
+                .replace(regexDesde, `$1desde ${addr}`);
+              
+              if (!newTexto.includes('desde') && (newTexto.toUpperCase().includes('SALE'))) {
+                 newTexto = newTexto.replace(new RegExp(`(${upperIndicativo}.*?)SALE`, 'i'), `$1SALE desde ${addr}`);
+              }
+              modified = true;
+            }
+          }
+        }
+
         if (solvedAddr) {
           const parts = (a.texto || "").split(' ');
           const indicativo = parts[1]; // ⚡️ [INDICATIVO]
           if (indicativo && indicativo.length > 2) {
-            // Find the most-recent REANUDA for this vehicle that is older than this PARADA
-            // and has NOT yet been back-propagated to a specific stop address (no editadoBack flag)
-            const candidateReanudas = allDocs
+            const upperIndicativo = indicativo.toUpperCase();
+
+            // 3. BACK-PROPAGATION: Update destination of PREVIOUS departure
+            const prevDeparture = allDocs
               .filter(doc => {
                 const da = doc.data();
                 const dat = (da.texto || "").toUpperCase();
                 return da.timestamp < a.timestamp &&
-                       dat.includes(indicativo.toUpperCase()) &&
-                       dat.includes('REANUDA') &&
+                       dat.includes(upperIndicativo) &&
+                       (dat.includes('REANUDA') || dat.includes('SALE')) &&
                        !da.editadoBack; // not already back-propagated
               })
-              .sort((x, y) => (y.data().timestamp || 0) - (x.data().timestamp || 0)); // most recent first
-            const prevReanuda = candidateReanudas[0];
-            if (prevReanuda) {
-              const prData = prevReanuda.data();
+              .sort((x, y) => (y.data().timestamp || 0) - (x.data().timestamp || 0))[0];
+
+            if (prevDeparture) {
+              const prData = prevDeparture.data();
               const prText = prData.texto || '';
-              // Replace the destination clause: "hacia [anything]" or "sin dirección" with actual stop addr
-              let upgradedText = prText
-                .replace(/hacia el lugar(?: del aviso)?/i, `hacia ${solvedAddr}`)
-                .replace(/sin dirección/i, solvedAddr);
-              // Also handle case where step 2 already replaced "el lugar" with opAddr in a previous pass
-              if (upgradedText === prText && opAddr && prText.includes(opAddr)) {
-                upgradedText = prText.replace(opAddr, solvedAddr);
-              }
+              // Indicativo-aware replacement to avoid corrupting multi-resource messages
+              const regexHacia = new RegExp(`(${upperIndicativo}.*?)hacia el lugar(?: del aviso)?`, 'i');
+              const upgradedText = prText.includes(solvedAddr) ? prText : prText
+                .replace(regexHacia, `$1hacia ${solvedAddr}`)
+                .replace(new RegExp(`(${upperIndicativo}.*?)sin dirección`, 'i'), `$1${solvedAddr}`);
+              
               if (upgradedText !== prText) {
-                updateDoc(prevReanuda.ref, { texto: upgradedText, hydrated: true, editadoBack: true }).catch(e => console.error('[Oysta] Back-prop error:', e));
+                updateDoc(prevDeparture.ref, { texto: upgradedText, hydrated: true, editadoBack: true }).catch(e => console.error('[Oysta] Back-prop error:', e));
+              }
+            }
+
+            // 4. FORWARD-PROPAGATION: Update origin of NEXT departure [V.13.27.0]
+            const nextDeparture = allDocs
+              .filter(doc => {
+                const da = doc.data();
+                const dat = (da.texto || "").toUpperCase();
+                return da.timestamp > a.timestamp &&
+                       dat.includes(upperIndicativo) &&
+                       (dat.includes('REANUDA') || dat.includes('SALE')) &&
+                       !da.editadoForward;
+              })
+              .sort((x, y) => (x.data().timestamp || 0) - (y.data().timestamp || 0))[0];
+
+            if (nextDeparture) {
+              const nxData = nextDeparture.data();
+              const nxText = nxData.texto || '';
+              // Transform "REANUDA marcha hacia..." into "SALE desde [A] hacia..."
+              const regexReanuda = new RegExp(`(${upperIndicativo}.*?)REANUDA marcha`, 'i');
+              const regexDesde = new RegExp(`(${upperIndicativo}.*?)desde (.*?)(?= hacia|$)`, 'i');
+              let upgradedText = nxText
+                .replace(regexReanuda, `$1SALE desde ${solvedAddr}`)
+                .replace(regexDesde, `$1desde ${solvedAddr}`);
+              
+              if (!upgradedText.includes('desde') && nxText.includes('SALE')) {
+                 upgradedText = upgradedText.replace(new RegExp(`(${upperIndicativo}.*?)SALE`, 'i'), `$1SALE desde ${solvedAddr}`);
+              }
+
+              if (upgradedText !== nxText) {
+                updateDoc(nextDeparture.ref, { texto: upgradedText, hydrated: true, editadoForward: true }).catch(e => console.error('[Oysta] Forward-prop error:', e));
               }
             }
           }
         }
         
         // 2. Hydrate "SALE" or "REANUDA" with missing destination address (op address fallback)
-        // Only runs if this message still says "el lugar" (not yet back-propagated above)
         if ((utext.includes('SIN DIRECCIÓN') || utext.includes('HACIA EL LUGAR')) && opAddr && !window._oystaHydrated.has(d.id + "_sale") && !a.editadoBack) {
           const oldTexto = newTexto;
           newTexto = newTexto.replace(/sin dirección/i, opAddr)
@@ -7559,7 +7609,7 @@ ${dataContext}
       });
     }
 
-    async function hydrateOystaComments(snap) { // V.13.25.1: Fixed REANUDA back-propagation ordering
+    async function hydrateOystaComments(snap) { // V.13.27.0: Improved forward/back propagation & SALE conversion
       if (!snap || snap.empty || currentRole === 'usuario') return; 
       if (!window._oystaHydrated) window._oystaHydrated = new Set();
       for (const d of snap.docs) {
@@ -7587,25 +7637,46 @@ ${dataContext}
             }
           }
 
-          // 3. Back-propagate stop address to nearest previous REANUDA (V.13.25.1 — runs BEFORE step 2)
-          // Comments array is sorted desc (newest first), so idx+1 is always older.
+          // 0. Direct "desde" hydration from coordinates [V.13.27.0]
+          if ((utext.includes('SALE') || utext.includes('REANUDA')) && c.coords && !window._oystaHydrated.has((c.timestamp||0) + "_desde")) {
+            const addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
+            if (addr) {
+              const parts = (c.texto || "").split(' ');
+              const indicativo = parts[1];
+              if (indicativo) {
+                const upperIndicativo = indicativo.toUpperCase();
+                window._oystaHydrated.add((c.timestamp||0) + "_desde");
+                const regexReanuda = new RegExp(`(${upperIndicativo}.*?)REANUDA marcha`, 'i');
+                const regexDesde = new RegExp(`(${upperIndicativo}.*?)desde (.*?)(?= hacia|$)`, 'i');
+                newTexto = newTexto
+                  .replace(regexReanuda, `$1SALE desde ${addr}`)
+                  .replace(regexDesde, `$1desde ${addr}`);
+                
+                if (!newTexto.includes('desde') && (newTexto.toUpperCase().includes('SALE'))) {
+                  newTexto = newTexto.replace(new RegExp(`(${upperIndicativo}.*?)SALE`, 'i'), `$1SALE desde ${addr}`);
+                }
+                itemModified = true;
+              }
+            }
+          }
+
           if (solvedAddr) {
             const parts = (c.texto || "").split(' ');
             const indicativo = parts[1];
             if (indicativo && indicativo.length > 2) {
+              const upperIndicativo = indicativo.toUpperCase();
+              
+              // 3. BACK-PROPAGATION: Update destination of PREVIOUS departure
               for (let k = idx + 1; k < comments.length; k++) {
                 const prevC = comments[k];
-                if (prevC.editadoBack) continue; // already back-propagated, skip
+                if (prevC.editadoBack) continue;
                 const prevUText = (prevC.texto || "").toUpperCase();
-                if (prevUText.includes(indicativo.toUpperCase()) && prevUText.includes('REANUDA')) {
-                  // Replace destination clause with actual stop address
-                  let upgraded = prevC.texto
-                    .replace(/hacia el lugar(?: del aviso)?/i, `hacia ${solvedAddr}`)
-                    .replace(/sin dirección/i, solvedAddr);
-                  // Also handle case where step 2 previously replaced "el lugar" with iAddr
-                  if (upgraded === prevC.texto && iAddr && prevC.texto.includes(iAddr)) {
-                    upgraded = prevC.texto.replace(iAddr, solvedAddr);
-                  }
+                if (prevUText.includes(upperIndicativo) && (prevUText.includes('REANUDA') || prevUText.includes('SALE'))) {
+                  const regexHacia = new RegExp(`(${upperIndicativo}.*?)hacia el lugar(?: del aviso)?`, 'i');
+                  let upgraded = prevC.texto.includes(solvedAddr) ? prevC.texto : prevC.texto
+                    .replace(regexHacia, `$1hacia ${solvedAddr}`)
+                    .replace(new RegExp(`(${upperIndicativo}.*?)sin dirección`, 'i'), `$1${solvedAddr}`);
+
                   if (upgraded !== prevC.texto) {
                     prevC.texto = upgraded;
                     prevC.editadoBack = true;
@@ -7615,11 +7686,35 @@ ${dataContext}
                   break;
                 }
               }
+
+              // 4. FORWARD-PROPAGATION: Update origin of NEXT departure [V.13.27.0]
+              for (let k = idx - 1; k >= 0; k--) {
+                const nextC = comments[k];
+                if (nextC.editadoForward) continue;
+                const nextUText = (nextC.texto || "").toUpperCase();
+                if (nextUText.includes(upperIndicativo) && (nextUText.includes('REANUDA') || nextUText.includes('SALE'))) {
+                   const regexReanuda = new RegExp(`(${upperIndicativo}.*?)REANUDA marcha`, 'i');
+                   const regexDesde = new RegExp(`(${upperIndicativo}.*?)desde (.*?)(?= hacia|$)`, 'i');
+                   let upgraded = nextC.texto
+                    .replace(regexReanuda, `$1SALE desde ${solvedAddr}`)
+                    .replace(regexDesde, `$1desde ${solvedAddr}`);
+
+                  if (!upgraded.includes(`desde ${solvedAddr}`) && nextC.texto.includes('SALE')) {
+                    upgraded = upgraded.replace(new RegExp(`(${upperIndicativo}.*?)SALE`, 'i'), `$1SALE desde ${solvedAddr}`);
+                  }
+                  if (upgraded !== nextC.texto) {
+                    nextC.texto = upgraded;
+                    nextC.editadoForward = true;
+                    nextC.hydrated = true;
+                    modified = true;
+                  }
+                  break;
+                }
+              }
             }
           }
           
           // 2. Hydrate "SALE" or "REANUDA" with destination address (fallback to intervention address)
-          // Only runs if NOT already back-propagated to a specific stop
           if ((utext.includes('EL LUGAR') || utext.includes('SIN DIRECCIÓN')) && iAddr && !c.editadoBack && !window._oystaHydrated.has((c.timestamp || 0) + "_sale")) {
             const oldTexto = newTexto;
             newTexto = newTexto.replace(/hacia el lugar(?: del aviso)?/i, "hacia " + iAddr)
@@ -14635,7 +14730,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.25.1
+          Versión V.13.27.0
         </div>
       </div>
 
@@ -15064,7 +15159,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.25.1
+          Versión V.13.27.0
         </div>
       </div>
 
@@ -15983,7 +16078,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.25.1
+            Versión V.13.27.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
