@@ -45,7 +45,7 @@ exports.getOystaVehicles = functions.https.onCall(async (data, context) => {
                 fecha: admin.firestore.FieldValue.serverTimestamp(),
                 usuario: userEmail,
                 tipo: "Oysta",
-                info: result.loginInfo || "Login automático por expiración de sesión"
+                detalle: result.loginInfo || "Login automático por expiración de sesión"
             });
         }
 
@@ -543,7 +543,7 @@ exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
 let vehiculosCache = {};
 let vehiculosCacheTime = {};
 
-// 5. Monitor Oysta Vehicles (V.13.27.0)
+// 5. Monitor Oysta Vehicles (V.13.28.0)
 // Detecta llegadas y salidas en segundo plano cada 2 minutos.
 exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRun(async (context) => {
     const db = admin.firestore();
@@ -574,7 +574,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 fecha: admin.firestore.FieldValue.serverTimestamp(),
                 usuario: "Oysta (BG)",
                 tipo: "Oysta",
-                info: oystaData.loginInfo || "Login automático por monitor de fondo"
+                detalle: oystaData.loginInfo || "Login automático por monitor de fondo"
             });
         }
 
@@ -666,6 +666,13 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                         await db.collection("operaciones").doc(opId).collection("acciones").add({
                             texto: text, coords: pos, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
                         });
+                        // V.13.28.0: Duplicar en oysta_logs para visibilidad general
+                        await db.collection("oysta_logs").add({
+                            fecha: admin.firestore.FieldValue.serverTimestamp(),
+                            usuario: "Oysta (BG)",
+                            tipo: "Oysta",
+                            detalle: text
+                        });
                     }
                     vs.hasDeparted = true;
                     vs.moving = true;
@@ -678,6 +685,13 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                         const text = `✅ ${indicativo} LLEGADA al lugar del aviso (${op.dir || 'sin dirección'}).`;
                         await db.collection("operaciones").doc(opId).collection("acciones").add({
                             texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
+                        });
+                        // V.13.28.0: Duplicar en oysta_logs
+                        await db.collection("oysta_logs").add({
+                            fecha: admin.firestore.FieldValue.serverTimestamp(),
+                            usuario: "Oysta (BG)",
+                            tipo: "Oysta",
+                            detalle: text
                         });
                     }
                     vs.hasArrived = true;
@@ -701,6 +715,13 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                             await db.collection("operaciones").doc(opId).collection("acciones").add({
                                 texto: text, coords: pos, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
                             });
+                            // V.13.28.0: Duplicar en oysta_logs
+                            await db.collection("oysta_logs").add({
+                                fecha: admin.firestore.FieldValue.serverTimestamp(),
+                                usuario: "Oysta (BG)",
+                                tipo: "Oysta",
+                                detalle: text
+                            });
                         }
                         vs.moving = true;
                         vs.lastStopAddr = "";
@@ -717,6 +738,13 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                                 autorId: 'system', 
                                 timestamp: oystaTime, 
                                 prioridad: 'Baja'
+                            });
+                            // V.13.28.0: Duplicar en oysta_logs
+                            await db.collection("oysta_logs").add({
+                                fecha: admin.firestore.FieldValue.serverTimestamp(),
+                                usuario: "Oysta (BG)",
+                                tipo: "Oysta",
+                                detalle: text
                             });
                         }
                         vs.moving = false;
@@ -781,6 +809,13 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                                 texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
                             })
                         });
+                        // V.13.28.0: Duplicar en oysta_logs
+                        await db.collection("oysta_logs").add({
+                            fecha: admin.firestore.FieldValue.serverTimestamp(),
+                            usuario: "Oysta (BG)",
+                            tipo: "Oysta",
+                            detalle: text
+                        });
                     }
                     vs.hasDeparted = true;
                     vs.moving = true;
@@ -799,6 +834,13 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                             comentarios: admin.firestore.FieldValue.arrayUnion({
                                 texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
                             })
+                        });
+                        // V.13.28.0: Duplicar en oysta_logs
+                        await db.collection("oysta_logs").add({
+                            fecha: admin.firestore.FieldValue.serverTimestamp(),
+                            usuario: "Oysta (BG)",
+                            tipo: "Oysta",
+                            detalle: text
                         });
                     }
                     vs.hasArrived = true;
@@ -826,6 +868,13 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                                     texto: text, coords: pos, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
                                 })
                             });
+                            // V.13.28.0: Duplicar en oysta_logs
+                            await db.collection("oysta_logs").add({
+                                fecha: admin.firestore.FieldValue.serverTimestamp(),
+                                usuario: "Oysta (BG)",
+                                tipo: "Oysta",
+                                detalle: text
+                            });
                         }
                         vs.moving = true;
                         vehicleStateChanged = true;
@@ -843,6 +892,13 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                                     fecha: formatCommentFecha(new Date(oystaTime))
                                 }),
                                 actualizadoEn: admin.firestore.FieldValue.serverTimestamp() 
+                            });
+                            // V.13.28.0: Duplicar en oysta_logs
+                            await db.collection("oysta_logs").add({
+                                fecha: admin.firestore.FieldValue.serverTimestamp(),
+                                usuario: "Oysta (BG)",
+                                tipo: "Oysta",
+                                detalle: arrivalText
                             });
                         }
                         vs.moving = false;
@@ -865,6 +921,14 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
             }
         }
 
+        if (assignedIds.size > 0) {
+            await db.collection("oysta_logs").add({
+                fecha: admin.firestore.FieldValue.serverTimestamp(),
+                usuario: "Oysta (BG)",
+                tipo: "Oysta",
+                detalle: `Monitor activo: Supervisando ${assignedIds.size} recurso(s) en ${activeOpsSnap.size} op(s) y ${activeIntsSnap.size} int(s).`
+            });
+        }
         return null;
     } catch (err) {
         console.error("Monitor Oysta Error:", err);

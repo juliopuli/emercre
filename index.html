@@ -1350,7 +1350,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.27.0 Loaded');
+    console.log('EmerCRE V.13.28.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3509,7 +3509,7 @@
       });
     }
 
-    async function hydrateOystaActions(snap, opId) { // V.13.27.0: Improved forward/back propagation & SALE conversion
+    async function hydrateOystaActions(snap, opId) { // V.13.28.0: Improved forward/back propagation & SALE conversion
       if (!snap || snap.empty || currentRole === 'usuario') return;
       if (!window._oystaHydrated) window._oystaHydrated = new Set();
       
@@ -3537,7 +3537,7 @@
           }
         }
 
-        // 0. Direct "desde" hydration from coordinates [V.13.27.0]
+        // 0. Direct "desde" hydration from coordinates [V.13.28.0]
         if ((utext.includes('SALE') || utext.includes('REANUDA')) && a.coords && !window._oystaHydrated.has(d.id + "_desde")) {
           const addr = await new Promise(res => reverseGeocodeWithCache(a.coords, res));
           if (addr) {
@@ -3592,7 +3592,7 @@
               }
             }
 
-            // 4. FORWARD-PROPAGATION: Update origin of NEXT departure [V.13.27.0]
+            // 4. FORWARD-PROPAGATION: Update origin of NEXT departure [V.13.28.0]
             const nextDeparture = allDocs
               .filter(doc => {
                 const da = doc.data();
@@ -7609,7 +7609,7 @@ ${dataContext}
       });
     }
 
-    async function hydrateOystaComments(snap) { // V.13.27.0: Improved forward/back propagation & SALE conversion
+    async function hydrateOystaComments(snap) { // V.13.28.0: Improved forward/back propagation & SALE conversion
       if (!snap || snap.empty || currentRole === 'usuario') return; 
       if (!window._oystaHydrated) window._oystaHydrated = new Set();
       for (const d of snap.docs) {
@@ -7637,7 +7637,7 @@ ${dataContext}
             }
           }
 
-          // 0. Direct "desde" hydration from coordinates [V.13.27.0]
+          // 0. Direct "desde" hydration from coordinates [V.13.28.0]
           if ((utext.includes('SALE') || utext.includes('REANUDA')) && c.coords && !window._oystaHydrated.has((c.timestamp||0) + "_desde")) {
             const addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
             if (addr) {
@@ -7687,7 +7687,7 @@ ${dataContext}
                 }
               }
 
-              // 4. FORWARD-PROPAGATION: Update origin of NEXT departure [V.13.27.0]
+              // 4. FORWARD-PROPAGATION: Update origin of NEXT departure [V.13.28.0]
               for (let k = idx - 1; k >= 0; k--) {
                 const nextC = comments[k];
                 if (nextC.editadoForward) continue;
@@ -14730,7 +14730,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.27.0
+          Versión V.13.28.0
         </div>
       </div>
 
@@ -15159,7 +15159,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.27.0
+          Versión V.13.28.0
         </div>
       </div>
 
@@ -16078,7 +16078,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.27.0
+            Versión V.13.28.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
