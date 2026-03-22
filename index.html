@@ -257,18 +257,9 @@
       });
     }
 
-    // Helper: Reverse Geocode con Caché y Throttle (V.12.4.1)
+    // V.13.28.1: Reverse Geocode Queue para evitar skips en carga batch
+    let rgcQueue = Promise.resolve();
     function reverseGeocodeWithCache(latlng, callback) {
-      // V.11.5.2: Throttle global — máximo 1 petición por segundo
-      if (reverseGeocodeThrottle) {
-        console.log('[API Optimize] Reverse geocode throttled, skipping.');
-        callback(null);
-        return;
-      }
-      reverseGeocodeThrottle = true;
-      setTimeout(() => { reverseGeocodeThrottle = false; }, 1000);
-
-      // V.13.8.1: Normalizar coordenadas para hit de caché (soporta LatLng y Literales)
       const lat = (typeof latlng.lat === 'function') ? latlng.lat() : latlng.lat;
       const lng = (typeof latlng.lng === 'function') ? latlng.lng() : latlng.lng;
       if (lat === undefined || lng === undefined) { callback(null); return; }
@@ -278,17 +269,23 @@
         callback(reverseGeocodeCache[key]);
         return;
       }
-      const gc = getGeocoder(); // V.11.5.2: Instancia compartida
-      gc.geocode({ location: { lat, lng } }, (results, status) => {
-        if (status === 'OK' && results[0]) {
-          reverseGeocodeCache[key] = results[0].formatted_address;
-          _saveRgcCache(); // V.13.18.1: Persistir en sessionStorage
-          callback(results[0].formatted_address);
-        } else {
-          callback(null);
-        }
-      });
+
+      rgcQueue = rgcQueue.then(() => new Promise(resolve => {
+        const gc = getGeocoder();
+        gc.geocode({ location: { lat, lng } }, (results, status) => {
+          if (status === 'OK' && results[0]) {
+            reverseGeocodeCache[key] = results[0].formatted_address;
+            _saveRgcCache();
+            callback(results[0].formatted_address);
+          } else {
+            callback(null);
+          }
+          setTimeout(resolve, 300); // 300ms delay between requests to avoid OVER_QUERY_LIMIT
+        });
+      }));
     }
+
+
 
     // Helper: Cálculo de Rutas con Caché (V.12.4.1)
     function calculateRouteWithCache(origin, destination, travelMode, callback) {
@@ -1350,7 +1347,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.28.0 Loaded');
+    console.log('EmerCRE V.13.28.1 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3509,9 +3506,10 @@
       });
     }
 
-    async function hydrateOystaActions(snap, opId) { // V.13.28.0: Improved forward/back propagation & SALE conversion
+    async function hydrateOystaActions(snap, opId) { // V.13.28.1: Improved forward/back propagation & timestamp fix
       if (!snap || snap.empty || currentRole === 'usuario') return;
       if (!window._oystaHydrated) window._oystaHydrated = new Set();
+      const getTs = d => d.timestamp?.toMillis ? d.timestamp.toMillis() : (typeof d.timestamp === 'number' ? d.timestamp : 0);
       
       const op = ops[opId];
       const opAddr = op ? (op.dir || op.loc) : null;
@@ -3537,7 +3535,7 @@
           }
         }
 
-        // 0. Direct "desde" hydration from coordinates [V.13.28.0]
+        // 0. Direct "desde" hydration from coordinates [V.13.28.1]
         if ((utext.includes('SALE') || utext.includes('REANUDA')) && a.coords && !window._oystaHydrated.has(d.id + "_desde")) {
           const addr = await new Promise(res => reverseGeocodeWithCache(a.coords, res));
           if (addr) {
@@ -3571,12 +3569,12 @@
               .filter(doc => {
                 const da = doc.data();
                 const dat = (da.texto || "").toUpperCase();
-                return da.timestamp < a.timestamp &&
+                return getTs(da) < getTs(a) &&
                        dat.includes(upperIndicativo) &&
                        (dat.includes('REANUDA') || dat.includes('SALE')) &&
                        !da.editadoBack; // not already back-propagated
               })
-              .sort((x, y) => (y.data().timestamp || 0) - (x.data().timestamp || 0))[0];
+              .sort((x, y) => getTs(y.data()) - getTs(x.data()))[0];
 
             if (prevDeparture) {
               const prData = prevDeparture.data();
@@ -3592,17 +3590,17 @@
               }
             }
 
-            // 4. FORWARD-PROPAGATION: Update origin of NEXT departure [V.13.28.0]
+            // 4. FORWARD-PROPAGATION: Update origin of NEXT departure [V.13.28.1]
             const nextDeparture = allDocs
               .filter(doc => {
                 const da = doc.data();
                 const dat = (da.texto || "").toUpperCase();
-                return da.timestamp > a.timestamp &&
+                return getTs(da) > getTs(a) &&
                        dat.includes(upperIndicativo) &&
                        (dat.includes('REANUDA') || dat.includes('SALE')) &&
                        !da.editadoForward;
               })
-              .sort((x, y) => (x.data().timestamp || 0) - (y.data().timestamp || 0))[0];
+              .sort((x, y) => getTs(x.data()) - getTs(y.data()))[0];
 
             if (nextDeparture) {
               const nxData = nextDeparture.data();
@@ -7609,7 +7607,7 @@ ${dataContext}
       });
     }
 
-    async function hydrateOystaComments(snap) { // V.13.28.0: Improved forward/back propagation & SALE conversion
+    async function hydrateOystaComments(snap) { // V.13.28.1: Improved forward/back propagation & SALE conversion
       if (!snap || snap.empty || currentRole === 'usuario') return; 
       if (!window._oystaHydrated) window._oystaHydrated = new Set();
       for (const d of snap.docs) {
@@ -7637,7 +7635,7 @@ ${dataContext}
             }
           }
 
-          // 0. Direct "desde" hydration from coordinates [V.13.28.0]
+          // 0. Direct "desde" hydration from coordinates [V.13.28.1]
           if ((utext.includes('SALE') || utext.includes('REANUDA')) && c.coords && !window._oystaHydrated.has((c.timestamp||0) + "_desde")) {
             const addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
             if (addr) {
@@ -7687,7 +7685,7 @@ ${dataContext}
                 }
               }
 
-              // 4. FORWARD-PROPAGATION: Update origin of NEXT departure [V.13.28.0]
+              // 4. FORWARD-PROPAGATION: Update origin of NEXT departure [V.13.28.1]
               for (let k = idx - 1; k >= 0; k--) {
                 const nextC = comments[k];
                 if (nextC.editadoForward) continue;
@@ -14730,7 +14728,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.28.0
+          Versión V.13.28.1
         </div>
       </div>
 
@@ -15159,7 +15157,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.28.0
+          Versión V.13.28.1
         </div>
       </div>
 
@@ -16078,7 +16076,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.28.0
+            Versión V.13.28.1
           </div>
         </div>
         <div class="field" id="j-prov-row">
