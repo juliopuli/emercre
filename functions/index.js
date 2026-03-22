@@ -563,7 +563,47 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
             return null;
         }
 
-        // 2. Solo si hay trabajo, consultamos Oysta para ver posiciones
+        // 2. Obtener mapeo de vehículos locales vinculados a Oysta
+        const assignedIds = new Set();
+        activeOpsSnap.forEach(doc => {
+            (doc.data().recursosAsignadosIds || []).forEach(rid => assignedIds.add(rid));
+        });
+        activeIntsSnap.forEach(doc => {
+            (doc.data().recursosAsignados || []).forEach(rid => assignedIds.add(rid));
+        });
+
+        if (assignedIds.size === 0) {
+            console.log("[Monitor] No hay recursos asignados en la actividad abierta. Finalizando.");
+            return null;
+        }
+
+        const localVehiclesByOystaId = {};
+        const missingIds = Array.from(assignedIds).filter(rid => !vehiculosCache[rid] || (Date.now() - vehiculosCacheTime[rid] > 3600000));
+        
+        if (missingIds.length > 0) {
+            const vSnaps = await Promise.all(missingIds.map(rid => db.collection("vehiculos").doc(rid).get()));
+            vSnaps.forEach(doc => {
+                if (doc.exists) {
+                    vehiculosCache[doc.id] = doc.data();
+                    vehiculosCacheTime[doc.id] = Date.now();
+                }
+            });
+        }
+        
+        assignedIds.forEach(rid => {
+            const data = vehiculosCache[rid];
+            if (data && data.oystaId) {
+                localVehiclesByOystaId[String(data.oystaId)] = { id: rid, ...data };
+            }
+        });
+
+        const oystaVehicleCount = Object.keys(localVehiclesByOystaId).length;
+        if (oystaVehicleCount === 0) {
+            console.log("[Monitor] Hay actividad abierta, pero ningún recurso tiene oystaId asignado. Finalizando.");
+            return null;
+        }
+
+        // 3. Solo si hay trabajo Y recursos con Oysta, consultamos Oysta para ver posiciones
         const resp = await fetch(`${bridgeUrl}?u=backend-monitor`);
         if (!resp.ok) throw new Error("Oysta GAS error");
         const oystaData = await resp.json();
@@ -582,41 +622,6 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
 
         const vehiclesMap = {};
         oystaData.vehicles.forEach(v => { vehiclesMap[String(v.id)] = v; });
-
-        // 3. Obtener mapeo de vehículos locales (V.13.19.1: Solo los asignados para ahorro extremo)
-        const assignedIds = new Set();
-        activeOpsSnap.forEach(doc => {
-            (doc.data().recursosAsignadosIds || []).forEach(rid => assignedIds.add(rid));
-        });
-        activeIntsSnap.forEach(doc => {
-            (doc.data().recursosAsignados || []).forEach(rid => assignedIds.add(rid));
-        });
-
-        if (assignedIds.size === 0) {
-            console.log("[Monitor] No hay recursos asignados en la actividad abierta. Finalizando.");
-            return null;
-        }
-
-        const localVehiclesByOystaId = {};
-        const missingIds = Array.from(assignedIds).filter(rid => !vehiculosCache[rid] || (Date.now() - vehiculosCacheTime[rid] > 3600000));
-        
-        if (missingIds.length > 0) {
-            // Firestore max "in" query limits or parallel reads. using promise.all reduces code path complexity.
-            const vSnaps = await Promise.all(missingIds.map(rid => db.collection("vehiculos").doc(rid).get()));
-            vSnaps.forEach(doc => {
-                if (doc.exists) {
-                    vehiculosCache[doc.id] = doc.data();
-                    vehiculosCacheTime[doc.id] = Date.now();
-                }
-            });
-        }
-        
-        assignedIds.forEach(rid => {
-            const data = vehiculosCache[rid];
-            if (data && data.oystaId) {
-                localVehiclesByOystaId[String(data.oystaId)] = { id: rid, ...data };
-            }
-        });
 
         const now = Date.now();
 
@@ -921,12 +926,12 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
             }
         }
 
-        if (assignedIds.size > 0) {
+        if (oystaVehicleCount > 0) {
             await db.collection("oysta_logs").add({
                 fecha: admin.firestore.FieldValue.serverTimestamp(),
                 usuario: "Oysta (BG)",
                 tipo: "Oysta",
-                detalle: `Monitor activo: Supervisando ${assignedIds.size} recurso(s) en ${activeOpsSnap.size} op(s) y ${activeIntsSnap.size} int(s).`
+                detalle: `Monitor activo: Supervisando ${oystaVehicleCount} recurso(s) en ${activeOpsSnap.size} op(s) y ${activeIntsSnap.size} int(s).`
             });
         }
         return null;
