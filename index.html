@@ -1347,7 +1347,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.28.5 Loaded');
+    console.log('EmerCRE V.13.28.6 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3506,25 +3506,27 @@
       });
     }
 
-    async function hydrateOystaActions(snap, opId) { // V.13.28.1: Improved forward/back propagation & timestamp fix
+    async function hydrateOystaActions(snap, opId) { // V.13.28.6: Improved forward/back propagation & serialization
       if (!snap || snap.empty || currentRole === 'usuario') return;
       if (!window._oystaHydrated) window._oystaHydrated = new Set();
       const getTs = d => d.timestamp?.toMillis ? d.timestamp.toMillis() : (typeof d.timestamp === 'number' ? d.timestamp : 0);
       
       const op = ops[opId];
       const opAddr = op ? (op.dir || op.loc) : null;
-      const allDocs = snap.docs;
+      
+      // V.13.28.6: Use mutable in-memory array to let successive back-props see changes
+      const inMemoryDocs = snap.docs.map(doc => ({ ref: doc.ref, id: doc.id, ...doc.data() }));
+      const docsToHydrate = opId ? inMemoryDocs.filter(d => d.assignedOpId === opId) : inMemoryDocs;
 
-      for (const d of snap.docs) {
-        const a = d.data();
+      for (const d of docsToHydrate) {
         let modified = false;
-        let newTexto = a.texto || "";
+        let newTexto = d.texto || "";
         const utext = newTexto.toUpperCase();
         let solvedAddr = null;
 
         // 1. Hydrate Stops (Intermediate stops with coordinates)
-        if ((utext.includes('PARADA EN TRAYECTO') || utext.includes('PUNTO INTERMEDIO') || utext.includes('SE HA DETENIDO')) && a.coords && !window._oystaHydrated.has(d.id)) {
-          const addr = await new Promise(res => reverseGeocodeWithCache(a.coords, res));
+        if ((utext.includes('PARADA EN TRAYECTO') || utext.includes('PUNTO INTERMEDIO') || utext.includes('SE HA DETENIDO')) && d.coords && !window._oystaHydrated.has(d.id)) {
+          const addr = await new Promise(res => reverseGeocodeWithCache(d.coords, res));
           if (addr) {
             window._oystaHydrated.add(d.id);
             solvedAddr = addr;
@@ -3535,9 +3537,9 @@
           }
         }
 
-        // 0. Direct "desde" hydration from coordinates [V.13.28.5]
-        if ((utext.includes('SALE') || utext.includes('REANUDA')) && a.coords && !window._oystaHydrated.has(d.id + "_desde")) {
-          const parts = (a.texto || "").split(' ');
+        // 0. Direct "desde" hydration from coordinates [V.13.28.6]
+        if ((utext.includes('SALE') || utext.includes('REANUDA')) && d.coords && !window._oystaHydrated.has(d.id + "_desde")) {
+          const parts = (d.texto || "").split(' ');
           const indicativo = parts[1];
           let addr = null;
 
@@ -3545,9 +3547,9 @@
             const upperIndicativo = indicativo.toUpperCase();
             
             const getTsLocal = (docData) => docData.timestamp?.toDate ? docData.timestamp.toDate().getTime() : (docData.timestamp || 0);
-            const myTs = getTsLocal(a);
+            const myTs = getTsLocal(d);
             
-            const prevParada = allDocs
+            const prevParada = inMemoryDocs
               .filter(doc => {
                 const da = doc.data();
                 const dat = (da.texto || "").toUpperCase();
@@ -3555,20 +3557,20 @@
                        dat.includes(upperIndicativo) &&
                        (dat.includes('PARADA EN') || dat.includes('DETENIDO EN'));
               })
-              .sort((x, y) => getTsLocal(y.data()) - getTsLocal(x.data()))[0];
+              .sort((x, y) => getTsLocal(y) - getTsLocal(x))[0];
 
             if (prevParada) {
-              const prevText = prevParada.data().texto || "";
+              const prevText = prevParada.texto || "";
               const match = prevText.match(/(?:PARADA|detenido) en (.*?)(?:\.$|$)/i);
               if (match && !match[1].toLowerCase().includes('trayecto') && !match[1].toLowerCase().includes('desconocida')) {
                 addr = match[1].trim();
-              } else if (prevParada.data().coords) {
-                addr = await new Promise(res => reverseGeocodeWithCache(prevParada.data().coords, res));
+              } else if (prevParada.coords) {
+                addr = await new Promise(res => reverseGeocodeWithCache(prevParada.coords, res));
               }
             }
 
             if (!addr) {
-              addr = await new Promise(res => reverseGeocodeWithCache(a.coords, res));
+              addr = await new Promise(res => reverseGeocodeWithCache(d.coords, res));
             }
 
             if (addr) {
@@ -3588,52 +3590,50 @@
         }
 
         if (solvedAddr) {
-          const parts = (a.texto || "").split(' ');
+          const parts = (d.texto || "").split(' ');
           const indicativo = parts[1]; // ⚡️ [INDICATIVO]
           if (indicativo && indicativo.length > 2) {
             const upperIndicativo = indicativo.toUpperCase();
 
             // 3. BACK-PROPAGATION: Update destination of PREVIOUS departure
-            const prevDeparture = allDocs
+            const prevDeparture = inMemoryDocs
               .filter(doc => {
-                const da = doc.data();
-                const dat = (da.texto || "").toUpperCase();
-                return getTs(da) < getTs(a) &&
+                const dat = (doc.texto || "").toUpperCase();
+                return getTs(doc) < getTs(d) &&
                        dat.includes(upperIndicativo) &&
                        (dat.includes('REANUDA') || dat.includes('SALE')) &&
-                       !da.editadoBack; // not already back-propagated
+                       !doc.editadoBack; // not already back-propagated
               })
-              .sort((x, y) => getTs(y.data()) - getTs(x.data()))[0];
+              .sort((x, y) => getTs(y) - getTs(x))[0];
 
             if (prevDeparture) {
-              const prData = prevDeparture.data();
-              const prText = prData.texto || '';
-              // Indicativo-aware replacement to avoid corrupting multi-resource messages
-              const regexHacia = new RegExp(`(${upperIndicativo}.*?)hacia el lugar(?: del aviso)?`, 'i');
+              const prText = prevDeparture.texto || '';
+              // Indicativo-aware replacement to avoid corrupting multi-resource messages [V.13.28.6]
+              const regexHacia = new RegExp(`(${upperIndicativo}.*?)(?:\\s+(?:hacia el lugar(?: del aviso)?|sin dirección)|(?=\\s+a las \\d{2}:\\d{2}))`, 'i');
               const upgradedText = prText.includes(solvedAddr) ? prText : prText
-                .replace(regexHacia, `$1hacia ${solvedAddr}`)
-                .replace(new RegExp(`(${upperIndicativo}.*?)sin dirección`, 'i'), `$1${solvedAddr}`);
+                .replace(regexHacia, `$1 hacia ${solvedAddr}`);
               
               if (upgradedText !== prText) {
+                prevDeparture.texto = upgradedText;
+                prevDeparture.editadoBack = true;
+                prevDeparture.hydrated = true;
                 updateDoc(prevDeparture.ref, { texto: upgradedText, hydrated: true, editadoBack: true }).catch(e => console.error('[Oysta] Back-prop error:', e));
               }
             }
 
-            // 4. FORWARD-PROPAGATION: Update origin of NEXT departure [V.13.28.2]
-            const nextDeparture = allDocs
+            // 4. FORWARD-PROPAGATION: Update origin of NEXT departure [V.13.28.6]
+            const nextDeparture = inMemoryDocs
               .filter(doc => {
-                const da = doc.data();
-                const dat = (da.texto || "").toUpperCase();
-                return getTs(da) > getTs(a) &&
+                const dat = (doc.texto || "").toUpperCase();
+                return getTs(doc) > getTs(d) &&
                        dat.includes(upperIndicativo) &&
                        (dat.includes('REANUDA') || dat.includes('SALE')) &&
-                       !da.editadoForward;
+                       !doc.editadoForward;
               })
-              .sort((x, y) => getTs(x.data()) - getTs(y.data()))[0];
+              .sort((x, y) => getTs(x) - getTs(y))[0];
 
             if (nextDeparture) {
-              const nxData = nextDeparture.data();
-              const nxText = nxData.texto || '';
+              const nxText = nextDeparture.texto || '';
               // Transform "REANUDA marcha hacia..." into "SALE desde [A] hacia..."
               const regexReanuda = new RegExp(`(${upperIndicativo}.*?)REANUDA marcha`, 'i');
               const regexDesde = new RegExp(`(${upperIndicativo}.*?)desde (.*?)(?= hacia|$)`, 'i');
@@ -3646,6 +3646,9 @@
               }
 
               if (upgradedText !== nxText) {
+                nextDeparture.texto = upgradedText;
+                nextDeparture.editadoForward = true;
+                nextDeparture.hydrated = true;
                 updateDoc(nextDeparture.ref, { texto: upgradedText, hydrated: true, editadoForward: true }).catch(e => console.error('[Oysta] Forward-prop error:', e));
               }
             }
@@ -3653,7 +3656,7 @@
         }
         
         // 2. Hydrate "SALE" or "REANUDA" with missing destination address (op address fallback)
-        if ((utext.includes('SIN DIRECCIÓN') || utext.includes('HACIA EL LUGAR')) && opAddr && !window._oystaHydrated.has(d.id + "_sale") && !a.editadoBack) {
+        if ((utext.includes('SIN DIRECCIÓN') || utext.includes('HACIA EL LUGAR')) && opAddr && !window._oystaHydrated.has(d.id + "_sale") && !d.editadoBack) {
           const oldTexto = newTexto;
           newTexto = newTexto.replace(/sin dirección/i, opAddr)
                             .replace(/hacia el lugar(?: del aviso)?/i, "hacia " + opAddr);
@@ -3664,6 +3667,8 @@
         }
 
         if (modified) {
+          d.texto = newTexto;
+          d.hydrated = true;
           updateDoc(d.ref, { texto: newTexto, hydrated: true }).catch(e => console.error("[Oysta] Hydration error:", e));
         }
       }
@@ -7636,7 +7641,7 @@ ${dataContext}
       });
     }
 
-    async function hydrateOystaComments(snap) { // V.13.28.2: Improved forward/back propagation & SALE conversion
+    async function hydrateOystaComments(snap) { // V.13.28.6: Improved forward/back propagation & memory serialization
       if (!snap || snap.empty || currentRole === 'usuario') return; 
       if (!window._oystaHydrated) window._oystaHydrated = new Set();
       for (const d of snap.docs) {
@@ -7645,7 +7650,8 @@ ${dataContext}
         const iAddr = data.direccion || null;
         let modified = false;
         
-        const newComms = await Promise.all(comments.map(async (c, idx) => {
+        for (let idx = 0; idx < comments.length; idx++) {
+          const c = comments[idx];
           let itemModified = false;
           let newTexto = c.texto || "";
           const utext = newTexto.toUpperCase();
@@ -7721,10 +7727,9 @@ ${dataContext}
                 if (prevC.editadoBack) continue;
                 const prevUText = (prevC.texto || "").toUpperCase();
                 if (prevUText.includes(upperIndicativo) && (prevUText.includes('REANUDA') || prevUText.includes('SALE'))) {
-                  const regexHacia = new RegExp(`(${upperIndicativo}.*?)hacia el lugar(?: del aviso)?`, 'i');
+                  const regexHacia = new RegExp(`(${upperIndicativo}.*?)(?:\\s+(?:hacia el lugar(?: del aviso)?|sin dirección)|(?=\\s+a las \\d{2}:\\d{2}))`, 'i');
                   let upgraded = prevC.texto.includes(solvedAddr) ? prevC.texto : prevC.texto
-                    .replace(regexHacia, `$1hacia ${solvedAddr}`)
-                    .replace(new RegExp(`(${upperIndicativo}.*?)sin dirección`, 'i'), `$1${solvedAddr}`);
+                    .replace(regexHacia, `$1 hacia ${solvedAddr}`);
 
                   if (upgraded !== prevC.texto) {
                     prevC.texto = upgraded;
@@ -7776,13 +7781,13 @@ ${dataContext}
           }
 
           if (itemModified) {
+            c.texto = newTexto;
+            c.hydrated = true;
             modified = true;
-            return { ...c, texto: newTexto, hydrated: true };
           }
-          return c;
-        }));
+        }
         
-        if (modified) updateDoc(d.ref, { comentarios: newComms }).catch(e => console.error("[Oysta] Hydration error:", e));
+        if (modified) updateDoc(d.ref, { comentarios: comments }).catch(e => console.error("[Oysta] Hydration error:", e));
       }
     }
 
@@ -14779,7 +14784,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.28.5
+          Versión V.13.28.6
         </div>
       </div>
 
@@ -15208,7 +15213,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.28.5
+          Versión V.13.28.6
         </div>
       </div>
 
@@ -16127,7 +16132,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.28.5
+            Versión V.13.28.6
           </div>
         </div>
         <div class="field" id="j-prov-row">
