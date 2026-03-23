@@ -1347,7 +1347,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.28.3 Loaded');
+    console.log('EmerCRE V.13.28.4 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3535,14 +3535,43 @@
           }
         }
 
-        // 0. Direct "desde" hydration from coordinates [V.13.28.2]
+        // 0. Direct "desde" hydration from coordinates [V.13.28.4]
         if ((utext.includes('SALE') || utext.includes('REANUDA')) && a.coords && !window._oystaHydrated.has(d.id + "_desde")) {
-          const addr = await new Promise(res => reverseGeocodeWithCache(a.coords, res));
-          if (addr) {
-            const parts = (a.texto || "").split(' ');
-            const indicativo = parts[1];
-            if (indicativo) {
-              const upperIndicativo = indicativo.toUpperCase();
+          const parts = (a.texto || "").split(' ');
+          const indicativo = parts[1];
+          let addr = null;
+
+          if (indicativo) {
+            const upperIndicativo = indicativo.toUpperCase();
+            
+            const getTsLocal = (docData) => docData.timestamp?.toDate ? docData.timestamp.toDate().getTime() : (docData.timestamp || 0);
+            const myTs = getTsLocal(a);
+            
+            const prevParada = allDocs
+              .filter(doc => {
+                const da = doc.data();
+                const dat = (da.texto || "").toUpperCase();
+                return getTsLocal(da) < myTs &&
+                       dat.includes(upperIndicativo) &&
+                       (dat.includes('PARADA EN') || dat.includes('DETENIDO EN'));
+              })
+              .sort((x, y) => getTsLocal(y.data()) - getTsLocal(x.data()))[0];
+
+            if (prevParada) {
+              const prevText = prevParada.data().texto || "";
+              const match = prevText.match(/(?:PARADA|detenido) en (.*?)(?:$|\.)/i);
+              if (match && !match[1].toLowerCase().includes('trayecto') && !match[1].toLowerCase().includes('desconocida')) {
+                addr = match[1].trim();
+              } else if (prevParada.data().coords) {
+                addr = await new Promise(res => reverseGeocodeWithCache(prevParada.data().coords, res));
+              }
+            }
+
+            if (!addr) {
+              addr = await new Promise(res => reverseGeocodeWithCache(a.coords, res));
+            }
+
+            if (addr) {
               window._oystaHydrated.add(d.id + "_desde");
               const regexReanuda = new RegExp(`(${upperIndicativo}.*?)REANUDA marcha`, 'i');
               const regexDesde = new RegExp(`(${upperIndicativo}.*?)desde ([^hacia\\n]+)`, 'i');
@@ -7635,14 +7664,36 @@ ${dataContext}
             }
           }
 
-          // 0. Direct "desde" hydration from coordinates [V.13.28.2]
+          // 0. Direct "desde" hydration from coordinates [V.13.28.4]
           if ((utext.includes('SALE') || utext.includes('REANUDA')) && c.coords && !window._oystaHydrated.has((c.timestamp||0) + "_desde")) {
-            const addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
-            if (addr) {
-              const parts = (c.texto || "").split(' ');
-              const indicativo = parts[1];
-              if (indicativo) {
-                const upperIndicativo = indicativo.toUpperCase();
+            const parts = (c.texto || "").split(' ');
+            const indicativo = parts[1];
+            let addr = null;
+
+            if (indicativo) {
+              const upperIndicativo = indicativo.toUpperCase();
+              
+              const prevParada = comments.slice(idx + 1).find(prevC => {
+                const dat = (prevC.texto || "").toUpperCase();
+                return dat.includes(upperIndicativo) &&
+                       (dat.includes('PARADA EN') || dat.includes('DETENIDO EN'));
+              });
+
+              if (prevParada) {
+                const prevText = prevParada.texto || "";
+                const match = prevText.match(/(?:PARADA|detenido) en (.*?)(?:$|\.)/i);
+                if (match && !match[1].toLowerCase().includes('trayecto') && !match[1].toLowerCase().includes('desconocida')) {
+                  addr = match[1].trim();
+                } else if (prevParada.coords) {
+                  addr = await new Promise(res => reverseGeocodeWithCache(prevParada.coords, res));
+                }
+              }
+
+              if (!addr) {
+                addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
+              }
+
+              if (addr) {
                 window._oystaHydrated.add((c.timestamp||0) + "_desde");
                 const regexReanuda = new RegExp(`(${upperIndicativo}.*?)REANUDA marcha`, 'i');
                 const regexDesde = new RegExp(`(${upperIndicativo}.*?)desde (.*?)(?= hacia|$)`, 'i');
@@ -14728,7 +14779,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.28.3
+          Versión V.13.28.4
         </div>
       </div>
 
@@ -15157,7 +15208,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.28.3
+          Versión V.13.28.4
         </div>
       </div>
 
@@ -16076,7 +16127,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.28.3
+            Versión V.13.28.4
           </div>
         </div>
         <div class="field" id="j-prov-row">
