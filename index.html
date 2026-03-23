@@ -1347,7 +1347,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.28.8 Loaded');
+    console.log('EmerCRE V.13.28.9 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3537,7 +3537,15 @@
           }
         }
 
-        // 0. Direct "desde" hydration from coordinates [V.13.28.6]
+        // 1.5 Extract solvedAddr from existing stops if not already set [V.13.28.9]
+        if (!solvedAddr && (utext.includes('PARADA EN') || utext.includes('DETENIDO EN'))) {
+          const match = newTexto.match(/(?:PARADA|detenido) en (.*?)(?:\.$|$)/i);
+          if (match && !match[1].toLowerCase().includes('trayecto') && !match[1].toLowerCase().includes('desconocida')) {
+            solvedAddr = match[1].trim();
+          }
+        }
+
+        // 0. Direct "desde" hydration from coordinates [V.13.28.9]
         if ((utext.includes('SALE') || utext.includes('REANUDA')) && d.coords && !window._oystaHydrated.has(d.id + "_desde")) {
           const parts = (d.texto || "").split(' ');
           const indicativo = parts[1];
@@ -7666,6 +7674,14 @@ ${dataContext}
                 .replace(/punto intermedio/i, "PARADA en " + addr)
                 .replace(/se ha detenido en el trayecto/i, "detenido en " + addr);
               itemModified = true;
+            }
+          }
+
+          // 1.5 Extract solvedAddr from existing stops if not already set [V.13.28.9]
+          if (!solvedAddr && (utext.includes('PARADA EN') || utext.includes('DETENIDO EN'))) {
+            const match = newTexto.match(/(?:PARADA|detenido) en (.*?)(?:\.$|$)/i);
+            if (match && !match[1].toLowerCase().includes('trayecto') && !match[1].toLowerCase().includes('desconocida')) {
+              solvedAddr = match[1].trim();
             }
           }
 
@@ -14798,7 +14814,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.28.8
+          Versión V.13.28.9
         </div>
       </div>
 
@@ -15227,7 +15243,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.28.8
+          Versión V.13.28.9
         </div>
       </div>
 
@@ -16146,7 +16162,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.28.8
+            Versión V.13.28.9
           </div>
         </div>
         <div class="field" id="j-prov-row">
