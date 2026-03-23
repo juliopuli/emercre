@@ -1347,7 +1347,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.28.6 Loaded');
+    console.log('EmerCRE V.13.28.8 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3551,9 +3551,8 @@
             
             const prevParada = inMemoryDocs
               .filter(doc => {
-                const da = doc.data();
-                const dat = (da.texto || "").toUpperCase();
-                return getTsLocal(da) < myTs &&
+                const dat = (doc.texto || "").toUpperCase();
+                return getTsLocal(doc) < myTs &&
                        dat.includes(upperIndicativo) &&
                        (dat.includes('PARADA EN') || dat.includes('DETENIDO EN'));
               })
@@ -7678,12 +7677,16 @@ ${dataContext}
 
             if (indicativo) {
               const upperIndicativo = indicativo.toUpperCase();
+              const myTs = c.timestamp || 0;
               
-              const prevParada = comments.slice(idx + 1).find(prevC => {
-                const dat = (prevC.texto || "").toUpperCase();
-                return dat.includes(upperIndicativo) &&
-                       (dat.includes('PARADA EN') || dat.includes('DETENIDO EN'));
-              });
+              const prevParada = comments
+                .filter(prevC => {
+                  const dat = (prevC.texto || "").toUpperCase();
+                  return (prevC.timestamp || 0) < myTs &&
+                         dat.includes(upperIndicativo) &&
+                         (dat.includes('PARADA EN') || dat.includes('DETENIDO EN'));
+                })
+                .sort((x, y) => (y.timestamp || 0) - (x.timestamp || 0))[0];
 
               if (prevParada) {
                 const prevText = prevParada.texto || "";
@@ -7720,49 +7723,60 @@ ${dataContext}
             const indicativo = parts[1];
             if (indicativo && indicativo.length > 2) {
               const upperIndicativo = indicativo.toUpperCase();
+              const myTs = c.timestamp || 0;
               
               // 3. BACK-PROPAGATION: Update destination of PREVIOUS departure
-              for (let k = idx + 1; k < comments.length; k++) {
-                const prevC = comments[k];
-                if (prevC.editadoBack) continue;
-                const prevUText = (prevC.texto || "").toUpperCase();
-                if (prevUText.includes(upperIndicativo) && (prevUText.includes('REANUDA') || prevUText.includes('SALE'))) {
-                  const regexHacia = new RegExp(`(${upperIndicativo}.*?)(?:\\s+(?:hacia el lugar(?: del aviso)?|sin dirección)|(?=\\s+a las \\d{2}:\\d{2}))`, 'i');
-                  let upgraded = prevC.texto.includes(solvedAddr) ? prevC.texto : prevC.texto
-                    .replace(regexHacia, `$1 hacia ${solvedAddr}`);
+              const prevDeparture = comments
+                .filter(prevC => {
+                  const dat = (prevC.texto || "").toUpperCase();
+                  return (prevC.timestamp || 0) < myTs &&
+                         dat.includes(upperIndicativo) &&
+                         (dat.includes('REANUDA') || dat.includes('SALE')) &&
+                         !prevC.editadoBack;
+                })
+                .sort((x, y) => (y.timestamp || 0) - (x.timestamp || 0))[0];
 
-                  if (upgraded !== prevC.texto) {
-                    prevC.texto = upgraded;
-                    prevC.editadoBack = true;
-                    prevC.hydrated = true;
-                    modified = true;
-                  }
-                  break;
+              if (prevDeparture) {
+                const prevC = prevDeparture;
+                const regexHacia = new RegExp(`(${upperIndicativo}.*?)(?:\\s+(?:hacia el lugar(?: del aviso)?|sin dirección)|(?=\\s+a las \\d{2}:\\d{2}))`, 'i');
+                let upgraded = prevC.texto.includes(solvedAddr) ? prevC.texto : prevC.texto
+                  .replace(regexHacia, `$1 hacia ${solvedAddr}`);
+
+                if (upgraded !== prevC.texto) {
+                  prevC.texto = upgraded;
+                  prevC.editadoBack = true;
+                  prevC.hydrated = true;
+                  modified = true;
                 }
               }
 
-              // 4. FORWARD-PROPAGATION: Update origin of NEXT departure [V.13.28.2]
-              for (let k = idx - 1; k >= 0; k--) {
-                const nextC = comments[k];
-                if (nextC.editadoForward) continue;
-                const nextUText = (nextC.texto || "").toUpperCase();
-                if (nextUText.includes(upperIndicativo) && (nextUText.includes('REANUDA') || nextUText.includes('SALE'))) {
-                   const regexReanuda = new RegExp(`(${upperIndicativo}.*?)REANUDA marcha`, 'i');
-                   const regexDesde = new RegExp(`(${upperIndicativo}.*?)desde (.*?)(?= hacia|$)`, 'i');
-                   let upgraded = nextC.texto
-                    .replace(regexReanuda, `$1SALE desde ${solvedAddr}`)
-                    .replace(regexDesde, `$1desde ${solvedAddr}`);
+              // 4. FORWARD-PROPAGATION: Update origin of NEXT departure [V.13.28.8]
+              const nextDeparture = comments
+                .filter(nextC => {
+                  const dat = (nextC.texto || "").toUpperCase();
+                  return (nextC.timestamp || 0) > myTs &&
+                         dat.includes(upperIndicativo) &&
+                         (dat.includes('REANUDA') || dat.includes('SALE')) &&
+                         !nextC.editadoForward;
+                })
+                .sort((x, y) => (x.timestamp || 0) - (y.timestamp || 0))[0];
 
-                  if (!upgraded.includes(`desde ${solvedAddr}`) && nextC.texto.includes('SALE')) {
-                    upgraded = upgraded.replace(new RegExp(`(${upperIndicativo}.*?)SALE`, 'i'), `$1SALE desde ${solvedAddr}`);
-                  }
-                  if (upgraded !== nextC.texto) {
-                    nextC.texto = upgraded;
-                    nextC.editadoForward = true;
-                    nextC.hydrated = true;
-                    modified = true;
-                  }
-                  break;
+              if (nextDeparture) {
+                const nextC = nextDeparture;
+                const regexReanuda = new RegExp(`(${upperIndicativo}.*?)REANUDA marcha`, 'i');
+                const regexDesde = new RegExp(`(${upperIndicativo}.*?)desde (.*?)(?= hacia|$)`, 'i');
+                let upgraded = nextC.texto
+                 .replace(regexReanuda, `$1SALE desde ${solvedAddr}`)
+                 .replace(regexDesde, `$1desde ${solvedAddr}`);
+
+                if (!upgraded.includes(`desde ${solvedAddr}`) && nextC.texto.includes('SALE')) {
+                  upgraded = upgraded.replace(new RegExp(`(${upperIndicativo}.*?)SALE`, 'i'), `$1SALE desde ${solvedAddr}`);
+                }
+                if (upgraded !== nextC.texto) {
+                  nextC.texto = upgraded;
+                  nextC.editadoForward = true;
+                  nextC.hydrated = true;
+                  modified = true;
                 }
               }
             }
@@ -16132,7 +16146,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.28.6
+            Versión V.13.28.8
           </div>
         </div>
         <div class="field" id="j-prov-row">
