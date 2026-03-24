@@ -1254,7 +1254,7 @@
 
           const content = createRenfeAVEMarkerContent(t);
 
-          // V.13.29.0: Doble click para crear pinchito de búsqueda
+          // V.14.0.0: Doble click para crear pinchito de búsqueda
           content.addEventListener('dblclick', (e) => {
             e.stopPropagation();
             window.onMapClickPersistentPin({ latLng: new google.maps.LatLng(pos.lat, pos.lng) }, 'eme');
@@ -1353,7 +1353,7 @@
       });
     }
 
-    console.log('EmerCRE V.13.29.0 Loaded');
+    console.log('EmerCRE V.14.0.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -11112,6 +11112,8 @@ ${dataContext}
       flex-direction: column;
       flex-shrink: 0;
       border-right: 1px solid var(--border-mid);
+      height: 100%;
+      overflow: hidden;
     }
 
     .chat-sidebar-head {
@@ -11135,6 +11137,7 @@ ${dataContext}
       overflow-y: auto;
       display: flex;
       flex-direction: column;
+      min-height: 0;
     }
 
     .chat-list::-webkit-scrollbar {
@@ -12093,6 +12096,7 @@ ${dataContext}
     .dp-timeline {
       flex: 1;
       overflow-y: auto;
+      min-height: 0;
       padding: 12px 16px;
     }
 
@@ -14820,7 +14824,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.29.0
+          Versión V.14.0.0
         </div>
       </div>
 
@@ -15249,7 +15253,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.13.29.0
+          Versión V.14.0.0
         </div>
       </div>
 
@@ -15282,7 +15286,7 @@ ${dataContext}
           </div>
         </div>
 
-        <div class="ops-list" id="preventivos-intervenciones-list" style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
+        <div class="ops-list" id="preventivos-intervenciones-list" style="flex:1; display:flex; flex-direction:column; overflow:hidden; min-height:0;">
           <div id="prev-intervenciones-container" style="flex:1; overflow-y:auto;"></div>
           <div class="empty-msg" id="empty-msg-prev-int" style="display:none; padding:40px 20px;">
             <div style="font-size:28px;opacity:0.4">📋</div>
@@ -16168,7 +16172,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.13.29.0
+            Versión V.14.0.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
