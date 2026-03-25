@@ -945,24 +945,35 @@
         }
         
         // V.14.4.0: Gestión de capas KML e itinerarios
+        // V.14.5.1: Recuperación dinámica en Preventivos
         list.forEach(t => {
-          if (t.rutaMapa && !semanaSantaKmlLayers[t.id]) {
-            const kmlEme = new google.maps.KmlLayer({
-              url: t.rutaMapa,
-              map: mapEmergencias,
-              preserveViewport: true,
-              suppressInfoWindows: true
-            });
-            let kmlPrev = null;
-            if (mapPreventivos) {
-              kmlPrev = new google.maps.KmlLayer({
+          if (t.rutaMapa) {
+            if (!semanaSantaKmlLayers[t.id]) {
+              const kmlEme = new google.maps.KmlLayer({
+                url: t.rutaMapa,
+                map: mapEmergencias,
+                preserveViewport: true,
+                suppressInfoWindows: true
+              });
+              let kmlPrev = null;
+              if (mapPreventivos) {
+                kmlPrev = new google.maps.KmlLayer({
+                  url: t.rutaMapa,
+                  map: mapPreventivos,
+                  preserveViewport: true,
+                  suppressInfoWindows: true
+                });
+              }
+              semanaSantaKmlLayers[t.id] = { kmlEme, kmlPrev };
+            } else if (!semanaSantaKmlLayers[t.id].kmlPrev && mapPreventivos) {
+              // Recuperar si ya existía kmlEme pero no kmlPrev
+              semanaSantaKmlLayers[t.id].kmlPrev = new google.maps.KmlLayer({
                 url: t.rutaMapa,
                 map: mapPreventivos,
                 preserveViewport: true,
                 suppressInfoWindows: true
               });
             }
-            semanaSantaKmlLayers[t.id] = { kmlEme, kmlPrev };
           }
         });
 
@@ -1045,7 +1056,7 @@
         const ms = semanaSantaMarkers[markerKey];
         if (ms.m) ms.m.position = pos;
 
-        // V.14.5.0: Inyección dinámica si mapPreventivos aparece más tarde
+        // V.14.5.1: Inyección dinámica si mapPreventivos aparece más tarde
         if (!ms.mPrev && mapPreventivos) {
           const contentPrev = ms.m.content.cloneNode(true);
           ms.mPrev = new google.maps.marker.AdvancedMarkerElement({
@@ -1109,7 +1120,7 @@
         if (mPrev) mPrev.addListener('click', () => info.open(mapPreventivos, mPrev));
 
         // V.14.2.1: Guardar ambos para limpieza correcta
-        // V.14.5.0: Guardar info para re-sincronización
+        // V.14.5.1: Guardar info para re-sincronización
         semanaSantaMarkers[markerKey] = { m, mPrev, info };
       }
     }
@@ -6799,6 +6810,12 @@ ${dataContext}
           streetViewControl: false,
           fullscreenControl: false
         });
+
+        // V.14.5.1: Forzar sincronización inmediata si la capa está activa
+        if (window.semanaSantaLayerEnabled) {
+          console.log("[SS] Sincronizando capa en nuevo mapa Preventivos");
+          window.cargarSemanaSantaData(true);
+        }
 
         // V.13.8.1: Guardar estado al mover el mapa
         mapPreventivos.addListener('idle', () => {
@@ -14449,7 +14466,7 @@ ${dataContext}
       border-color: #e67e22;
     }
 
-    /* ═══════ SEMANA SANTA MARKERS (V.14.5.0) ═══════ */
+    /* ═══════ SEMANA SANTA MARKERS (V.14.5.1) ═══════ */
     .ss-marker {
       cursor: pointer;
       display: flex;
@@ -14487,12 +14504,12 @@ ${dataContext}
       margin-bottom: 6px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.3);
       border: 1px solid rgba(255,255,255,0.2);
-      opacity: 0; /* V.14.5.0 */
+      opacity: 0; /* V.14.5.1 */
       transition: opacity 0.2s;
       pointer-events: none;
     }
     .ss-marker:hover .ss-marker-label {
-      opacity: 1; /* V.14.5.0 */
+      opacity: 1; /* V.14.5.1 */
     }
 
     /* V.12.4.1: Expanded marker style */
@@ -15272,7 +15289,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.4.2
+          Versión V.14.5.1
         </div>
       </div>
 
@@ -15743,7 +15760,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.4.2
+          Versión V.14.5.1
         </div>
       </div>
 
