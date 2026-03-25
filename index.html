@@ -158,9 +158,10 @@
     let aisRefreshInterval = null;
     let aisShipsCache = []; // V.13.5.2: Caché para búsqueda local
     let aisSearchQuery = ''; // V.13.5.2: Consulta de búsqueda AIS
-    let semanaSantaMarkers = {}; // V.14.2.0
-    let semanaSantaLayerEnabled = false; // V.14.2.0
-    let semanaSantaRefreshInterval = null; // V.14.2.0
+    let semanaSantaMarkers = {}; // V.14.2.1: Ahora almacena { eme, prev }
+    let semanaSantaLayerEnabled = false; // V.14.2.1
+    let semanaSantaRefreshInterval = null; // V.14.2.1
+    let semanaSantaDay = 2; // V.14.2.1: Día seleccionado (0-9)
 
 
     let autocompleteOrigin = null;
@@ -879,8 +880,11 @@
           clearInterval(semanaSantaRefreshInterval);
           semanaSantaRefreshInterval = null;
         }
-        // Limpiar marcadores
-        Object.values(semanaSantaMarkers).forEach(m => m.setMap(null));
+        // V.14.2.1: Limpiar marcadores en ambos mapas
+        Object.values(semanaSantaMarkers).forEach(ms => {
+          if (ms.m) ms.m.setMap(null);
+          if (ms.mPrev) ms.mPrev.setMap(null);
+        });
         semanaSantaMarkers = {};
         const st = document.getElementById('semanasanta-status-count');
         if (st) st.textContent = "Desconectado";
@@ -901,9 +905,25 @@
 
       try {
         const getSS = httpsCallable(functions, 'getSemanaSantaData');
-        const res = await getSS({ dayId: 1 }); // Por ahora ID 1 como pidió el usuario
+        
+        // V.14.2.1: Usar día dinámico del selector
+        const daySelect = document.getElementById('sel-semanasanta-day');
+        if (daySelect) semanaSantaDay = parseInt(daySelect.value);
+        
+        const res = await getSS({ dayId: semanaSantaDay });
         const list = res.data?.geo || [];
         
+        // V.14.2.1: Limpiar los que ya no están en la lista (si cambiamos de día)
+        const currentIds = list.map(t => t.id);
+        Object.keys(semanaSantaMarkers).forEach(id => {
+          if (!currentIds.includes(parseInt(id))) {
+            const ms = semanaSantaMarkers[id];
+            if (ms.m) ms.m.setMap(null);
+            if (ms.mPrev) ms.mPrev.setMap(null);
+            delete semanaSantaMarkers[id];
+          }
+        });
+
         list.forEach(t => {
           updateSemanaSantaMarker(t);
         });
@@ -924,7 +944,9 @@
       if (isNaN(pos.lat) || isNaN(pos.lng)) return;
 
       if (semanaSantaMarkers[id]) {
-        semanaSantaMarkers[id].position = pos;
+        const ms = semanaSantaMarkers[id];
+        if (ms.m) ms.m.position = pos;
+        if (ms.mPrev) ms.mPrev.position = pos;
       } else {
         const content = document.createElement('div');
         content.className = 'ss-marker';
@@ -941,7 +963,7 @@
           title: t.nombre
         });
 
-        // Duplicar en preventivos si existe el mapa
+        // V.14.2.1: Duplicar en preventivos si existe el mapa
         let mPrev = null;
         if (window.mapPreventivos) {
            mPrev = new google.maps.marker.AdvancedMarkerElement({
@@ -960,8 +982,8 @@
                 <b style="font-size:14px; color:#7b1fa2;">${t.nombre}</b>
               </div>
               <div style="font-size:12px; margin-bottom:4px;">📍 <b>Calle:</b> ${t.calle || 'No disponible'}</div>
-              <div style="font-size:11px; color:#666;">🕒 <b>Salida:</b> ${new Date(t.salida).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
-              <div style="font-size:11px; color:#666;">🏠 <b>Encierro:</b> ${new Date(t.encierro).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+              <div style="font-size:11px; color:#666;">🕒 <b>Salida:</b> ${t.salida ? new Date(t.salida).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '---'}</div>
+              <div style="font-size:11px; color:#666;">🏠 <b>Encierro:</b> ${t.encierro ? new Date(t.encierro).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '---'}</div>
             </div>
           `
         });
@@ -969,9 +991,8 @@
         m.addListener('click', () => info.open(mapEmergencias, m));
         if (mPrev) mPrev.addListener('click', () => info.open(window.mapPreventivos, mPrev));
 
-        semanaSantaMarkers[id] = m;
-        // Nota: para simplificar limpieza, guardamos solo uno en el objeto de markers globales pero ambos se limpian al apagar
-        // Si queremos ser rigurosos, deberíamos guardarlos en un array
+        // V.14.2.1: Guardar ambos para limpieza correcta
+        semanaSantaMarkers[id] = { m: m, mPrev: mPrev };
       }
     }
 
@@ -15122,7 +15143,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.2.0
+          Versión V.14.2.1
         </div>
       </div>
 
@@ -15246,7 +15267,7 @@ ${dataContext}
             </div>
           </div>
 
-          <!-- Semana Santa Panel (V.14.2.0) -->
+          <!-- Semana Santa Panel (V.14.2.1) -->
           <div id="map-semanasanta-panel" class="map-ais-panel">
             <div class="panel-header" style="background: #7b1fa2;">
               <span class="panel-title">Semana Santa Málaga</span>
@@ -15254,7 +15275,22 @@ ${dataContext}
             </div>
             <div style="padding: 10px; display: flex; flex-direction: column; gap: 8px;">
               <div style="font-size: 11px; color: var(--text-3); margin-bottom: 2px;">
-                Geolocalización en tiempo real de Cofradías (API El Penitente).
+                Geolocalización en tiempo real de Cofradías.
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px;">
+                <label style="font-size: 9px; font-weight: 700; color: #7b1fa2; text-transform: uppercase; margin-left: 4px;">Día de Semana Santa</label>
+                <select id="sel-semanasanta-day" style="padding: 6px; border-radius: 6px; border: 1px solid #7b1fa233; font-size: 11px; background: #fff;" onchange="const d=parseInt(this.value); const s2=document.getElementById('sel-semanasanta-day-prev'); if(s2)s2.value=d; if(semanaSantaLayerEnabled) cargarSemanaSantaData(true)">
+                  <option value="0">Viernes de Dolores (27/03)</option>
+                  <option value="1">Sábado de Pasión (28/03)</option>
+                  <option value="2" selected>Domingo de Ramos (29/03)</option>
+                  <option value="3">Lunes Santo (30/03)</option>
+                  <option value="4">Martes Santo (31/03)</option>
+                  <option value="5">Miércoles Santo (01/04)</option>
+                  <option value="6">Jueves Santo (02/04)</option>
+                  <option value="7">Viernes Santo (03/04)</option>
+                  <option value="8">Sábado Santo (04/04)</option>
+                  <option value="9">Domingo de Resurrección (05/04)</option>
+                </select>
               </div>
               <div class="drawer-notif-toggle" style="padding: 10px; cursor: pointer; border-radius: 8px; background: rgba(123, 31, 162, 0.05);" onclick="toggleSemanaSantaLayer()">
                 <div class="drawer-notif-info">
@@ -15578,7 +15614,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.2.0
+          Versión V.14.2.1
         </div>
       </div>
 
@@ -15684,7 +15720,7 @@ ${dataContext}
               <button onclick="toggleMapSearch('prev')">✕</button>
             </div>
           </div>
-          <!-- Semana Santa Panel Prev (V.14.2.0) -->
+          <!-- Semana Santa Panel Prev (V.14.2.1) -->
           <div id="map-semanasanta-panel-prev" class="map-ais-panel">
             <div class="panel-header" style="background: #7b1fa2;">
               <span class="panel-title">Semana Santa Málaga</span>
@@ -15692,7 +15728,22 @@ ${dataContext}
             </div>
             <div style="padding: 10px; display: flex; flex-direction: column; gap: 8px;">
               <div style="font-size: 11px; color: var(--text-3); margin-bottom: 2px;">
-                Geolocalización en tiempo real de Cofradías (API El Penitente).
+                Geolocalización en tiempo real de Cofradías.
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px;">
+                <label style="font-size: 9px; font-weight: 700; color: #7b1fa2; text-transform: uppercase; margin-left: 4px;">Día de Semana Santa</label>
+                <select id="sel-semanasanta-day-prev" style="padding: 6px; border-radius: 6px; border: 1px solid #7b1fa233; font-size: 11px; background: #fff;" onchange="const d=parseInt(this.value); const s1=document.getElementById('sel-semanasanta-day'); if(s1)s1.value=d; if(semanaSantaLayerEnabled) cargarSemanaSantaData(true)">
+                  <option value="0">Viernes de Dolores (27/03)</option>
+                  <option value="1">Sábado de Pasión (28/03)</option>
+                  <option value="2" selected>Domingo de Ramos (29/03)</option>
+                  <option value="3">Lunes Santo (30/03)</option>
+                  <option value="4">Martes Santo (31/03)</option>
+                  <option value="5">Miércoles Santo (01/04)</option>
+                  <option value="6">Jueves Santo (02/04)</option>
+                  <option value="7">Viernes Santo (03/04)</option>
+                  <option value="8">Sábado Santo (04/04)</option>
+                  <option value="9">Domingo de Resurrección (05/04)</option>
+                </select>
               </div>
               <div class="drawer-notif-toggle" style="padding: 10px; cursor: pointer; border-radius: 8px; background: rgba(123, 31, 162, 0.05);" onclick="toggleSemanaSantaLayer()">
                 <div class="drawer-notif-info">
@@ -17042,6 +17093,35 @@ ${dataContext}
         elDate.textContent = `${capitalizedWeekday}, ${day}/${month}/${year}`;
       }
     }, 1000);
+
+    // V.14.2.1: Auto-seleccionar día de Semana Santa según fecha actual (Málaga 2026)
+    setTimeout(() => {
+      const now = new Date();
+      const month = now.getMonth();
+      const day = now.getDate();
+      const year = now.getFullYear();
+      let autoDay = 2; // Por defecto Domingo de Ramos
+      
+      if (year === 2026 && month === 2) { // Marzo
+        if (day === 27) autoDay = 0;
+        else if (day === 28) autoDay = 1;
+        else if (day === 29) autoDay = 2;
+        else if (day === 30) autoDay = 3;
+        else if (day === 31) autoDay = 4;
+      } else if (year === 2026 && month === 3) { // Abril
+        if (day === 1) autoDay = 5;
+        else if (day === 2) autoDay = 6;
+        else if (day === 3) autoDay = 7;
+        else if (day === 4) autoDay = 8;
+        else if (day === 5) autoDay = 9;
+      }
+      
+      const daySelect = document.getElementById('sel-semanasanta-day');
+      const daySelectPrev = document.getElementById('sel-semanasanta-day-prev');
+      if (daySelect) daySelect.value = autoDay;
+      if (daySelectPrev) daySelectPrev.value = autoDay;
+      semanaSantaDay = autoDay;
+    }, 2000);
 
   </script>
 </body>
