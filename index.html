@@ -159,7 +159,7 @@
     let aisShipsCache = []; // V.13.5.2: Caché para búsqueda local
     let aisSearchQuery = ''; // V.13.5.2: Consulta de búsqueda AIS
     let semanaSantaMarkers = {}; // V.14.2.1: Ahora almacena { eme, prev }
-    let semanaSantaLayerEnabled = false; // V.14.2.1
+    window.semanaSantaLayerEnabled = false; // V.14.2.1: Expuesto a window
     let semanaSantaRefreshInterval = null; // V.14.2.1
     let semanaSantaDay = 2; // V.14.2.1: Día seleccionado (0-9)
 
@@ -867,12 +867,12 @@
       chk.checked = turnOn;
       if (chkPrev) chkPrev.checked = turnOn;
       
-      semanaSantaLayerEnabled = turnOn;
+      window.semanaSantaLayerEnabled = turnOn;
 
-      if (semanaSantaLayerEnabled) {
-        cargarSemanaSantaData(true);
+      if (window.semanaSantaLayerEnabled) {
+        window.cargarSemanaSantaData(true);
         if (!semanaSantaRefreshInterval) {
-          semanaSantaRefreshInterval = setInterval(() => cargarSemanaSantaData(), 30000); // 30s para procesiones
+          semanaSantaRefreshInterval = setInterval(() => window.cargarSemanaSantaData(), 30000); // 30s para procesiones
         }
         mostrarToast('Capa Semana Santa Málaga activada');
       } else {
@@ -894,9 +894,9 @@
       }
     };
 
-    async function cargarSemanaSantaData(force = false) {
+    window.cargarSemanaSantaData = async (force = false) => {
       if (!mapReady) return;
-      if (!semanaSantaLayerEnabled && !force) return;
+      if (!window.semanaSantaLayerEnabled && !force) return;
 
       const st = document.getElementById('semanasanta-status-count');
       const stPrev = document.getElementById('semanasanta-status-count-prev');
@@ -936,7 +936,16 @@
         if (st) st.textContent = "Error de conexión";
         if (stPrev) stPrev.textContent = "Error de conexión";
       }
-    }
+    };
+
+    window.updateSemanaSantaDay = (val) => {
+      semanaSantaDay = parseInt(val);
+      const s1 = document.getElementById('sel-semanasanta-day');
+      const s2 = document.getElementById('sel-semanasanta-day-prev');
+      if (s1 && s1.value != val) s1.value = val;
+      if (s2 && s2.value != val) s2.value = val;
+      if (window.semanaSantaLayerEnabled) window.cargarSemanaSantaData(true);
+    };
 
     function updateSemanaSantaMarker(t) {
       const id = t.id;
@@ -989,7 +998,7 @@
         });
 
         m.addListener('click', () => info.open(mapEmergencias, m));
-        if (mPrev) mPrev.addListener('click', () => info.open(window.mapPreventivos, mPrev));
+        if (mPrev) mPrev.addListener('click', () => info.open(mapPreventivos, mPrev));
 
         // V.14.2.1: Guardar ambos para limpieza correcta
         semanaSantaMarkers[id] = { m: m, mPrev: mPrev };
@@ -15279,7 +15288,7 @@ ${dataContext}
               </div>
               <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px;">
                 <label style="font-size: 9px; font-weight: 700; color: #7b1fa2; text-transform: uppercase; margin-left: 4px;">Día de Semana Santa</label>
-                <select id="sel-semanasanta-day" style="padding: 6px; border-radius: 6px; border: 1px solid #7b1fa233; font-size: 11px; background: #fff;" onchange="const d=parseInt(this.value); const s2=document.getElementById('sel-semanasanta-day-prev'); if(s2)s2.value=d; if(semanaSantaLayerEnabled) cargarSemanaSantaData(true)">
+                <select id="sel-semanasanta-day" style="padding: 6px; border-radius: 6px; border: 1px solid #7b1fa233; font-size: 11px; background: #fff;" onchange="window.updateSemanaSantaDay(this.value)">
                   <option value="0">Viernes de Dolores (27/03)</option>
                   <option value="1">Sábado de Pasión (28/03)</option>
                   <option value="2" selected>Domingo de Ramos (29/03)</option>
@@ -15732,7 +15741,7 @@ ${dataContext}
               </div>
               <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px;">
                 <label style="font-size: 9px; font-weight: 700; color: #7b1fa2; text-transform: uppercase; margin-left: 4px;">Día de Semana Santa</label>
-                <select id="sel-semanasanta-day-prev" style="padding: 6px; border-radius: 6px; border: 1px solid #7b1fa233; font-size: 11px; background: #fff;" onchange="const d=parseInt(this.value); const s1=document.getElementById('sel-semanasanta-day'); if(s1)s1.value=d; if(semanaSantaLayerEnabled) cargarSemanaSantaData(true)">
+                <select id="sel-semanasanta-day-prev" style="padding: 6px; border-radius: 6px; border: 1px solid #7b1fa233; font-size: 11px; background: #fff;" onchange="window.updateSemanaSantaDay(this.value)">
                   <option value="0">Viernes de Dolores (27/03)</option>
                   <option value="1">Sábado de Pasión (28/03)</option>
                   <option value="2" selected>Domingo de Ramos (29/03)</option>
