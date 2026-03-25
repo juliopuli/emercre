@@ -869,10 +869,17 @@
       
       window.semanaSantaLayerEnabled = turnOn;
 
+      const updateStatus = (text) => {
+        const s1 = document.getElementById('semanasanta-status-count');
+        const s2 = document.getElementById('semanasanta-status-count-prev');
+        if (s1) s1.textContent = text;
+        if (s2) s2.textContent = text;
+      };
+
       if (window.semanaSantaLayerEnabled) {
         window.cargarSemanaSantaData(true);
         if (!semanaSantaRefreshInterval) {
-          semanaSantaRefreshInterval = setInterval(() => window.cargarSemanaSantaData(), 30000); // 30s para procesiones
+          semanaSantaRefreshInterval = setInterval(() => window.cargarSemanaSantaData(), 30000);
         }
         mostrarToast('Capa Semana Santa Málaga activada');
       } else {
@@ -880,16 +887,13 @@
           clearInterval(semanaSantaRefreshInterval);
           semanaSantaRefreshInterval = null;
         }
-        // V.14.2.1: Limpiar marcadores en ambos mapas
+        // Limpiar marcadores
         Object.values(semanaSantaMarkers).forEach(ms => {
           if (ms.m) ms.m.setMap(null);
           if (ms.mPrev) ms.mPrev.setMap(null);
         });
         semanaSantaMarkers = {};
-        const st = document.getElementById('semanasanta-status-count');
-        if (st) st.textContent = "Desconectado";
-        const stPrev = document.getElementById('semanasanta-status-count-prev');
-        if (stPrev) stPrev.textContent = "Desconectado";
+        updateStatus("Desconectado");
         mostrarToast('Capa Semana Santa desactivada');
       }
     };
@@ -911,7 +915,8 @@
         if (daySelect) semanaSantaDay = parseInt(daySelect.value);
         
         const res = await getSS({ dayId: semanaSantaDay });
-        const list = res.data?.geo || [];
+        console.log("Semana Santa API Res:", res);
+        const list = (res.data && res.data.geo) ? res.data.geo : (res.geo || []);
         
         // V.14.2.1: Limpiar los que ya no están en la lista (si cambiamos de día)
         const currentIds = list.map(t => t.id);
@@ -928,13 +933,14 @@
           updateSemanaSantaMarker(t);
         });
 
-        const statusText = `Mostrando ${list.length} hermandades`;
+        const statusText = list.length > 0 ? `Mostrando ${list.length} hermandades` : "Sin procesiones ahora";
         if (st) st.textContent = statusText;
         if (stPrev) stPrev.textContent = statusText;
       } catch (e) {
         console.error("Error Semana Santa:", e);
-        if (st) st.textContent = "Error de conexión";
-        if (stPrev) stPrev.textContent = "Error de conexión";
+        const errMsg = e.code === 'not-found' ? "Función no desplegada" : (e.message || "Error de conexión");
+        if (st) st.textContent = errMsg;
+        if (stPrev) stPrev.textContent = errMsg;
       }
     };
 
