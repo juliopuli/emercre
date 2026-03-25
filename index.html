@@ -945,7 +945,7 @@
         }
         
         // V.14.4.0: Gestión de capas KML e itinerarios
-        // V.14.5.1: Recuperación dinámica en Preventivos
+        // V.14.5.2: Recuperación dinámica en Preventivos
         list.forEach(t => {
           if (t.rutaMapa) {
             if (!semanaSantaKmlLayers[t.id]) {
@@ -1056,7 +1056,7 @@
         const ms = semanaSantaMarkers[markerKey];
         if (ms.m) ms.m.position = pos;
 
-        // V.14.5.1: Inyección dinámica si mapPreventivos aparece más tarde
+        // V.14.5.2: Inyección dinámica si mapPreventivos aparece más tarde
         if (!ms.mPrev && mapPreventivos) {
           const contentPrev = ms.m.content.cloneNode(true);
           ms.mPrev = new google.maps.marker.AdvancedMarkerElement({
@@ -1120,7 +1120,7 @@
         if (mPrev) mPrev.addListener('click', () => info.open(mapPreventivos, mPrev));
 
         // V.14.2.1: Guardar ambos para limpieza correcta
-        // V.14.5.1: Guardar info para re-sincronización
+        // V.14.5.2: Guardar info para re-sincronización
         semanaSantaMarkers[markerKey] = { m, mPrev, info };
       }
     }
@@ -6811,7 +6811,7 @@ ${dataContext}
           fullscreenControl: false
         });
 
-        // V.14.5.1: Forzar sincronización inmediata si la capa está activa
+        // V.14.5.2: Forzar sincronización inmediata si la capa está activa
         if (window.semanaSantaLayerEnabled) {
           console.log("[SS] Sincronizando capa en nuevo mapa Preventivos");
           window.cargarSemanaSantaData(true);
@@ -14466,19 +14466,20 @@ ${dataContext}
       border-color: #e67e22;
     }
 
-    /* ═══════ SEMANA SANTA MARKERS (V.14.5.1) ═══════ */
+    /* ═══════ SEMANA SANTA MARKERS (V.14.5.2) ═══════ */
     .ss-marker {
       cursor: pointer;
       display: flex;
       flex-direction: column-reverse; /* Etiqueta arriba */
       align-items: center;
       transition: transform 0.2s;
-      width: 40px; 
-      height: 60px; 
+      width: 42px; 
       justify-content: flex-start;
+      /* V.14.5.2: Corregir anclaje para que el centro coincida con la ruta */
+      transform: translateY(21px); /* Mitad del icono (42px/2) */
     }
     .ss-marker:hover {
-      transform: scale(1.15);
+      transform: translateY(21px) scale(1.15);
       z-index: 2000 !important;
     }
     .ss-marker-icon {
@@ -14504,12 +14505,12 @@ ${dataContext}
       margin-bottom: 6px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.3);
       border: 1px solid rgba(255,255,255,0.2);
-      opacity: 0; /* V.14.5.1 */
+      opacity: 0; /* V.14.5.2 */
       transition: opacity 0.2s;
       pointer-events: none;
     }
     .ss-marker:hover .ss-marker-label {
-      opacity: 1; /* V.14.5.1 */
+      opacity: 1; /* V.14.5.2 */
     }
 
     /* V.12.4.1: Expanded marker style */
@@ -15289,7 +15290,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.5.1
+          Versión V.14.5.2
         </div>
       </div>
 
@@ -15760,7 +15761,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.5.1
+          Versión V.14.5.2
         </div>
       </div>
 
