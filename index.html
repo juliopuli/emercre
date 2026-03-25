@@ -916,7 +916,8 @@
     };
 
     window.cargarSemanaSantaData = async (force = false) => {
-      if (!mapReady) return;
+      // V.14.5.4: Permitir sincronizar si al menos un mapa está listo
+      if (!mapReady && !mapPreventivos) return;
       if (!window.semanaSantaLayerEnabled && !force) return;
 
       const st = document.getElementById('semanasanta-status-count');
@@ -925,22 +926,20 @@
       if (stPrev && force) stPrev.textContent = "Sincronizando...";
 
       try {
-        const getSS = httpsCallable(functions, 'getSemanaSantaData');
-        
-        // V.14.2.1: Usar día dinámico del selector
-        const daySelect = document.getElementById('sel-semanasanta-day');
+        // V.14.5.4: Obtener día preferiblemente del selector activo
+        const daySelect = document.getElementById('sel-semanasanta-day') || document.getElementById('sel-semanasanta-day-prev');
         if (daySelect) semanaSantaDay = parseInt(daySelect.value);
         
-        const res = await getSS({ dayId: semanaSantaDay });
-        console.log("Semana Santa API Res:", res);
+        console.log("[SS] Iniciando fetch para día:", semanaSantaDay);
+        const url = `https://getsemanasantadata-sh2v6nrtqa-uc.a.run.app?dayId=${semanaSantaDay || ""}`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error("API Error: " + response.status);
+        const res = await response.json();
         
-        // V.14.2.3: La API de El Penitente anida en .data, y Firebase añade otro .data
         let list = [];
-        if (res.data && res.data.data && Array.isArray(res.data.data.geo)) {
-          list = res.data.data.geo;
-        } else if (res.data && Array.isArray(res.data.geo)) {
+        if (res && res.data && Array.isArray(res.data.geo)) {
           list = res.data.geo;
-        } else if (Array.isArray(res.geo)) {
+        } else if (res && Array.isArray(res.geo)) {
           list = res.geo;
         }
         
@@ -15292,7 +15291,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.5.3
+          Versión V.14.5.4
         </div>
       </div>
 
@@ -15763,7 +15762,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.5.3
+          Versión V.14.5.4
         </div>
       </div>
 
@@ -16724,7 +16723,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.14.2.0
+            Versión V.14.5.4
           </div>
         </div>
         <div class="field" id="j-prov-row">
