@@ -832,67 +832,52 @@
         document.getElementById('btn-toggle-vehicles').classList.remove('active');
         document.getElementById('map-semanasanta-panel').classList.remove('open');
         document.getElementById('btn-toggle-semanasanta').classList.remove('active');
-        document.getElementById('map-semanasanta-panel-prev').classList.remove('open');
-        document.getElementById('btn-toggle-semanasanta-prev').classList.remove('active');
-      }
+    // V.14.6.0: Sincronización de estado visual de los botones SS
+    const syncSemanaSantaButtons = () => {
+      const active = window.semanaSantaLayerEnabled;
+      const btn = document.getElementById('btn-toggle-semanasanta');
+      const btnPrev = document.getElementById('btn-toggle-semanasanta-prev');
+      const panel = document.getElementById('map-semanasanta-panel');
+      const panelPrev = document.getElementById('map-semanasanta-panel-prev');
+      
+      if (btn) btn.classList.toggle('active', active);
+      if (btnPrev) btnPrev.classList.toggle('active', active);
+      if (panel) panel.classList.toggle('open', active);
+      if (panelPrev) panelPrev.classList.toggle('open', active);
     };
 
     window.toggleSemanaSantaPanel = () => {
-      const panel = document.getElementById('map-semanasanta-panel');
-      const panelPrev = document.getElementById('map-semanasanta-panel-prev');
-      const btn = document.getElementById('btn-toggle-semanasanta');
-      const btnPrev = document.getElementById('btn-toggle-semanasanta-prev');
+      // V.14.6.0: El botón del mapa ahora es el toggle directo de la capa
+      window.semanaSantaLayerEnabled = !window.semanaSantaLayerEnabled;
       
-      const isOpen = panel ? panel.classList.toggle('open') : false;
-      if (panelPrev) panelPrev.classList.toggle('open', isOpen);
-      if (btn) btn.classList.toggle('active', isOpen);
-      if (btnPrev) btnPrev.classList.toggle('active', isOpen);
-
-      if (isOpen) {
-        // Cerrar otros paneles
-        document.getElementById('map-ais-panel').classList.remove('open');
-        document.getElementById('btn-toggle-ais').classList.remove('active');
-        document.getElementById('map-railway-panel').classList.remove('open');
-        document.getElementById('btn-toggle-railway').classList.remove('active');
-        document.getElementById('map-vehicles-panel').classList.remove('open');
-        document.getElementById('btn-toggle-vehicles').classList.remove('active');
-      }
-    };
-
-    window.toggleSemanaSantaLayer = (el) => {
-      // Si se pasa 'el' (el div pulsado), buscamos el checkbox dentro. Si no, usamos el principal.
+      // Sincronizar checkboxes internos (si existen)
       const chk = document.getElementById('chk-semanasanta-layer');
       const chkPrev = document.getElementById('chk-semanasanta-layer-prev');
-      if (!chk) return;
-      
-      // V.14.2.2: Determinar estado deseado basado en el checkbox principal o el pulsado
-      let turnOn;
-      if (el) {
-        const clickedChk = el.querySelector('input[type="checkbox"]');
-        turnOn = clickedChk ? !clickedChk.checked : !chk.checked;
-      } else {
-        turnOn = !chk.checked;
-      }
+      if (chk) chk.checked = window.semanaSantaLayerEnabled;
+      if (chkPrev) chkPrev.checked = window.semanaSantaLayerEnabled;
 
-      chk.checked = turnOn;
-      if (chkPrev) chkPrev.checked = turnOn;
-      window.semanaSantaLayerEnabled = turnOn;
-
-      const updateStatus = (text) => {
-        const s1 = document.getElementById('semanasanta-status-count');
-        const s2 = document.getElementById('semanasanta-status-count-prev');
-        if (s1) s1.textContent = text;
-        if (s2) s2.textContent = text;
-      };
+      syncSemanaSantaButtons();
 
       if (window.semanaSantaLayerEnabled) {
-        updateStatus("Sincronizando..."); // Feedback inmediato
+        // Cerrar otros paneles al activar
+        const otherPanels = ['map-ais-panel', 'map-railway-panel', 'map-routing-panel', 'map-vehicles-panel'];
+        otherPanels.forEach(pId => {
+          const p = document.getElementById(pId);
+          if (p) p.classList.remove('open');
+        });
+        const otherBtns = ['btn-toggle-ais', 'btn-toggle-railway', 'btn-toggle-routing', 'btn-toggle-vehicles'];
+        otherBtns.forEach(bId => {
+          const b = document.getElementById(bId);
+          if (b) b.classList.remove('active');
+        });
+
         window.cargarSemanaSantaData(true);
         if (!semanaSantaRefreshInterval) {
           semanaSantaRefreshInterval = setInterval(() => window.cargarSemanaSantaData(), 30000);
         }
-        mostrarToast('Capa Semana Santa Málaga activada');
+        mostrarToast('Capa Semana Santa Málaga activa');
       } else {
+        // Limpieza al desactivar
         if (semanaSantaRefreshInterval) {
           clearInterval(semanaSantaRefreshInterval);
           semanaSantaRefreshInterval = null;
@@ -902,17 +887,24 @@
           if (ms.mPrev) ms.mPrev.setMap(null);
         });
         semanaSantaMarkers = {};
-        
-        // V.14.4.0: Limpiar capas KML
         Object.values(semanaSantaKmlLayers).forEach(kl => {
           if (kl.kmlEme) kl.kmlEme.setMap(null);
           if (kl.kmlPrev) kl.kmlPrev.setMap(null);
         });
         semanaSantaKmlLayers = {};
 
-        updateStatus("Desconectado");
+        const statusText = "Desconectado";
+        const s1 = document.getElementById('semanasanta-status-count');
+        const s2 = document.getElementById('semanasanta-status-count-prev');
+        if (s1) s1.textContent = statusText;
+        if (s2) s2.textContent = statusText;
         mostrarToast('Capa Semana Santa desactivada');
       }
+    };
+
+    window.toggleSemanaSantaLayer = () => {
+      // V.14.6.0: Redirigir al toggle unificado del panel/botón
+      window.toggleSemanaSantaPanel();
     };
 
     window.cargarSemanaSantaData = async (force = false) => {
@@ -15293,7 +15285,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.5.6
+          Versión V.14.6.0
         </div>
       </div>
 
@@ -15764,7 +15756,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.5.6
+          Versión V.14.6.0
         </div>
       </div>
 
@@ -16725,7 +16717,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.14.5.6
+            Versión V.14.6.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
