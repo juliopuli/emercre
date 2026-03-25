@@ -194,6 +194,35 @@ exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB'
     });
 });
 
+// 0.8. Semana Santa Málaga Proxy (V.14.2.0)
+exports.getSemanaSantaData = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "Debe estar autenticado.");
+    }
+
+    const dayId = data.dayId || 1;
+    const apiKey = process.env.PENITENTE_API_KEY;
+    
+    if (!apiKey) {
+        throw new functions.https.HttpsError("internal", "API Key de 'El Penitente' no configurada en el servidor.");
+    }
+
+    try {
+        const resp = await fetch(`https://api.elpenitente.app/api/v1/geolocalizaciones/${dayId}`, {
+            headers: {
+                "Accept": "application/json",
+                "Authorization": `Bearer ${apiKey}`
+            }
+        });
+        if (!resp.ok) throw new Error("Penitente API error: " + resp.status);
+        const result = await resp.json();
+        return result;
+    } catch (error) {
+        console.error("Semana Santa Function Error:", error);
+        throw new functions.https.HttpsError("internal", error.message);
+    }
+});
+
 // 1. Gemini Content Generator Function (V.6.2.0)
 exports.generateGeminiContent = functions.https.onCall(async (data, context) => {
     if (!context.auth) {

@@ -158,6 +158,9 @@
     let aisRefreshInterval = null;
     let aisShipsCache = []; // V.13.5.2: Caché para búsqueda local
     let aisSearchQuery = ''; // V.13.5.2: Consulta de búsqueda AIS
+    let semanaSantaMarkers = {}; // V.14.2.0
+    let semanaSantaLayerEnabled = false; // V.14.2.0
+    let semanaSantaRefreshInterval = null; // V.14.2.0
 
 
     let autocompleteOrigin = null;
@@ -825,10 +828,152 @@
         document.getElementById('btn-toggle-railway').classList.remove('active');
         document.getElementById('map-vehicles-panel').classList.remove('open');
         document.getElementById('btn-toggle-vehicles').classList.remove('active');
+        document.getElementById('map-semanasanta-panel').classList.remove('open');
+        document.getElementById('btn-toggle-semanasanta').classList.remove('active');
+        document.getElementById('map-semanasanta-panel-prev').classList.remove('open');
+        document.getElementById('btn-toggle-semanasanta-prev').classList.remove('active');
       }
     };
 
-    window.toggleAISLayer = () => {
+    window.toggleSemanaSantaPanel = () => {
+      const panel = document.getElementById('map-semanasanta-panel');
+      const panelPrev = document.getElementById('map-semanasanta-panel-prev');
+      const btn = document.getElementById('btn-toggle-semanasanta');
+      const btnPrev = document.getElementById('btn-toggle-semanasanta-prev');
+      
+      const isOpen = panel ? panel.classList.toggle('open') : false;
+      if (panelPrev) panelPrev.classList.toggle('open', isOpen);
+      if (btn) btn.classList.toggle('active', isOpen);
+      if (btnPrev) btnPrev.classList.toggle('active', isOpen);
+
+      if (isOpen) {
+        // Cerrar otros paneles
+        document.getElementById('map-ais-panel').classList.remove('open');
+        document.getElementById('btn-toggle-ais').classList.remove('active');
+        document.getElementById('map-railway-panel').classList.remove('open');
+        document.getElementById('btn-toggle-railway').classList.remove('active');
+        document.getElementById('map-vehicles-panel').classList.remove('open');
+        document.getElementById('btn-toggle-vehicles').classList.remove('active');
+      }
+    };
+
+    window.toggleSemanaSantaLayer = () => {
+      const chk = document.getElementById('chk-semanasanta-layer');
+      const chkPrev = document.getElementById('chk-semanasanta-layer-prev');
+      if (!chk) return;
+      
+      const turnOn = !chk.checked;
+      chk.checked = turnOn;
+      if (chkPrev) chkPrev.checked = turnOn;
+      
+      semanaSantaLayerEnabled = turnOn;
+
+      if (semanaSantaLayerEnabled) {
+        cargarSemanaSantaData(true);
+        if (!semanaSantaRefreshInterval) {
+          semanaSantaRefreshInterval = setInterval(() => cargarSemanaSantaData(), 30000); // 30s para procesiones
+        }
+        mostrarToast('Capa Semana Santa Málaga activada');
+      } else {
+        if (semanaSantaRefreshInterval) {
+          clearInterval(semanaSantaRefreshInterval);
+          semanaSantaRefreshInterval = null;
+        }
+        // Limpiar marcadores
+        Object.values(semanaSantaMarkers).forEach(m => m.setMap(null));
+        semanaSantaMarkers = {};
+        const st = document.getElementById('semanasanta-status-count');
+        if (st) st.textContent = "Desconectado";
+        const stPrev = document.getElementById('semanasanta-status-count-prev');
+        if (stPrev) stPrev.textContent = "Desconectado";
+        mostrarToast('Capa Semana Santa desactivada');
+      }
+    };
+
+    async function cargarSemanaSantaData(force = false) {
+      if (!mapReady) return;
+      if (!semanaSantaLayerEnabled && !force) return;
+
+      const st = document.getElementById('semanasanta-status-count');
+      const stPrev = document.getElementById('semanasanta-status-count-prev');
+      if (st && force) st.textContent = "Sincronizando...";
+      if (stPrev && force) stPrev.textContent = "Sincronizando...";
+
+      try {
+        const getSS = httpsCallable(functions, 'getSemanaSantaData');
+        const res = await getSS({ dayId: 1 }); // Por ahora ID 1 como pidió el usuario
+        const list = res.data?.geo || [];
+        
+        list.forEach(t => {
+          updateSemanaSantaMarker(t);
+        });
+
+        const statusText = `Mostrando ${list.length} hermandades`;
+        if (st) st.textContent = statusText;
+        if (stPrev) stPrev.textContent = statusText;
+      } catch (e) {
+        console.error("Error Semana Santa:", e);
+        if (st) st.textContent = "Error de conexión";
+        if (stPrev) stPrev.textContent = "Error de conexión";
+      }
+    }
+
+    function updateSemanaSantaMarker(t) {
+      const id = t.id;
+      const pos = { lat: parseFloat(t.lat), lng: parseFloat(t.long) };
+      if (isNaN(pos.lat) || isNaN(pos.lng)) return;
+
+      if (semanaSantaMarkers[id]) {
+        semanaSantaMarkers[id].position = pos;
+      } else {
+        const content = document.createElement('div');
+        content.className = 'ss-marker';
+        content.style.position = 'relative';
+        content.innerHTML = `
+          <div class="ss-marker-label">${t.nombre}</div>
+          <div class="ss-marker-icon" style="background-image: url('${t.escudo}');"></div>
+        `;
+
+        const m = new google.maps.marker.AdvancedMarkerElement({
+          map: mapEmergencias, // Por defecto en el de emergencias
+          position: pos,
+          content: content,
+          title: t.nombre
+        });
+
+        // Duplicar en preventivos si existe el mapa
+        let mPrev = null;
+        if (window.mapPreventivos) {
+           mPrev = new google.maps.marker.AdvancedMarkerElement({
+              map: window.mapPreventivos,
+              position: pos,
+              content: content.cloneNode(true),
+              title: t.nombre
+           });
+        }
+
+        const info = new google.maps.InfoWindow({
+          content: `
+            <div style="padding:10px; font-family: sans-serif; min-width: 150px;">
+              <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                <img src="${t.escudo}" style="width:32px; height:32px; object-fit:contain;">
+                <b style="font-size:14px; color:#7b1fa2;">${t.nombre}</b>
+              </div>
+              <div style="font-size:12px; margin-bottom:4px;">📍 <b>Calle:</b> ${t.calle || 'No disponible'}</div>
+              <div style="font-size:11px; color:#666;">🕒 <b>Salida:</b> ${new Date(t.salida).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+              <div style="font-size:11px; color:#666;">🏠 <b>Encierro:</b> ${new Date(t.encierro).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</div>
+            </div>
+          `
+        });
+
+        m.addListener('click', () => info.open(mapEmergencias, m));
+        if (mPrev) mPrev.addListener('click', () => info.open(window.mapPreventivos, mPrev));
+
+        semanaSantaMarkers[id] = m;
+        // Nota: para simplificar limpieza, guardamos solo uno en el objeto de markers globales pero ambos se limpian al apagar
+        // Si queremos ser rigurosos, deberíamos guardarlos en un array
+      }
+    }
       const chk = document.getElementById('chk-ais-layer');
       if (!chk) return;
       chk.checked = !chk.checked;
@@ -1353,7 +1498,7 @@
       });
     }
 
-    console.log('EmerCRE V.14.1.3 Loaded');
+    console.log('EmerCRE V.14.2.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -14162,6 +14307,42 @@ ${dataContext}
       border-color: #e67e22;
     }
 
+    /* ═══════ SEMANA SANTA MARKERS (V.14.2.0) ═══════ */
+    .ss-marker {
+      cursor: pointer;
+      display: flex;
+      flex-direction: column-reverse; /* Etiqueta arriba */
+      align-items: center;
+      transition: transform 0.2s;
+    }
+    .ss-marker:hover {
+      transform: scale(1.15);
+      z-index: 2000 !important;
+    }
+    .ss-marker-icon {
+      width: 36px;
+      height: 36px;
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
+      border: 2px solid white;
+      border-radius: 50%;
+      background-color: white;
+    }
+    .ss-marker-label {
+      background: #7b1fa2;
+      color: white;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+      margin-bottom: 4px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.2);
+    }
+
     /* V.12.4.1: Expanded marker style */
     .oysta-linked-marker.expanded {
       z-index: 9999 !important;
@@ -14939,7 +15120,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.1.3
+          Versión V.14.2.0
         </div>
       </div>
 
@@ -15051,6 +15232,7 @@ ${dataContext}
 
           <button id="btn-toggle-railway" class="map-btn-float" onclick="toggleRailwayPanel()">🛤️ Ferrocarril</button>
           <button id="btn-toggle-ais" class="map-btn-float" onclick="toggleAISPanel()">⚓ Marítimo</button>
+          <button id="btn-toggle-semanasanta" class="map-btn-float" onclick="toggleSemanaSantaPanel()" title="Semana Santa Málaga">✝️ S. Santa</button>
 
           <!-- V.12.4.1: Buscador de direcciones -->
           <div class="map-search-container">
@@ -15059,6 +15241,32 @@ ${dataContext}
             <div id="search-box-eme" class="map-search-box" style="display:none;">
               <input type="text" id="map-search-input-eme" placeholder="Buscar dirección..." autocomplete="off">
               <button onclick="toggleMapSearch('eme')">✕</button>
+            </div>
+          </div>
+
+          <!-- Semana Santa Panel (V.14.2.0) -->
+          <div id="map-semanasanta-panel" class="map-ais-panel">
+            <div class="panel-header" style="background: #7b1fa2;">
+              <span class="panel-title">Semana Santa Málaga</span>
+              <button class="btn-panel-close" onclick="toggleSemanaSantaPanel()">✕</button>
+            </div>
+            <div style="padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="font-size: 11px; color: var(--text-3); margin-bottom: 2px;">
+                Geolocalización en tiempo real de Cofradías (API El Penitente).
+              </div>
+              <div class="drawer-notif-toggle" style="padding: 10px; cursor: pointer; border-radius: 8px; background: rgba(123, 31, 162, 0.05);" onclick="toggleSemanaSantaLayer()">
+                <div class="drawer-notif-info">
+                  <div class="drawer-notif-icon" style="font-size: 18px; width: 32px; height: 32px; background: #f3e5f5; color: #7b1fa2;">✝️</div>
+                  <div>
+                    <div class="drawer-notif-title" style="font-size: 11px; font-weight: 700;">Localización Hermandades</div>
+                    <div class="drawer-notif-desc" style="font-size: 9px;" id="semanasanta-status-count">Desconectado</div>
+                  </div>
+                </div>
+                <label class="switch" style="pointer-events:none; transform: scale(0.85);">
+                  <input type="checkbox" id="chk-semanasanta-layer">
+                  <span class="slider round"></span>
+                </label>
+              </div>
             </div>
           </div>
 
@@ -15368,7 +15576,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.1.3
+          Versión V.14.2.0
         </div>
       </div>
 
@@ -15463,6 +15671,7 @@ ${dataContext}
             Vehículos</button>
           <button id="btn-toggle-oysta-moving-prev" class="map-btn-float" onclick="toggleMovingOysta()"
             style="display:none;" title="Ver vehículos Oysta en movimiento">🚗 Movimiento</button>
+          <button id="btn-toggle-semanasanta-prev" class="map-btn-float" onclick="toggleSemanaSantaPanel()" title="Semana Santa Málaga">✝️ S. Santa</button>
 
           <!-- V.12.4.1: Buscador de direcciones Preventivos -->
           <div class="map-search-container">
@@ -15473,6 +15682,32 @@ ${dataContext}
               <button onclick="toggleMapSearch('prev')">✕</button>
             </div>
           </div>
+          <!-- Semana Santa Panel Prev (V.14.2.0) -->
+          <div id="map-semanasanta-panel-prev" class="map-ais-panel">
+            <div class="panel-header" style="background: #7b1fa2;">
+              <span class="panel-title">Semana Santa Málaga</span>
+              <button class="btn-panel-close" onclick="toggleSemanaSantaPanel()">✕</button>
+            </div>
+            <div style="padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="font-size: 11px; color: var(--text-3); margin-bottom: 2px;">
+                Geolocalización en tiempo real de Cofradías (API El Penitente).
+              </div>
+              <div class="drawer-notif-toggle" style="padding: 10px; cursor: pointer; border-radius: 8px; background: rgba(123, 31, 162, 0.05);" onclick="toggleSemanaSantaLayer()">
+                <div class="drawer-notif-info">
+                  <div class="drawer-notif-icon" style="font-size: 18px; width: 32px; height: 32px; background: #f3e5f5; color: #7b1fa2;">✝️</div>
+                  <div>
+                    <div class="drawer-notif-title" style="font-size: 11px; font-weight: 700;">Localización Hermandades</div>
+                    <div class="drawer-notif-desc" style="font-size: 9px;" id="semanasanta-status-count-prev">Desconectado</div>
+                  </div>
+                </div>
+                <label class="switch" style="pointer-events:none; transform: scale(0.85);">
+                  <input type="checkbox" id="chk-semanasanta-layer-prev">
+                  <span class="slider round"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
           <!-- Listado de Vehículos Preventivos -->
           <div id="prev-map-vehicles-panel" class="map-vehicles-panel" style="display:none;">
             <div class="panel-header">
@@ -16287,7 +16522,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.14.1.3
+            Versión V.14.2.0
           </div>
         </div>
         <div class="field" id="j-prov-row">
