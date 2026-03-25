@@ -8324,6 +8324,7 @@ ${dataContext}
                   vs.lastSaleDeTS = correctedTS;
                   const saleTime = new Date(correctedTS).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
                   const decalStr = estimatedTravelMin > 1 ? ` [aprox. ${estimatedTravelMin} min antes]` : '';
+                  const text = hayDestino
                     ? `⚡️ ${indicativo} SALE desde ${addr} hacia ${iData.direccion || 'el lugar del aviso'} a las ${saleTime}${decalStr}.`
                     : `⚡️ ${indicativo} SALE desde ${addr} a las ${saleTime}${decalStr}.`;
                   // V.14.1.1: Desactivado para evitar duplicados con Oysta (BG)
