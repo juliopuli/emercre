@@ -974,6 +974,8 @@
         // Si queremos ser rigurosos, deberíamos guardarlos en un array
       }
     }
+
+    window.toggleAISLayer = () => {
       const chk = document.getElementById('chk-ais-layer');
       if (!chk) return;
       chk.checked = !chk.checked;
