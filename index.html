@@ -834,7 +834,7 @@
       }
     };
 
-    // V.14.6.2: Sincronización de estado visual de los botones SS
+    // V.14.6.3: Sincronización de estado visual de los botones SS
     const syncSemanaSantaButtons = () => {
       const active = window.semanaSantaLayerEnabled;
       const btn = document.getElementById('btn-toggle-semanasanta');
@@ -849,7 +849,7 @@
     };
 
     window.closeSemanaSantaPanel = () => {
-      // V.14.6.2: Solo cerrar la interfaz del panel, no desactivar la capa
+      // V.14.6.3: Solo cerrar la interfaz del panel, no desactivar la capa
       const panel = document.getElementById('map-semanasanta-panel');
       const panelPrev = document.getElementById('map-semanasanta-panel-prev');
       if (panel) panel.classList.remove('open');
@@ -857,7 +857,7 @@
     };
 
     window.toggleSemanaSantaPanel = () => {
-      // V.14.6.2: El botón del mapa ahora es el toggle directo de la capa
+      // V.14.6.3: El botón del mapa ahora es el toggle directo de la capa
       window.semanaSantaLayerEnabled = !window.semanaSantaLayerEnabled;
       
       // Sincronizar checkboxes internos (si existen)
@@ -913,7 +913,7 @@
     };
 
     window.toggleSemanaSantaLayer = () => {
-      // V.14.6.2: Redirigir al toggle unificado del panel/botón
+      // V.14.6.3: Redirigir al toggle unificado del panel/botón
       window.toggleSemanaSantaPanel();
     };
 
@@ -15055,6 +15055,9 @@ ${dataContext}
             style="font-size: 12px; color: var(--accent); text-decoration: none; font-weight: 500;">¿Has olvidado tu
             contraseña?</a>
         </div>
+        <div style="margin-top: 25px; text-align: left; font-size: 10px; color: var(--text-4); font-family: monospace;">
+          Versión V.14.6.3
+        </div>
       </div>
     </div>
   </div>
@@ -15253,6 +15256,9 @@ ${dataContext}
             style="width:100%; padding:10px; background:var(--bg-2); border:1px solid var(--border-mid); color:var(--text-2); cursor:pointer; font-family:inherit; font-size:13px; font-weight:500; border-radius:4px; display:flex; align-items:center; justify-content:center; gap:8px;">🔑
             Cambiar contrasena</button>
           <button class="btn-logout" style="width:100%; padding:12px;" onclick="doLogout()">Cerrar Sesion</button>
+          <div style="margin-top: 10px; text-align: center; font-size: 10px; color: var(--text-4); font-family: monospace;">
+            Versión V.14.6.3
+          </div>
         </div>
       </div>
     </div>
@@ -15295,7 +15301,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.6.2
+          Versión V.14.6.3
         </div>
       </div>
 
@@ -15766,7 +15772,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.6.2
+          Versión V.14.6.3
         </div>
       </div>
 
@@ -15966,6 +15972,10 @@ ${dataContext}
           </div>
         </div>
       </div>
+      <div
+        style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
+        Versión V.14.6.3
+      </div>
     </div>
 
     <!-- USUARIOS -->
@@ -16001,6 +16011,10 @@ ${dataContext}
           </thead>
           <tbody id="users-tbody"></tbody>
         </table>
+      </div>
+      <div
+        style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
+        Versión V.14.6.3
       </div>
     </div>
 
@@ -16112,6 +16126,10 @@ ${dataContext}
             <tbody id="jefes-tbody"></tbody>
           </table>
         </div>
+      </div>
+      <div
+        style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
+        Versión V.14.6.3
       </div>
     </div>
 
@@ -16727,7 +16745,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.14.6.2
+            Versión V.14.6.3
           </div>
         </div>
         <div class="field" id="j-prov-row">
