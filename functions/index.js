@@ -552,14 +552,39 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
 
     try {
         // 1. Lectura inteligente: Verificar primero si hay actividad para ahorrar consultas
-        const [activeOpsSnap, activeIntsSnap] = await Promise.all([
+        const [activeOpsSnap, rawIntsSnap] = await Promise.all([
             db.collection("operaciones").where("estado", "==", "activa").get(),
             db.collectionGroup("intervenciones").where("abierta", "==", true).get()
         ]);
 
+        // 1.5. Filtrar intervenciones cuyos preventivos padres estén realmente abiertos (V.14.1.3)
+        const activeIntDocs = [];
+        if (!rawIntsSnap.empty) {
+            const prevIds = new Set();
+            rawIntsSnap.docs.forEach(doc => {
+                const parts = doc.ref.path.split('/');
+                if (parts.length >= 2) prevIds.add(parts[1]); // preventivos/{id}/...
+            });
+
+            if (prevIds.size > 0) {
+                // Consultamos el estado de los preventivos padres
+                const prevSnaps = await Promise.all(Array.from(prevIds).map(pid => db.collection("preventivos").doc(pid).get()));
+                const openPrevs = new Set();
+                prevSnaps.forEach(s => {
+                    // Un preventivo se considera abierto si existe y 'abierta' no es explícitamente false
+                    if (s.exists && s.data().abierta !== false) openPrevs.add(s.id);
+                });
+
+                rawIntsSnap.docs.forEach(doc => {
+                    const parts = doc.ref.path.split('/');
+                    if (openPrevs.has(parts[1])) activeIntDocs.push(doc);
+                });
+            }
+        }
+
         // Si no hay nada abierto ni emergencias activas, salimos inmediatamente sin gastar más
-        if (activeOpsSnap.empty && activeIntsSnap.empty) {
-            console.log("[Monitor] Sin actividad detectada (0 ops, 0 preventivos). Finalizando para ahorro de cuota Firebase.");
+        if (activeOpsSnap.empty && activeIntDocs.length === 0) {
+            console.log("[Monitor] Sin actividad detectada (0 ops, 0 preventivos válidos). Finalizando para ahorro de cuota Firebase.");
             return null;
         }
 
@@ -568,7 +593,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         activeOpsSnap.forEach(doc => {
             (doc.data().recursosAsignadosIds || []).forEach(rid => assignedIds.add(rid));
         });
-        activeIntsSnap.forEach(doc => {
+        activeIntDocs.forEach(doc => {
             (doc.data().recursosAsignados || []).forEach(rid => assignedIds.add(rid));
         });
 
