@@ -159,6 +159,7 @@
     let aisShipsCache = []; // V.13.5.2: Caché para búsqueda local
     let aisSearchQuery = ''; // V.13.5.2: Consulta de búsqueda AIS
     let semanaSantaMarkers = {}; // V.14.2.1: Ahora almacena { eme, prev }
+    let semanaSantaKmlLayers = {}; // V.14.4.0: Almacena { id: { kmlEme, kmlPrev } }
     window.semanaSantaLayerEnabled = false; // V.14.2.1: Expuesto a window
     let semanaSantaRefreshInterval = null; // V.14.2.1
     let semanaSantaDay = 2; // V.14.2.1: Día seleccionado (0-9)
@@ -901,6 +902,14 @@
           if (ms.mPrev) ms.mPrev.setMap(null);
         });
         semanaSantaMarkers = {};
+        
+        // V.14.4.0: Limpiar capas KML
+        Object.values(semanaSantaKmlLayers).forEach(kl => {
+          if (kl.kmlEme) kl.kmlEme.setMap(null);
+          if (kl.kmlPrev) kl.kmlPrev.setMap(null);
+        });
+        semanaSantaKmlLayers = {};
+
         updateStatus("Desconectado");
         mostrarToast('Capa Semana Santa desactivada');
       }
@@ -935,22 +944,34 @@
           list = res.geo;
         }
         
-        // V.14.2.4: Limpiar marcadores obsoletos usando claves compuestas
-        const currentMarkerKeys = [];
+        // V.14.4.0: Gestión de capas KML e itinerarios
         list.forEach(t => {
-          if (t.trackers && t.trackers.length > 0) {
-            t.trackers.forEach(tr => { if (tr.activo === 1) currentMarkerKeys.push(`${t.id}_${tr.idTracker}`); });
-          } else {
-            currentMarkerKeys.push(`${t.id}_main`);
+          if (t.rutaMapa && !semanaSantaKmlLayers[t.id]) {
+            const kmlEme = new google.maps.KmlLayer({
+              url: t.rutaMapa,
+              map: mapEmergencias,
+              preserveViewport: true,
+              suppressInfoWindows: true
+            });
+            let kmlPrev = null;
+            if (mapPreventivos) {
+              kmlPrev = new google.maps.KmlLayer({
+                url: t.rutaMapa,
+                map: mapPreventivos,
+                preserveViewport: true,
+                suppressInfoWindows: true
+              });
+            }
+            semanaSantaKmlLayers[t.id] = { kmlEme, kmlPrev };
           }
         });
 
-        Object.keys(semanaSantaMarkers).forEach(mKey => {
-          if (!currentMarkerKeys.includes(mKey)) {
-            const ms = semanaSantaMarkers[mKey];
-            if (ms.m) ms.m.setMap(null);
-            if (ms.mPrev) ms.mPrev.setMap(null);
-            delete semanaSantaMarkers[mKey];
+        // V.14.4.0: Limpieza de KMLs que ya no están
+        Object.keys(semanaSantaKmlLayers).forEach(id => {
+          if (!list.some(t => t.id == id)) {
+            if (semanaSantaKmlLayers[id].kmlEme) semanaSantaKmlLayers[id].kmlEme.setMap(null);
+            if (semanaSantaKmlLayers[id].kmlPrev) semanaSantaKmlLayers[id].kmlPrev.setMap(null);
+            delete semanaSantaKmlLayers[id];
           }
         });
 
@@ -986,7 +1007,7 @@
       if (window.semanaSantaLayerEnabled) window.cargarSemanaSantaData(true);
     };
 
-    // V.14.2.4: Modificar renderizado de marcadores para iterar sobre los trackers de cada hermandad y usar claves compuestas
+    // V.14.4.0: Iconografía mejorada y corrección definitiva de Preventivos
     function updateSemanaSantaMarker(t, tracker = null) {
       const cofradiaId = t.id;
       const trackerId = tracker ? tracker.idTracker : 'main';
@@ -998,15 +1019,26 @@
       if (isNaN(pos.lat) || isNaN(pos.lng)) return;
 
       let labelText = t.nombre;
+      let iconUrl = t.escudo; // Por defecto el escudo
+
       if (tracker) {
-        if (trackerId.includes('guia')) labelText += " (Guía)";
-        else if (trackerId.includes('cristo')) labelText += " (Trono 1)";
-        else if (trackerId.includes('virgen')) labelText += " (Trono 2)";
-        else if (trackerId.includes('extra')) {
+        if (trackerId.includes('guia')) {
+          labelText += " (Guía)";
+          // Icono Cruz Guía El Penitente (Proxy/SVG)
+          iconUrl = "https://elpenitente.app/storage/img/iconos/marcador_cruz_guia.png"; 
+        } else if (trackerId.includes('cristo')) {
+          labelText += " (Trono 1)";
+          iconUrl = "https://elpenitente.app/storage/img/iconos/marcador_trono.png";
+        } else if (trackerId.includes('virgen')) {
+          labelText += " (Trono 2)";
+          iconUrl = "https://elpenitente.app/storage/img/iconos/marcador_trono.png";
+        } else if (trackerId.includes('extra')) {
           const num = trackerId.replace('tracker_extra', '') || '';
           labelText += ` (Extra ${num})`.replace('  ', ' ');
+          iconUrl = "https://elpenitente.app/storage/img/iconos/marcador_trono.png";
+        } else {
+          labelText += ` (${trackerId})`;
         }
-        else labelText += ` (${trackerId})`;
       }
 
       if (semanaSantaMarkers[markerKey]) {
@@ -1019,7 +1051,7 @@
         content.style.position = 'relative';
         content.innerHTML = `
           <div class="ss-marker-label">${labelText}</div>
-          <div class="ss-marker-icon" style="background-image: url('${t.escudo}');"></div>
+          <div class="ss-marker-icon" style="background-image: url('${iconUrl}'), url('${t.escudo}');"></div>
         `;
 
         const m = new google.maps.marker.AdvancedMarkerElement({
@@ -1030,10 +1062,10 @@
         });
 
         let mPrev = null;
-        if (window.mapPreventivos) {
+        if (mapPreventivos) {
           const contentPrev = content.cloneNode(true);
           mPrev = new google.maps.marker.AdvancedMarkerElement({
-            map: window.mapPreventivos,
+            map: mapPreventivos,
             position: pos,
             content: contentPrev,
             title: labelText
@@ -1042,14 +1074,18 @@
 
         const info = new google.maps.InfoWindow({
           content: `
-            <div style="padding: 10px; font-family: sans-serif; min-width: 150px;">
-              <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-                <img src="${t.escudo}" style="width: 32px; height: 32px; object-fit: contain;">
+            <div style="padding: 10px; font-family: sans-serif; min-width: 170px;">
+              <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px; border-bottom: 1px solid #7b1fa222; padding-bottom: 8px;">
+                <img src="${t.escudo}" style="width: 38px; height: 38px; object-fit: contain;">
                 <div style="font-weight: bold; font-size: 14px; color: #7b1fa2;">${t.nombre}</div>
               </div>
               <div style="font-size: 12px; margin-bottom: 4px;"><strong>📍 Calle:</strong> ${t.calle || 'N/D'}</div>
-              <div style="font-size: 12px; margin-bottom: 4px;"><strong>📡 Punto:</strong> ${trackerId}</div>
-              <div style="font-size: 11px; margin-top: 8px; color: #666; font-style: italic;">Sincronizado vía El Penitente</div>
+              <div style="font-size: 12px; margin-bottom: 4px;"><strong>📡 Tracker:</strong> ${trackerId}</div>
+              <div style="display: flex; justify-content: space-between; gap: 10px; margin-top: 8px; font-size: 11px; background: #f3e5f5; padding: 4px 8px; border-radius: 4px;">
+                 <span>🕒 ${t.salida ? new Date(t.salida).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '--:--'}</span>
+                 <span>🏠 ${t.encierro ? new Date(t.encierro).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : '--:--'}</span>
+              </div>
+              <div style="font-size: 9px; margin-top: 8px; color: #999; text-align: center; font-style: italic;">Sincronizado vía El Penitente</div>
             </div>
           `
         });
@@ -14403,6 +14439,9 @@ ${dataContext}
       flex-direction: column-reverse; /* Etiqueta arriba */
       align-items: center;
       transition: transform 0.2s;
+      width: 40px; /* V.14.3.1: Asegurar dimensiones */
+      height: 60px; /* V.14.3.1: Asegurar dimensiones */
+      justify-content: flex-start;
     }
     .ss-marker:hover {
       transform: scale(1.15);
@@ -15209,7 +15248,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.3.0
+          Versión V.14.4.0
         </div>
       </div>
 
@@ -15333,7 +15372,7 @@ ${dataContext}
             </div>
           </div>
 
-          <!-- Semana Santa Panel (V.14.3.0) -->
+          <!-- Semana Santa Panel (V.14.4.0) -->
           <div id="map-semanasanta-panel" class="map-ais-panel">
             <div class="panel-header" style="background: #7b1fa2;">
               <span class="panel-title">Semana Santa Málaga</span>
@@ -15680,7 +15719,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.3.0
+          Versión V.14.4.0
         </div>
       </div>
 
@@ -15786,7 +15825,7 @@ ${dataContext}
               <button onclick="toggleMapSearch('prev')">✕</button>
             </div>
           </div>
-          <!-- Semana Santa Panel Prev (V.14.3.0) -->
+          <!-- Semana Santa Panel Prev (V.14.4.0) -->
           <div id="map-semanasanta-panel-prev" class="map-ais-panel">
             <div class="panel-header" style="background: #7b1fa2;">
               <span class="panel-title">Semana Santa Málaga</span>
