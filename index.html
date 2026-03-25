@@ -14172,6 +14172,7 @@ ${dataContext}
         margin-bottom: 2px !important;
       }
 
+
       .dp-name {
         font-size: 16px !important;
       }
@@ -14432,15 +14433,15 @@ ${dataContext}
       border-color: #e67e22;
     }
 
-    /* ═══════ SEMANA SANTA MARKERS (V.14.2.0) ═══════ */
+    /* ═══════ SEMANA SANTA MARKERS (V.14.4.1) ═══════ */
     .ss-marker {
       cursor: pointer;
       display: flex;
       flex-direction: column-reverse; /* Etiqueta arriba */
       align-items: center;
       transition: transform 0.2s;
-      width: 40px; /* V.14.3.1: Asegurar dimensiones */
-      height: 60px; /* V.14.3.1: Asegurar dimensiones */
+      width: 40px; 
+      height: 60px; 
       justify-content: flex-start;
     }
     .ss-marker:hover {
@@ -14448,15 +14449,13 @@ ${dataContext}
       z-index: 2000 !important;
     }
     .ss-marker-icon {
-      width: 36px;
-      height: 36px;
+      width: 42px; /* V.14.4.1 */
+      height: 42px;
       background-size: contain;
       background-repeat: no-repeat;
       background-position: center;
       filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4));
-      border: 2px solid white;
-      border-radius: 50%;
-      background-color: white;
+      /* V.14.4.1: Limpios, sin fondo ni borde */
     }
     .ss-marker-label {
       background: #7b1fa2;
@@ -14469,6 +14468,12 @@ ${dataContext}
       margin-bottom: 4px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.3);
       border: 1px solid rgba(255,255,255,0.2);
+      opacity: 0; /* V.14.4.1 */
+      transition: opacity 0.2s;
+      pointer-events: none;
+    }
+    .ss-marker:hover .ss-marker-label {
+      opacity: 1; /* V.14.4.1 */
     }
 
     /* V.12.4.1: Expanded marker style */
@@ -15248,7 +15253,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.4.0
+          Versión V.14.4.1
         </div>
       </div>
 
@@ -15372,7 +15377,7 @@ ${dataContext}
             </div>
           </div>
 
-          <!-- Semana Santa Panel (V.14.4.0) -->
+          <!-- Semana Santa Panel (V.14.4.1) -->
           <div id="map-semanasanta-panel" class="map-ais-panel">
             <div class="panel-header" style="background: #7b1fa2;">
               <span class="panel-title">Semana Santa Málaga</span>
@@ -15719,7 +15724,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.4.0
+          Versión V.14.4.1
         </div>
       </div>
 
@@ -15825,7 +15830,7 @@ ${dataContext}
               <button onclick="toggleMapSearch('prev')">✕</button>
             </div>
           </div>
-          <!-- Semana Santa Panel Prev (V.14.4.0) -->
+          <!-- Semana Santa Panel Prev (V.14.4.1) -->
           <div id="map-semanasanta-panel-prev" class="map-ais-panel">
             <div class="panel-header" style="background: #7b1fa2;">
               <span class="panel-title">Semana Santa Málaga</span>
