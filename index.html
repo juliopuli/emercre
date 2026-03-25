@@ -916,7 +916,7 @@
     };
 
     window.cargarSemanaSantaData = async (force = false) => {
-      // V.14.5.4: Permitir sincronizar si al menos un mapa está listo
+      // V.14.5.5: Permitir sincronizar si al menos un mapa está listo
       if (!mapReady && !mapPreventivos) return;
       if (!window.semanaSantaLayerEnabled && !force) return;
 
@@ -926,21 +926,21 @@
       if (stPrev && force) stPrev.textContent = "Sincronizando...";
 
       try {
-        // V.14.5.4: Obtener día preferiblemente del selector activo
+        // V.14.5.5: Obtener día preferiblemente del selector activo
         const daySelect = document.getElementById('sel-semanasanta-day') || document.getElementById('sel-semanasanta-day-prev');
         if (daySelect) semanaSantaDay = parseInt(daySelect.value);
         
-        console.log("[SS] Iniciando fetch para día:", semanaSantaDay);
-        const url = `https://getsemanasantadata-sh2v6nrtqa-uc.a.run.app?dayId=${semanaSantaDay || ""}`;
-        const response = await fetch(url);
-        if (!response.ok) throw new Error("API Error: " + response.status);
-        const res = await response.json();
+        console.log("[SS] Llamando a getSemanaSantaData (Callable) para día:", semanaSantaDay);
+        
+        // V.14.5.5: Revertir a httpsCallable para evitar errores CORS
+        const getSS = httpsCallable(functions, 'getSemanaSantaData');
+        const res = await getSS({ dayId: semanaSantaDay });
         
         let list = [];
-        if (res && res.data && Array.isArray(res.data.geo)) {
+        if (res.data && res.data.data && Array.isArray(res.data.data.geo)) {
+          list = res.data.data.geo;
+        } else if (res.data && Array.isArray(res.data.geo)) {
           list = res.data.geo;
-        } else if (res && Array.isArray(res.geo)) {
-          list = res.geo;
         }
         
         // V.14.4.0: Gestión de capas KML e itinerarios
@@ -15291,7 +15291,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.5.4
+          Versión V.14.5.5
         </div>
       </div>
 
@@ -15762,7 +15762,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.5.4
+          Versión V.14.5.5
         </div>
       </div>
 
@@ -16723,7 +16723,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.14.5.4
+            Versión V.14.5.5
           </div>
         </div>
         <div class="field" id="j-prov-row">
