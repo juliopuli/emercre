@@ -924,7 +924,16 @@
         
         const res = await getSS({ dayId: semanaSantaDay });
         console.log("Semana Santa API Res:", res);
-        const list = (res.data && res.data.geo) ? res.data.geo : (res.geo || []);
+        
+        // V.14.2.3: La API de El Penitente anida en .data, y Firebase añade otro .data
+        let list = [];
+        if (res.data && res.data.data && Array.isArray(res.data.data.geo)) {
+          list = res.data.data.geo;
+        } else if (res.data && Array.isArray(res.data.geo)) {
+          list = res.data.geo;
+        } else if (Array.isArray(res.geo)) {
+          list = res.geo;
+        }
         
         // V.14.2.1: Limpiar los que ya no están en la lista (si cambiamos de día)
         const currentIds = list.map(t => t.id);
@@ -15166,7 +15175,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.2.2
+          Versión V.14.2.3
         </div>
       </div>
 
@@ -15290,7 +15299,7 @@ ${dataContext}
             </div>
           </div>
 
-          <!-- Semana Santa Panel (V.14.2.2) -->
+          <!-- Semana Santa Panel (V.14.2.3) -->
           <div id="map-semanasanta-panel" class="map-ais-panel">
             <div class="panel-header" style="background: #7b1fa2;">
               <span class="panel-title">Semana Santa Málaga</span>
@@ -15637,7 +15646,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.2.2
+          Versión V.14.2.3
         </div>
       </div>
 
@@ -15743,7 +15752,7 @@ ${dataContext}
               <button onclick="toggleMapSearch('prev')">✕</button>
             </div>
           </div>
-          <!-- Semana Santa Panel Prev (V.14.2.2) -->
+          <!-- Semana Santa Panel Prev (V.14.2.3) -->
           <div id="map-semanasanta-panel-prev" class="map-ais-panel">
             <div class="panel-header" style="background: #7b1fa2;">
               <span class="panel-title">Semana Santa Málaga</span>
@@ -17117,7 +17126,7 @@ ${dataContext}
       }
     }, 1000);
 
-    // V.14.2.2: Auto-seleccionar día de Semana Santa según fecha actual (Málaga 2026)
+    // V.14.2.3: Auto-seleccionar día de Semana Santa según fecha actual (Málaga 2026)
     setTimeout(() => {
       const now = new Date();
       const month = now.getMonth();
