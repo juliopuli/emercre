@@ -834,7 +834,7 @@
       }
     };
 
-    // V.14.6.3: Sincronización de estado visual de los botones SS
+    // V.14.6.4: Sincronización de estado visual de los botones SS
     const syncSemanaSantaButtons = () => {
       const active = window.semanaSantaLayerEnabled;
       const btn = document.getElementById('btn-toggle-semanasanta');
@@ -849,7 +849,7 @@
     };
 
     window.closeSemanaSantaPanel = () => {
-      // V.14.6.3: Solo cerrar la interfaz del panel, no desactivar la capa
+      // V.14.6.4: Solo cerrar la interfaz del panel, no desactivar la capa
       const panel = document.getElementById('map-semanasanta-panel');
       const panelPrev = document.getElementById('map-semanasanta-panel-prev');
       if (panel) panel.classList.remove('open');
@@ -857,7 +857,7 @@
     };
 
     window.toggleSemanaSantaPanel = () => {
-      // V.14.6.3: El botón del mapa ahora es el toggle directo de la capa
+      // V.14.6.4: El botón del mapa ahora es el toggle directo de la capa
       window.semanaSantaLayerEnabled = !window.semanaSantaLayerEnabled;
       
       // Sincronizar checkboxes internos (si existen)
@@ -913,7 +913,7 @@
     };
 
     window.toggleSemanaSantaLayer = () => {
-      // V.14.6.3: Redirigir al toggle unificado del panel/botón
+      // V.14.6.4: Redirigir al toggle unificado del panel/botón
       window.toggleSemanaSantaPanel();
     };
 
@@ -13048,6 +13048,10 @@ ${dataContext}
       box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
       padding: 28px 32px;
       margin: 16px;
+      flex: 1;
+      min-height: 0;
+      display: none;
+      flex-direction: column;
     }
 
     .users-toolbar {
@@ -15018,6 +15022,11 @@ ${dataContext}
 
 <body>
 
+  <!-- GLOBAL VERSION WATERMARK -->
+  <div id="global-version-watermark" style="position: fixed; bottom: 14px; left: 16px; z-index: 999999; font-size: 11px; color: var(--text-3); font-family: monospace; pointer-events: none; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); font-weight: 700; opacity: 0.9;">
+    EmerCRE V.14.6.4
+  </div>
+
   <!-- LOGIN -->
   <div id="screen-login">
     <div class="login-hero">
@@ -15056,7 +15065,7 @@ ${dataContext}
             contraseña?</a>
         </div>
         <div style="margin-top: 25px; text-align: left; font-size: 10px; color: var(--text-4); font-family: monospace;">
-          Versión V.14.6.3
+          Versión V.14.6.4
         </div>
       </div>
     </div>
@@ -15257,7 +15266,7 @@ ${dataContext}
             Cambiar contrasena</button>
           <button class="btn-logout" style="width:100%; padding:12px;" onclick="doLogout()">Cerrar Sesion</button>
           <div style="margin-top: 10px; text-align: center; font-size: 10px; color: var(--text-4); font-family: monospace;">
-            Versión V.14.6.3
+            Versión V.14.6.4
           </div>
         </div>
       </div>
@@ -15301,7 +15310,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.6.3
+          Versión V.14.6.4
         </div>
       </div>
 
@@ -15772,7 +15781,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.6.3
+          Versión V.14.6.4
         </div>
       </div>
 
@@ -15974,7 +15983,7 @@ ${dataContext}
       </div>
       <div
         style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-        Versión V.14.6.3
+        Versión V.14.6.4
       </div>
     </div>
 
@@ -16014,7 +16023,7 @@ ${dataContext}
       </div>
       <div
         style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-        Versión V.14.6.3
+        Versión V.14.6.4
       </div>
     </div>
 
@@ -16129,7 +16138,7 @@ ${dataContext}
       </div>
       <div
         style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-        Versión V.14.6.3
+        Versión V.14.6.4
       </div>
     </div>
 
@@ -16745,7 +16754,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.14.6.3
+            Versión V.14.6.4
           </div>
         </div>
         <div class="field" id="j-prov-row">
