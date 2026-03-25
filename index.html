@@ -1024,26 +1024,41 @@
       if (tracker) {
         if (trackerId.includes('guia')) {
           labelText += " (Guía)";
-          // Icono Cruz Guía El Penitente (Proxy/SVG)
-          iconUrl = "https://elpenitente.app/storage/img/iconos/marcador_cruz_guia.png"; 
+          iconUrl = "assets/icons/semanasanta/cruz_guia.png"; 
         } else if (trackerId.includes('cristo')) {
           labelText += " (Trono 1)";
-          iconUrl = "https://elpenitente.app/storage/img/iconos/marcador_trono.png";
+          iconUrl = "assets/icons/semanasanta/cristo.png";
         } else if (trackerId.includes('virgen')) {
           labelText += " (Trono 2)";
-          iconUrl = "https://elpenitente.app/storage/img/iconos/marcador_trono.png";
+          iconUrl = "assets/icons/semanasanta/virgen.png";
         } else if (trackerId.includes('extra')) {
           const num = trackerId.replace('tracker_extra', '') || '';
           labelText += ` (Extra ${num})`.replace('  ', ' ');
-          iconUrl = "https://elpenitente.app/storage/img/iconos/marcador_trono.png";
+          iconUrl = "assets/icons/semanasanta/trono.png";
         } else {
           labelText += ` (${trackerId})`;
+          iconUrl = "assets/icons/semanasanta/trono.png";
         }
       }
 
       if (semanaSantaMarkers[markerKey]) {
         const ms = semanaSantaMarkers[markerKey];
         if (ms.m) ms.m.position = pos;
+
+        // V.14.5.0: Inyección dinámica si mapPreventivos aparece más tarde
+        if (!ms.mPrev && mapPreventivos) {
+          const contentPrev = ms.m.content.cloneNode(true);
+          ms.mPrev = new google.maps.marker.AdvancedMarkerElement({
+            map: mapPreventivos,
+            position: pos,
+            content: contentPrev,
+            title: labelText
+          });
+          if (ms.info) {
+             ms.mPrev.addListener('click', () => ms.info.open(mapPreventivos, ms.mPrev));
+          }
+        }
+
         if (ms.mPrev) ms.mPrev.position = pos;
       } else {
         const content = document.createElement('div');
@@ -1094,7 +1109,8 @@
         if (mPrev) mPrev.addListener('click', () => info.open(mapPreventivos, mPrev));
 
         // V.14.2.1: Guardar ambos para limpieza correcta
-        semanaSantaMarkers[markerKey] = { m, mPrev };
+        // V.14.5.0: Guardar info para re-sincronización
+        semanaSantaMarkers[markerKey] = { m, mPrev, info };
       }
     }
 
@@ -14433,7 +14449,7 @@ ${dataContext}
       border-color: #e67e22;
     }
 
-    /* ═══════ SEMANA SANTA MARKERS (V.14.4.1) ═══════ */
+    /* ═══════ SEMANA SANTA MARKERS (V.14.5.0) ═══════ */
     .ss-marker {
       cursor: pointer;
       display: flex;
@@ -14471,12 +14487,12 @@ ${dataContext}
       margin-bottom: 6px;
       box-shadow: 0 2px 4px rgba(0,0,0,0.3);
       border: 1px solid rgba(255,255,255,0.2);
-      opacity: 0; /* V.14.4.1 */
+      opacity: 0; /* V.14.5.0 */
       transition: opacity 0.2s;
       pointer-events: none;
     }
     .ss-marker:hover .ss-marker-label {
-      opacity: 1; /* V.14.4.1 */
+      opacity: 1; /* V.14.5.0 */
     }
 
     /* V.12.4.1: Expanded marker style */
