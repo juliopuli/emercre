@@ -1254,7 +1254,7 @@
 
           const content = createRenfeAVEMarkerContent(t);
 
-          // V.14.0.0: Doble click para crear pinchito de búsqueda
+          // V.14.1.1: Doble click para crear pinchito de búsqueda
           content.addEventListener('dblclick', (e) => {
             e.stopPropagation();
             window.onMapClickPersistentPin({ latLng: new google.maps.LatLng(pos.lat, pos.lng) }, 'eme');
@@ -1353,7 +1353,7 @@
       });
     }
 
-    console.log('EmerCRE V.14.0.0 Loaded');
+    console.log('EmerCRE V.14.1.1 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2804,6 +2804,20 @@
         console.log('[Oysta] Sin permiso canSeeVehicles y fuera de Preventivos, abortando.');
         return;
       }
+      // V.14.1.1: Guard de eficiencia - Solo cargar si hay actividad activa (recursos asignados en preventivos/emergencias)
+      const hasActiveTracking = (window._assignedVehiclesInOpenPreventivos && window._assignedVehiclesInOpenPreventivos.size > 0) || 
+                               (typeof window._assignedVehiclesInEmergencies !== 'undefined' && window._assignedVehiclesInEmergencies.size > 0);
+      
+      if (!hasActiveTracking && !force) {
+        console.log("[Oysta] No active tracking needed (0 assigned resources), skipping fetch.");
+        // Limpiamos indicadores si estaban activos
+        const st = document.getElementById('oysta-status-text');
+        if (st) st.textContent = "Sincronización pausada (Sin actividad)";
+        const stp = document.getElementById('oysta-status-text-prev');
+        if (stp) stp.textContent = "Pausado (Sin actividad)";
+        return;
+      }
+
       if (!force && (!mapReady || (!mapEmergencias && !mapPreventivos))) {
         console.log(`[Oysta] Gating active: mapReady=${mapReady}, maps available=${!!mapEmergencias || !!mapPreventivos}`);
         return;
@@ -2989,18 +3003,20 @@
                         return t.includes(indicativo.toUpperCase()) && (t.includes("SALE") || t.includes("EN MOVIMIENTO") || t.includes("INTERVENCIÓN INICIADA"));
                       })) {
                       const text = `⚡️ ${indicativo} SALE hacia el lugar (${assignedOp.dir || 'sin dirección'}).`;
-                      addDoc(collection(db, 'operaciones', opId, 'acciones'), {
-                        texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
-                      });
+                      // V.14.1.1: Desactivado para evitar duplicados con Oysta (BG)
+                      // addDoc(collection(db, 'operaciones', opId, 'acciones'), {
+                      //   texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
+                      // });
                     }
                   });
                 vs.hasDeparted = true;
               } else if (vs.lastStopAddr && distToDest > 0.1) {
                 // Reanudación
                 const text = `⚡️ ${indicativo} REANUDA marcha hacia el lugar del aviso.`;
-                addDoc(collection(db, 'operaciones', opId, 'acciones'), {
-                  texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
-                });
+                // V.14.1.1: Desactivado para evitar duplicados con Oysta (BG)
+                // addDoc(collection(db, 'operaciones', opId, 'acciones'), {
+                //   texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
+                // });
                 vs.lastStopAddr = "";
               }
             }
@@ -3017,9 +3033,10 @@
                     .then(snap => {
                       if (!snap.docs.some(d => d.data().texto?.toUpperCase().includes("LLEGADA"))) {
                         const text = `✅ ${indicativo} LLEGADA al lugar del aviso (${assignedOp.dir || 'sin dirección'}).`;
-                        addDoc(collection(db, 'operaciones', opId, 'acciones'), {
-                          texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
-                        });
+                        // V.14.1.1: Desactivado para evitar duplicados con Oysta (BG)
+                        // addDoc(collection(db, 'operaciones', opId, 'acciones'), {
+                        //   texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
+                        // });
                       }
                     });
                   vs.hasArrived = true;
@@ -3029,9 +3046,10 @@
                 reverseGeocodeWithCache(pos, (addr) => {
                   vs.lastStopAddr = addr || 'posición desconocida';
                   const text = `✅ ${indicativo} PARADA en ${vs.lastStopAddr}.`;
-                  addDoc(collection(db, 'operaciones', opId, 'acciones'), {
-                    texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
-                  });
+                  // V.14.1.1: Desactivado para evitar duplicados con Oysta (BG)
+                  // addDoc(collection(db, 'operaciones', opId, 'acciones'), {
+                  //   texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
+                  // });
                   // Sincronizar estado con Firestore V.13.20.0
                   const docKey = `eme_${opId}`;
                   setDoc(doc(db, 'oysta_vehicle_states', docKey), { [mid]: vs }, { merge: true });
@@ -7955,6 +7973,93 @@ ${dataContext}
       });
     };
 
+    // V.14.1.1: Función para añadir direcciones a los comentarios del proceso de fondo
+    window.enrichOystaComments = async function(iRef, iDataOrType, indicativo) {
+      // Si iDataOrType es string "EMERGENCY", tratamos iRef como docRef de operación y buscamos subcolección 'acciones'
+      if (typeof iDataOrType === 'string' && iDataOrType === 'EMERGENCY') {
+        try {
+          const accionesSnap = await getDocs(query(collection(iRef, 'acciones'), where('autor', '==', 'Sist. Oysta (BG)')));
+          accionesSnap.forEach(async (doc) => {
+            const c = doc.data();
+            if (c.coords && !c.enriquecido) {
+              const textLower = (c.texto || "").toLowerCase();
+              if (textLower.includes("parada") || textLower.includes("sale") || textLower.includes("reanuda")) {
+                const addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
+                if (addr) {
+                  let newText = c.texto;
+                  if (newText.includes("en trayecto")) newText = newText.replace("en trayecto", `en ${addr}`);
+                  else if (newText.includes("hacia el lugar")) {
+                    if (textLower.includes("sale")) newText = newText.replace("SALE", `SALE desde ${addr}`);
+                    else newText = newText.replace("hacia el lugar", `hacia ${addr}`);
+                  } else if (!newText.includes(addr)) newText = newText.replace(/\.?$/, ` (${addr}).`);
+                  
+                  await updateDoc(doc.ref, { texto: newText, enriquecido: true, editado: true });
+                }
+              }
+            }
+          });
+        } catch (e) { console.error("[Oysta Enrichment EME] Error:", e); }
+        return;
+      }
+
+      // Caso PREVENTIVOS (array de comentarios)
+      const iData = iDataOrType;
+      if (!iData.comentarios || iData.comentarios.length === 0) return;
+      
+      let changed = false;
+      const newComms = [...iData.comentarios];
+      
+      for (let k = 0; k < newComms.length; k++) {
+        const c = newComms[k];
+        // Solo actuar sobre mensajes de Oysta (BG) que tengan coordenadas y no estén enriquecidos
+        if (c.autor === 'Sist. Oysta (BG)' && c.coords && !c.enriquecido) {
+          const textLower = (c.texto || "").toLowerCase();
+          // Detectar si es un mensaje de parada o salida que necesita dirección
+          if (textLower.includes("parada") || textLower.includes("sale") || textLower.includes("reanuda")) {
+            try {
+              const addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
+              if (addr) {
+                let newText = c.texto;
+                if (newText.includes("en trayecto")) {
+                  newText = newText.replace("en trayecto", `en ${addr}`);
+                } else if (newText.includes("hacia el lugar")) {
+                  // V.14.1.1: Si es salida, añadir el "desde [origen]"
+                  if (textLower.includes("sale")) {
+                    newText = newText.replace("SALE", `SALE desde ${addr}`);
+                  } else {
+                    newText = newText.replace("hacia el lugar", `hacia ${addr}`);
+                  }
+                } else if (!newText.includes(addr)) {
+                  // Fallback
+                  newText = newText.replace(/\.?$/, ` (${addr}).`);
+                }
+                
+                newComms[k] = { 
+                  ...c, 
+                  texto: newText, 
+                  enriquecido: true, 
+                  editado: true,
+                  actualizadoEn: Date.now() 
+                };
+                changed = true;
+                console.log(`[Oysta Enrichment] Enriquecido: ${indicativo} -> ${addr}`);
+              }
+            } catch (e) {
+              console.warn("[Oysta Enrichment] Error geocodificando:", e);
+            }
+          }
+        }
+      }
+      
+      if (changed) {
+        try {
+          await updateDoc(iRef, { comentarios: newComms, actualizadoEn: serverTimestamp() });
+        } catch (e) {
+          console.error("[Oysta Enrichment] Error guardando enrichment:", e);
+        }
+      }
+    };
+
     window.refreshGlobalPreventivoMarkers = () => {
       if (!mapPreventivos || !lastGlobalInterventionDocs) return;
 
@@ -8203,8 +8308,9 @@ ${dataContext}
                 if (!vs.loggedStartAtOrigin) {
                   vs.loggedStartAtOrigin = true;
                   const text = `⚡️ ${indicativo} en movimiento desde el lugar de inicio.`;
-                  const nc = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime)) };
-                  updateDoc(iRef, { comentarios: arrayUnion(nc) }).catch(e => { vs.loggedStartAtOrigin = false; });
+                  // V.14.1.1: Desactivado para evitar duplicados con Oysta (BG)
+                  // const nc = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime)) };
+                  // updateDoc(iRef, { comentarios: arrayUnion(nc) }).catch(e => { vs.loggedStartAtOrigin = false; });
                 }
               } else {
                 vs.hasDeparted = true;
@@ -8218,18 +8324,18 @@ ${dataContext}
                   vs.lastSaleDeTS = correctedTS;
                   const saleTime = new Date(correctedTS).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
                   const decalStr = estimatedTravelMin > 1 ? ` [aprox. ${estimatedTravelMin} min antes]` : '';
-                  const text = hayDestino
                     ? `⚡️ ${indicativo} SALE desde ${addr} hacia ${iData.direccion || 'el lugar del aviso'} a las ${saleTime}${decalStr}.`
                     : `⚡️ ${indicativo} SALE desde ${addr} a las ${saleTime}${decalStr}.`;
-                  const nc = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: correctedTS, fecha: formatCommentFecha(new Date(correctedTS)) };
-                  updateDoc(iRef, { comentarios: arrayUnion(nc), actualizadoEn: serverTimestamp() }).then(() => {
-                     // Sincronizar estado con Firestore V.13.20.0
-                     const docKey = `prev_${iRef.id}`;
-                     setDoc(doc(db, 'oysta_vehicle_states', docKey), { [localVeh.id]: vs }, { merge: true });
-                  }).catch(e => {
-                    console.error('[Oysta] Error salida inicial:', e);
-                    vs.hasDeparted = false;
-                  });
+                  // V.14.1.1: Desactivado para evitar duplicados con Oysta (BG)
+                  // const nc = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: correctedTS, fecha: formatCommentFecha(new Date(correctedTS)) };
+                  // updateDoc(iRef, { comentarios: arrayUnion(nc), actualizadoEn: serverTimestamp() }).then(() => {
+                  //    // Sincronizar estado con Firestore V.13.20.0
+                  //    const docKey = `prev_${iRef.id}`;
+                  //    setDoc(doc(db, 'oysta_vehicle_states', docKey), { [localVeh.id]: vs }, { merge: true });
+                  // }).catch(e => {
+                  //   console.error('[Oysta] Error salida inicial:', e);
+                  //   vs.hasDeparted = false;
+                  // });
                 });
               }
             } else {
@@ -8243,9 +8349,10 @@ ${dataContext}
             const alreadyLogged = comms.some(c => c.texto && c.texto.includes(indicativo) && c.texto.includes('llega al lugar del aviso'));
             if (!alreadyLogged) {
               const text = `✅ ${indicativo} LLEGADA al lugar del aviso (${iData.direccion || 'sin dirección'}).`;
-              const nc = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime)) };
+              // V.14.1.1: Desactivado para evitar duplicados con Oysta (BG)
+              // const nc = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime)) };
               try {
-                await updateDoc(iRef, { comentarios: arrayUnion(nc), actualizadoEn: serverTimestamp() });
+                // await updateDoc(iRef, { comentarios: arrayUnion(nc), actualizadoEn: serverTimestamp() });
                 vs.hasArrived = true;
                 vs.lastArrivedCoords = { ...iData.coords };
                 vs.isMovingOffsite = false;
@@ -8265,14 +8372,15 @@ ${dataContext}
               const desdeDonde = currentAddr || iData.direccion || 'el lugar del aviso';
               vs.lastOffsiteOrigin = desdeDonde;
               const text = `⚡️ ${indicativo} sale hacia otro destino desde ${desdeDonde}.`;
-              const nc = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime)) };
-              updateDoc(iRef, { comentarios: arrayUnion(nc), actualizadoEn: serverTimestamp() }).then(() => {
-                const docKey = `prev_${iRef.id}`;
-                setDoc(doc(db, 'oysta_vehicle_states', docKey), { [localVeh.id]: vs }, { merge: true });
-              }).catch(e => {
-                console.error('[Oysta] Error salida offsite:', e);
-                vs.isMovingOffsite = false;
-              });
+              // V.14.1.1: Desactivado para evitar duplicados con Oysta (BG)
+              // const nc = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime)) };
+              // updateDoc(iRef, { comentarios: arrayUnion(nc), actualizadoEn: serverTimestamp() }).then(() => {
+              //   const docKey = `prev_${iRef.id}`;
+              //   setDoc(doc(db, 'oysta_vehicle_states', docKey), { [localVeh.id]: vs }, { merge: true });
+              // }).catch(e => {
+              //   console.error('[Oysta] Error salida offsite:', e);
+              //   vs.isMovingOffsite = false;
+              // });
             });
           }
 
@@ -8297,8 +8405,9 @@ ${dataContext}
                     const origen = vs.lastOffsiteOrigin || 'lugar anterior';
                     comms[foundIndex] = { ...comms[foundIndex], texto: `⚡️ ${indicativo} sale hacia ${destFinal} desde ${origen}.`, editado: true };
                   }
-                  comms.push(arrivalComment);
-                  await updateDoc(iRef, { comentarios: comms, actualizadoEn: serverTimestamp() });
+                  // V.14.1.1: Desactivado para evitar duplicados con Oysta (BG)
+                  // comms.push(arrivalComment);
+                  // await updateDoc(iRef, { comentarios: comms, actualizadoEn: serverTimestamp() });
                   const docKey = `prev_${iRef.id}`;
                   setDoc(doc(db, 'oysta_vehicle_states', docKey), { [localVeh.id]: vs }, { merge: true });
                 }
@@ -8333,8 +8442,9 @@ ${dataContext}
                         comms[foundIndex] = { ...c, texto: newTxt, editado: true };
                       }
                     }
-                    comms.push(paraComment);
-                    await updateDoc(iRef, { comentarios: comms, actualizadoEn: serverTimestamp() });
+                    // V.14.1.1: Desactivado para evitar duplicados con Oysta (BG)
+                    // comms.push(paraComment);
+                    // await updateDoc(iRef, { comentarios: comms, actualizadoEn: serverTimestamp() });
                     const docKey = `prev_${iRef.id}`;
                     setDoc(doc(db, 'oysta_vehicle_states', docKey), { [localVeh.id]: vs }, { merge: true });
                   }
@@ -8346,20 +8456,24 @@ ${dataContext}
               const text = hayDestino
                 ? `⚡️ ${indicativo} REANUDA marcha desde ${vs.lastStopAddr} hacia ${iData.direccion || 'el lugar del aviso'} a las ${saleTime}.`
                 : `⚡️ ${indicativo} REANUDA marcha desde ${vs.lastStopAddr} a las ${saleTime}.`;
-              const nc = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime)) };
+              // V.14.1.1: Desactivado para evitar duplicados con Oysta (BG)
+              // const nc = { texto: text, autor: 'Sist. Oysta', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime)) };
               vs.lastSaleDeTS = oystaTime;
-              updateDoc(iRef, { comentarios: arrayUnion(nc), actualizadoEn: serverTimestamp() }).then(() => {
+              // updateDoc(iRef, { comentarios: arrayUnion(nc), actualizadoEn: serverTimestamp() }).then(() => {
                 const docKey = `prev_${iRef.id}`;
                 setDoc(doc(db, 'oysta_vehicle_states', docKey), { [localVeh.id]: vs }, { merge: true });
-              }).catch(e => {
-                console.error('[Oysta] Error reanuda marcha:', e);
-                vs.moving = false;
-              });
+              // }).catch(e => {
+              //   console.error('[Oysta] Error reanuda marcha:', e);
+              //   vs.moving = false;
+              // });
             }
           }
 
           vs.moving = isMovingNow;
           vs.lastStationaryPos = pos;
+          
+          // V.14.1.1: Enriquecer comentarios de Oysta BG con direcciones (solo si hay cambios o refresco)
+          window.enrichOystaComments(iRef, iData, indicativo);
         }
       }
         // Cleanup restos de marcadores si ya no están asignados
@@ -14824,7 +14938,7 @@ ${dataContext}
         </div>
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.1.0
+          Versión V.14.1.1
         </div>
       </div>
 
@@ -15253,7 +15367,7 @@ ${dataContext}
 
         <div
           style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-          Versión V.14.1.0
+          Versión V.14.1.1
         </div>
       </div>
 
@@ -16172,7 +16286,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.14.1.0
+            Versión V.14.1.1
           </div>
         </div>
         <div class="field" id="j-prov-row">
