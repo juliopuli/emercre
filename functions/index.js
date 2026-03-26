@@ -573,7 +573,7 @@ exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
 let vehiculosCache = {};
 let vehiculosCacheTime = {};
 
-// 5. Monitor Oysta Vehicles (V.14.8.1)
+// 5. Monitor Oysta Vehicles (V.14.8.2)
 // Detecta llegadas y salidas en segundo plano cada 2 minutos.
 // Solo procesa intervenciones PREVENTIVAS. No seguimiento de emergencias en BG.
 exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRun(async (context) => {
@@ -583,7 +583,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
 
     try {
         // 1. Lectura inteligente: Solo consultamos preventivos activos.
-        // BUG FIX (V.14.8.1): No consultamos emergencias porque no se hace seguimiento en BG.
+        // BUG FIX (V.14.8.2): No consultamos emergencias porque no se hace seguimiento en BG.
         const rawIntsSnap = await db.collectionGroup("intervenciones").where("abierta", "==", true).get();
 
         // 1.5. Filtrar intervenciones cuyos preventivos padres estén realmente abiertos (V.14.1.3)
@@ -611,7 +611,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
             }
         }
 
-        // BUG FIX (V.14.8.1): Salimos si no hay preventivos activos.
+        // BUG FIX (V.14.8.2): Salimos si no hay preventivos activos.
         // La existencia de emergencias con coches NO debe activar el login en Oysta.
         if (activeIntDocs.length === 0) {
             console.log("[Monitor] Sin intervenciones preventivas activas. Finalizando para ahorro de cuota Firebase.");
@@ -619,7 +619,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         }
 
         // 2. Obtener mapeo de vehículos locales vinculados a Oysta.
-        // BUG FIX (V.14.8.1): Solo recursos de PREVENTIVOS (no de emergencias).
+        // BUG FIX (V.14.8.2): Solo recursos de PREVENTIVOS (no de emergencias).
         const assignedIds = new Set();
         activeIntDocs.forEach(doc => {
             (doc.data().recursosAsignados || []).forEach(rid => assignedIds.add(rid));
@@ -680,7 +680,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         let diagnosticLogged = false;
 
         // 4. Obtener todos los estados agregados en batch.
-        // BUG FIX (V.14.8.1): usa activeIntDocs (correcto) en lugar de activeIntsSnap (no definido).
+        // BUG FIX (V.14.8.2): usa activeIntDocs (correcto) en lugar de activeIntsSnap (no definido).
         const intStateRefs = activeIntDocs.map(doc => db.collection("oysta_vehicle_states").doc(`prev_${doc.id}`));
         const allStatesSnaps = intStateRefs.length > 0 ? await db.getAll(...intStateRefs) : [];
         const statesMap = {};
@@ -706,12 +706,12 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
 
                 const pos = { lat: parseFloat(v.lat), lng: parseFloat(v.lng) };
                 const speed = parseFloat(v.speed);
-                // V.14.8.1: Detección más robusta. Si Oysta no envía speed, intentamos detectar por status o movimiento
+                // V.14.8.2: Detección más robusta. Si Oysta no envía speed, intentamos detectar por status o movimiento
                 let isMoving = speed > 3;
                 if (v.status && v.status.toUpperCase().includes("MOVING")) isMoving = true;
                 if (v.moving === true || v.moving === "true") isMoving = true;
 
-                // Log de diagnóstico temporal (V.14.8.1): logueamos las claves del primer objeto que veamos
+                // Log de diagnóstico temporal (V.14.8.2): logueamos las claves del primer objeto que veamos
                 if (!diagnosticLogged) {
                     await db.collection("oysta_logs").add({
                         fecha: admin.firestore.FieldValue.serverTimestamp(), usuario: "Sist. Debug", tipo: "Debug",
@@ -730,13 +730,13 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 const distToDest = iCoords ? calculateHaversineDist(pos, iCoords) : 999;
                 let vehicleStateChanged = false;
 
-                // Reset de arribo agresivo (V.14.8.1: resetea siempre > 250m para evitar botes)
+                // Reset de arribo agresivo (V.14.8.2: resetea siempre > 250m para evitar botes)
                 if (vs.hasArrived && distToDest > 0.25) {
                     vs.hasArrived = false;
                     vehicleStateChanged = true;
                 }
 
-                // --- NUEVA LÓGICA V.14.8.1 (Reglas de Casos A, B y C) ---
+                // --- NUEVA LÓGICA V.14.8.2 (Reglas de Casos A, B y C) ---
                 
                 // 1. DETECCIÓN DE SALIDA (Inicia movimiento o reinicia tras parada)
                 if (isMoving && (!vs.moving || !vs.hasDeparted)) {
@@ -853,7 +853,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 fecha: admin.firestore.FieldValue.serverTimestamp(),
                 usuario: "Oysta (BG)",
                 tipo: "Oysta",
-                // BUG FIX (V.14.8.1): activeIntsSnap no existía; usa activeIntDocs.length
+                // BUG FIX (V.14.8.2): activeIntsSnap no existía; usa activeIntDocs.length
                 detalle: `Monitor activo: Supervisando ${oystaVehicleCount} recurso(s) en ${activeIntDocs.length} int(s) preventiva(s).`
             });
         }
@@ -893,7 +893,7 @@ function formatCommentFecha(d) {
     return `${day}/${month}/${year} ${hour}:${min}`;
 }
 
-// V.14.8.1: Geocodificación inversa robusta con fallback a link de Google Maps
+// V.14.8.2: Geocodificación inversa robusta con fallback a link de Google Maps
 async function getReverseGeocoding(lat, lng) {
     const apiKey = process.env.PENITENTE_API_KEY || "";
     const coordsStr = `[${lat.toFixed(4)}, ${lng.toFixed(4)}]`;

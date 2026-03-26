@@ -7970,184 +7970,20 @@ ${dataContext}
     function cargarIntervenciones(pId, dId) {
       if (unsubIntervenciones) unsubIntervenciones();
       const q = query(collection(db, 'preventivos', pId, 'subpreventivos', dId, 'intervenciones'), orderBy('timestamp', 'desc'), limit(50));
-      unsubIntervenciones = onSnapshot(q, snap => {
+      unsubIntervenciones = onSnapshot(q, async snap => {
         lastIntervencionesSnap = snap;
         renderPreventivoIntervenciones(snap);
-        hydrateOystaComments(snap);
+        // V.14.8.2: Usamos el sistema de enriquecimiento robusto y unificado
+        for (const doc of snap.docs) {
+          await window.enrichOystaComments(doc.ref, doc.data(), "Global");
+        }
       });
     }
 
-    async function hydrateOystaComments(snap) { // V.13.28.6: Improved forward/back propagation & memory serialization
-      if (!snap || snap.empty || currentRole === 'usuario') return; 
-      if (!window._oystaHydrated) window._oystaHydrated = new Set();
-      for (const d of snap.docs) {
-        const data = d.data();
-        const comments = data.comentarios || [];
-        const iAddr = data.direccion || null;
-        let modified = false;
-        
-        for (let idx = 0; idx < comments.length; idx++) {
-          const c = comments[idx];
-          let itemModified = false;
-          let newTexto = c.texto || "";
-          const utext = newTexto.toUpperCase();
-          let solvedAddr = null;
-
-          // 1. Hydrate Stops
-          if ((utext.includes('PARADA EN TRAYECTO') || utext.includes('PUNTO INTERMEDIO') || utext.includes('SE HA DETENIDO')) && c.coords && !window._oystaHydrated.has(c.timestamp)) {
-            const addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
-            if (addr) {
-              window._oystaHydrated.add(c.timestamp);
-              solvedAddr = addr;
-              newTexto = newTexto.replace(/parada en trayecto/i, "PARADA en " + addr)
-                .replace(/punto intermedio/i, "PARADA en " + addr)
-                .replace(/se ha detenido en el trayecto/i, "detenido en " + addr);
-              itemModified = true;
-            }
-          }
-
-          // 1.5 Extract solvedAddr from existing stops if not already set [V.13.28.9]
-          if (!solvedAddr && (utext.includes('PARADA EN') || utext.includes('DETENIDO EN'))) {
-            const match = newTexto.match(/(?:PARADA|detenido) en (.*?)(?:\.$|$)/i);
-            if (match && !match[1].toLowerCase().includes('trayecto') && !match[1].toLowerCase().includes('desconocida')) {
-              solvedAddr = match[1].trim();
-            }
-          }
-
-          // 0. Direct "desde" hydration from coordinates [V.13.28.5]
-          if ((utext.includes('SALE') || utext.includes('REANUDA')) && c.coords && !window._oystaHydrated.has((c.timestamp||0) + "_desde")) {
-            const parts = (c.texto || "").split(' ');
-            const indicativo = parts[1];
-            let addr = null;
-
-            if (indicativo) {
-              const upperIndicativo = indicativo.toUpperCase();
-              const myTs = c.timestamp || 0;
-              
-              const prevParada = comments
-                .filter(prevC => {
-                  const dat = (prevC.texto || "").toUpperCase();
-                  return (prevC.timestamp || 0) < myTs &&
-                         dat.includes(upperIndicativo) &&
-                         (dat.includes('PARADA EN') || dat.includes('DETENIDO EN'));
-                })
-                .sort((x, y) => (y.timestamp || 0) - (x.timestamp || 0))[0];
-
-              if (prevParada) {
-                const prevText = prevParada.texto || "";
-                const match = prevText.match(/(?:PARADA|detenido) en (.*?)(?:\.$|$)/i);
-                if (match && !match[1].toLowerCase().includes('trayecto') && !match[1].toLowerCase().includes('desconocida')) {
-                  addr = match[1].trim();
-                } else if (prevParada.coords) {
-                  addr = await new Promise(res => reverseGeocodeWithCache(prevParada.coords, res));
-                }
-              }
-
-              if (!addr) {
-                addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
-              }
-
-              if (addr) {
-                window._oystaHydrated.add((c.timestamp||0) + "_desde");
-                const regexReanuda = new RegExp(`(${upperIndicativo}.*?)REANUDA marcha`, 'i');
-                const regexDesde = new RegExp(`(${upperIndicativo}.*?)desde (.*?)(?= hacia|$)`, 'i');
-                newTexto = newTexto
-                  .replace(regexReanuda, `$1SALE desde ${addr}`)
-                  .replace(regexDesde, `$1desde ${addr}`);
-                
-                if (!newTexto.includes('desde') && (newTexto.toUpperCase().includes('SALE'))) {
-                  newTexto = newTexto.replace(new RegExp(`(${upperIndicativo}.*?)SALE`, 'i'), `$1SALE desde ${addr}`);
-                }
-                itemModified = true;
-              }
-            }
-          }
-
-          if (solvedAddr) {
-            const parts = (c.texto || "").split(' ');
-            const indicativo = parts[1];
-            if (indicativo && indicativo.length > 2) {
-              const upperIndicativo = indicativo.toUpperCase();
-              const myTs = c.timestamp || 0;
-              
-              // 3. BACK-PROPAGATION: Update destination of PREVIOUS departure
-              const prevDeparture = comments
-                .filter(prevC => {
-                  const dat = (prevC.texto || "").toUpperCase();
-                  return (prevC.timestamp || 0) < myTs &&
-                         dat.includes(upperIndicativo) &&
-                         (dat.includes('REANUDA') || dat.includes('SALE')) &&
-                         !prevC.editadoBack;
-                })
-                .sort((x, y) => (y.timestamp || 0) - (x.timestamp || 0))[0];
-
-              if (prevDeparture) {
-                const prevC = prevDeparture;
-                const regexHacia = new RegExp(`(${upperIndicativo}.*?)(?:\\s+(?:hacia el lugar(?: del aviso)?|sin dirección)|(?=\\s+a las \\d{2}:\\d{2}))`, 'i');
-                let upgraded = prevC.texto.includes(solvedAddr) ? prevC.texto : prevC.texto
-                  .replace(regexHacia, `$1 hacia ${solvedAddr}`);
-
-                if (upgraded !== prevC.texto) {
-                  prevC.texto = upgraded;
-                  prevC.editadoBack = true;
-                  prevC.hydrated = true;
-                  modified = true;
-                }
-              }
-
-              // 4. FORWARD-PROPAGATION: Update origin of NEXT departure [V.13.28.8]
-              const nextDeparture = comments
-                .filter(nextC => {
-                  const dat = (nextC.texto || "").toUpperCase();
-                  return (nextC.timestamp || 0) > myTs &&
-                         dat.includes(upperIndicativo) &&
-                         (dat.includes('REANUDA') || dat.includes('SALE')) &&
-                         !nextC.editadoForward;
-                })
-                .sort((x, y) => (x.timestamp || 0) - (y.timestamp || 0))[0];
-
-              if (nextDeparture) {
-                const nextC = nextDeparture;
-                const regexReanuda = new RegExp(`(${upperIndicativo}.*?)REANUDA marcha`, 'i');
-                const regexDesde = new RegExp(`(${upperIndicativo}.*?)desde (.*?)(?= hacia|$)`, 'i');
-                let upgraded = nextC.texto
-                 .replace(regexReanuda, `$1SALE desde ${solvedAddr}`)
-                 .replace(regexDesde, `$1desde ${solvedAddr}`);
-
-                if (!upgraded.includes(`desde ${solvedAddr}`) && nextC.texto.includes('SALE')) {
-                  upgraded = upgraded.replace(new RegExp(`(${upperIndicativo}.*?)SALE`, 'i'), `$1SALE desde ${solvedAddr}`);
-                }
-                if (upgraded !== nextC.texto) {
-                  nextC.texto = upgraded;
-                  nextC.editadoForward = true;
-                  nextC.hydrated = true;
-                  modified = true;
-                }
-              }
-            }
-          }
-          
-          // 2. Hydrate "SALE" or "REANUDA" with destination address (fallback to intervention address)
-          if ((utext.includes('EL LUGAR') || utext.includes('SIN DIRECCIÓN')) && iAddr && !c.editadoBack && !window._oystaHydrated.has((c.timestamp || 0) + "_sale")) {
-            const oldTexto = newTexto;
-            newTexto = newTexto.replace(/hacia el lugar(?: del aviso)?/i, "hacia " + iAddr)
-                              .replace(/el lugar/i, iAddr)
-                              .replace(/sin dirección/i, iAddr);
-            if (newTexto !== oldTexto) {
-                window._oystaHydrated.add((c.timestamp || 0) + "_sale");
-                itemModified = true;
-            }
-          }
-
-          if (itemModified) {
-            c.texto = newTexto;
-            c.hydrated = true;
-            modified = true;
-          }
-        }
-        
-        if (modified) updateDoc(d.ref, { comentarios: comments }).catch(e => console.error("[Oysta] Hydration error:", e));
-      }
+    async function hydrateOystaComments(snap) { 
+      // V.14.8.2: DEPRECADA - Reemplazada por enrichOystaComments para evitar conflictos de regex y lógica duplicada.
+      console.log("[Legacy] hydrateOystaComments ignorada en favor de enrichOystaComments (V.14.8.2)");
+      return;
     }
 
     window.handlePrevIntSearch = (val) => {
@@ -15036,7 +14872,7 @@ ${dataContext}
 
   <!-- GLOBAL VERSION WATERMARK -->
   <div id="global-version-watermark" style="position: fixed; bottom: 14px; left: 16px; z-index: 999999; font-size: 11px; color: var(--text-3); font-family: monospace; pointer-events: none; text-shadow: 1px 1px 2px rgba(0,0,0,0.8); font-weight: 700; opacity: 0.9;">
-    EmerCRE V.14.8.1
+    EmerCRE V.14.8.2
   </div>
 
   <!-- LOGIN -->
@@ -15077,7 +14913,7 @@ ${dataContext}
             contraseña?</a>
         </div>
         <div style="margin-top: 25px; text-align: left; font-size: 10px; color: var(--text-4); font-family: monospace;">
-          Versión V.14.8.1
+          Versión V.14.8.2
         </div>
       </div>
     </div>
@@ -15278,7 +15114,7 @@ ${dataContext}
             Cambiar contrasena</button>
           <button class="btn-logout" style="width:100%; padding:12px;" onclick="doLogout()">Cerrar Sesion</button>
           <div style="margin-top: 10px; text-align: center; font-size: 10px; color: var(--text-4); font-family: monospace;">
-            Versión V.14.8.1
+            Versión V.14.8.2
           </div>
         </div>
       </div>
@@ -15989,7 +15825,7 @@ ${dataContext}
       </div>
       <div
         style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-        Versión V.14.8.1
+        Versión V.14.8.2
       </div>
     </div>
 
@@ -16029,7 +15865,7 @@ ${dataContext}
       </div>
       <div
         style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-        Versión V.14.8.1
+        Versión V.14.8.2
       </div>
     </div>
 
@@ -16144,7 +15980,7 @@ ${dataContext}
       </div>
       <div
         style="padding: 10px 16px; font-size: 11px; color: var(--text-3); font-weight:600; border-top: 1px solid var(--border-mid); text-align: left; font-family: monospace; flex-shrink: 0; background: var(--bg-1);">
-        Versión V.14.8.1
+        Versión V.14.8.2
       </div>
     </div>
 
@@ -16760,7 +16596,7 @@ ${dataContext}
             Selecciona un usuario registrado para designarlo como Jefe de Operaciones en el ámbito seleccionado.
           </div>
           <div style="font-size:10px; color:var(--text-4); margin-top:20px; text-align:center;">
-            Versión V.14.8.1
+            Versión V.14.8.2
           </div>
         </div>
         <div class="field" id="j-prov-row">
@@ -17093,7 +16929,7 @@ ${dataContext}
     </div>
   </div>
 
-  <!-- MODAL LISTADO LOGS OYSTA (V.14.8.1) -->
+  <!-- MODAL LISTADO LOGS OYSTA (V.14.8.2) -->
   <div class="overlay" id="overlay-oysta-logs">
     <div class="modal" style="width:800px; max-width:95vw; max-height: 85vh;">
       <div class="modal-head">
