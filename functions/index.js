@@ -572,7 +572,7 @@ exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
 let vehiculosCache = {};
 let vehiculosCacheTime = {};
 
-// 5. Monitor Oysta Vehicles (V.14.6.5)
+// 5. Monitor Oysta Vehicles (V.14.6.6)
 // Detecta llegadas y salidas en segundo plano cada 2 minutos.
 // Solo procesa intervenciones PREVENTIVAS. No seguimiento de emergencias en BG.
 exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRun(async (context) => {
@@ -582,7 +582,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
 
     try {
         // 1. Lectura inteligente: Solo consultamos preventivos activos.
-        // BUG FIX (V.14.6.5): No consultamos emergencias porque no se hace seguimiento en BG.
+        // BUG FIX (V.14.6.6): No consultamos emergencias porque no se hace seguimiento en BG.
         const rawIntsSnap = await db.collectionGroup("intervenciones").where("abierta", "==", true).get();
 
         // 1.5. Filtrar intervenciones cuyos preventivos padres estén realmente abiertos (V.14.1.3)
@@ -610,7 +610,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
             }
         }
 
-        // BUG FIX (V.14.6.5): Salimos si no hay preventivos activos.
+        // BUG FIX (V.14.6.6): Salimos si no hay preventivos activos.
         // La existencia de emergencias con coches NO debe activar el login en Oysta.
         if (activeIntDocs.length === 0) {
             console.log("[Monitor] Sin intervenciones preventivas activas. Finalizando para ahorro de cuota Firebase.");
@@ -618,7 +618,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         }
 
         // 2. Obtener mapeo de vehículos locales vinculados a Oysta.
-        // BUG FIX (V.14.6.5): Solo recursos de PREVENTIVOS (no de emergencias).
+        // BUG FIX (V.14.6.6): Solo recursos de PREVENTIVOS (no de emergencias).
         const assignedIds = new Set();
         activeIntDocs.forEach(doc => {
             (doc.data().recursosAsignados || []).forEach(rid => assignedIds.add(rid));
@@ -678,7 +678,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         const now = Date.now();
 
         // 4. Obtener todos los estados agregados en batch.
-        // BUG FIX (V.14.6.5): usa activeIntDocs (correcto) en lugar de activeIntsSnap (no definido).
+        // BUG FIX (V.14.6.6): usa activeIntDocs (correcto) en lugar de activeIntsSnap (no definido).
         const intStateRefs = activeIntDocs.map(doc => db.collection("oysta_vehicle_states").doc(`prev_${doc.id}`));
         const allStatesSnaps = intStateRefs.length > 0 ? await db.getAll(...intStateRefs) : [];
         const statesMap = {};
@@ -841,7 +841,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 fecha: admin.firestore.FieldValue.serverTimestamp(),
                 usuario: "Oysta (BG)",
                 tipo: "Oysta",
-                // BUG FIX (V.14.6.5): activeIntsSnap no existía; usa activeIntDocs.length
+                // BUG FIX (V.14.6.6): activeIntsSnap no existía; usa activeIntDocs.length
                 detalle: `Monitor activo: Supervisando ${oystaVehicleCount} recurso(s) en ${activeIntDocs.length} int(s) preventiva(s).`
             });
         }
