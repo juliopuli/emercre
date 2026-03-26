@@ -1,5 +1,6 @@
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const https = require("https");
 
 admin.initializeApp();
 
@@ -572,17 +573,17 @@ exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
 let vehiculosCache = {};
 let vehiculosCacheTime = {};
 
-// 5. Monitor Oysta Vehicles (V.14.7.3)
+// 5. Monitor Oysta Vehicles (V.14.7.4)
 // Detecta llegadas y salidas en segundo plano cada 2 minutos.
 // Solo procesa intervenciones PREVENTIVAS. No seguimiento de emergencias en BG.
 exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRun(async (context) => {
     const db = admin.firestore();
-    const bridgeUrl = process.env.OYSTA_BRIDGE_URL;
+    const bridgeUrl = process.env.OYSTA_BRIDGE_URL || "https://script.google.com/macros/s/AKfycbw3-xw3BPvvHIagopXlcvd4fzHgSs_BUlv6-CbiP4ZhtivoIiltxx1QkcS6d7AF45f2/exec";
     if (!bridgeUrl) return null;
 
     try {
         // 1. Lectura inteligente: Solo consultamos preventivos activos.
-        // BUG FIX (V.14.7.3): No consultamos emergencias porque no se hace seguimiento en BG.
+        // BUG FIX (V.14.7.4): No consultamos emergencias porque no se hace seguimiento en BG.
         const rawIntsSnap = await db.collectionGroup("intervenciones").where("abierta", "==", true).get();
 
         // 1.5. Filtrar intervenciones cuyos preventivos padres estén realmente abiertos (V.14.1.3)
@@ -610,7 +611,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
             }
         }
 
-        // BUG FIX (V.14.7.3): Salimos si no hay preventivos activos.
+        // BUG FIX (V.14.7.4): Salimos si no hay preventivos activos.
         // La existencia de emergencias con coches NO debe activar el login en Oysta.
         if (activeIntDocs.length === 0) {
             console.log("[Monitor] Sin intervenciones preventivas activas. Finalizando para ahorro de cuota Firebase.");
@@ -618,7 +619,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         }
 
         // 2. Obtener mapeo de vehículos locales vinculados a Oysta.
-        // BUG FIX (V.14.7.3): Solo recursos de PREVENTIVOS (no de emergencias).
+        // BUG FIX (V.14.7.4): Solo recursos de PREVENTIVOS (no de emergencias).
         const assignedIds = new Set();
         activeIntDocs.forEach(doc => {
             (doc.data().recursosAsignados || []).forEach(rid => assignedIds.add(rid));
@@ -679,7 +680,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         let diagnosticLogged = false;
 
         // 4. Obtener todos los estados agregados en batch.
-        // BUG FIX (V.14.7.3): usa activeIntDocs (correcto) en lugar de activeIntsSnap (no definido).
+        // BUG FIX (V.14.7.4): usa activeIntDocs (correcto) en lugar de activeIntsSnap (no definido).
         const intStateRefs = activeIntDocs.map(doc => db.collection("oysta_vehicle_states").doc(`prev_${doc.id}`));
         const allStatesSnaps = intStateRefs.length > 0 ? await db.getAll(...intStateRefs) : [];
         const statesMap = {};
@@ -705,12 +706,12 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
 
                 const pos = { lat: parseFloat(v.lat), lng: parseFloat(v.lng) };
                 const speed = parseFloat(v.speed);
-                // V.14.7.3: Detección más robusta. Si Oysta no envía speed, intentamos detectar por status o movimiento
+                // V.14.7.4: Detección más robusta. Si Oysta no envía speed, intentamos detectar por status o movimiento
                 let isMoving = speed > 3;
                 if (v.status && v.status.toUpperCase().includes("MOVING")) isMoving = true;
                 if (v.moving === true || v.moving === "true") isMoving = true;
 
-                // Log de diagnóstico temporal (V.14.7.3): logueamos las claves del primer objeto que veamos
+                // Log de diagnóstico temporal (V.14.7.4): logueamos las claves del primer objeto que veamos
                 if (!diagnosticLogged) {
                     await db.collection("oysta_logs").add({
                         fecha: admin.firestore.FieldValue.serverTimestamp(), usuario: "Sist. Debug", tipo: "Debug",
@@ -729,7 +730,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 const distToDest = iCoords ? calculateHaversineDist(pos, iCoords) : 999;
                 let vehicleStateChanged = false;
 
-                // Reset de arribo agresivo (V.14.7.3: resetea siempre > 250m para evitar botes)
+                // Reset de arribo agresivo (V.14.7.4: resetea siempre > 250m para evitar botes)
                 if (vs.hasArrived && distToDest > 0.25) {
                     vs.hasArrived = false;
                     vehicleStateChanged = true;
@@ -761,7 +762,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                             detalle: MSG_SALE
                         });
                     } else {
-                        // Log de depuración (V.14.7.3)
+                        // Log de depuración (V.14.7.4)
                         await db.collection("oysta_logs").add({
                             fecha: admin.firestore.FieldValue.serverTimestamp(), usuario: "Sist. Debug", tipo: "Debug",
                             detalle: `Bloqueado SALE duplicado para ${indicativo}.`
@@ -805,7 +806,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                     } 
                     // PARADA en trayecto (Transición moviéndose -> parado)
                     else if (!isMoving && vs.moving && distToDest > 0.1) {
-                        // V.14.7.3: Usamos distToDest > 0.1 (100m) para evitar que la parada se marque si ya está en el lugar
+                        // V.14.7.4: Usamos distToDest > 0.1 (100m) para evitar que la parada se marque si ya está en el lugar
                         await iRef.update({ 
                             comentarios: admin.firestore.FieldValue.arrayUnion({
                                 texto: MSG_PARADA, coords: pos, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
@@ -848,7 +849,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 fecha: admin.firestore.FieldValue.serverTimestamp(),
                 usuario: "Oysta (BG)",
                 tipo: "Oysta",
-                // BUG FIX (V.14.7.3): activeIntsSnap no existía; usa activeIntDocs.length
+                // BUG FIX (V.14.7.4): activeIntsSnap no existía; usa activeIntDocs.length
                 detalle: `Monitor activo: Supervisando ${oystaVehicleCount} recurso(s) en ${activeIntDocs.length} int(s) preventiva(s).`
             });
         }
@@ -888,11 +889,16 @@ function formatCommentFecha(d) {
     return `${day}/${month}/${year} ${hour}:${min}`;
 }
 
-// V.14.7.3: Geocodificación inversa para el monitor de fondo
+// V.14.7.4: Geocodificación inversa robusta con fallback a link de Google Maps
 async function getReverseGeocoding(lat, lng) {
     const apiKey = process.env.PENITENTE_API_KEY || "";
-    if (!apiKey) return `[${lat.toFixed(4)}, ${lng.toFixed(4)}]`;
-    const https = require('https');
+    const coordsStr = `[${lat.toFixed(4)}, ${lng.toFixed(4)}]`;
+    const mapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
+    const fallback = `${coordsStr} (Ver mapa: ${mapsLink})`;
+    
+    // Si no hay API Key o es inválida, usamos el fallback directo
+    if (!apiKey || apiKey.length < 10) return fallback;
+    
     return new Promise((resolve) => {
         const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}&language=es`;
         https.get(url, (res) => {
@@ -904,13 +910,13 @@ async function getReverseGeocoding(lat, lng) {
                     if (json.results && json.results.length > 0) {
                         resolve(json.results[0].formatted_address);
                     } else {
-                        resolve(`[${lat.toFixed(4)}, ${lng.toFixed(4)}]`);
+                        resolve(fallback);
                     }
                 } catch (e) {
-                    resolve(`[${lat.toFixed(4)}, ${lng.toFixed(4)}]`);
+                    resolve(fallback);
                 }
             });
-        }).on('error', () => resolve(`[${lat.toFixed(4)}, ${lng.toFixed(4)}]`));
+        }).on('error', () => resolve(fallback));
     });
 }
 
