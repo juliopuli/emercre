@@ -572,7 +572,7 @@ exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
 let vehiculosCache = {};
 let vehiculosCacheTime = {};
 
-// 5. Monitor Oysta Vehicles (V.14.6.7)
+// 5. Monitor Oysta Vehicles (V.14.6.8)
 // Detecta llegadas y salidas en segundo plano cada 2 minutos.
 // Solo procesa intervenciones PREVENTIVAS. No seguimiento de emergencias en BG.
 exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRun(async (context) => {
@@ -582,7 +582,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
 
     try {
         // 1. Lectura inteligente: Solo consultamos preventivos activos.
-        // BUG FIX (V.14.6.7): No consultamos emergencias porque no se hace seguimiento en BG.
+        // BUG FIX (V.14.6.8): No consultamos emergencias porque no se hace seguimiento en BG.
         const rawIntsSnap = await db.collectionGroup("intervenciones").where("abierta", "==", true).get();
 
         // 1.5. Filtrar intervenciones cuyos preventivos padres estén realmente abiertos (V.14.1.3)
@@ -610,7 +610,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
             }
         }
 
-        // BUG FIX (V.14.6.7): Salimos si no hay preventivos activos.
+        // BUG FIX (V.14.6.8): Salimos si no hay preventivos activos.
         // La existencia de emergencias con coches NO debe activar el login en Oysta.
         if (activeIntDocs.length === 0) {
             console.log("[Monitor] Sin intervenciones preventivas activas. Finalizando para ahorro de cuota Firebase.");
@@ -618,7 +618,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         }
 
         // 2. Obtener mapeo de vehículos locales vinculados a Oysta.
-        // BUG FIX (V.14.6.7): Solo recursos de PREVENTIVOS (no de emergencias).
+        // BUG FIX (V.14.6.8): Solo recursos de PREVENTIVOS (no de emergencias).
         const assignedIds = new Set();
         activeIntDocs.forEach(doc => {
             (doc.data().recursosAsignados || []).forEach(rid => assignedIds.add(rid));
@@ -678,7 +678,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         const now = Date.now();
 
         // 4. Obtener todos los estados agregados en batch.
-        // BUG FIX (V.14.6.7): usa activeIntDocs (correcto) en lugar de activeIntsSnap (no definido).
+        // BUG FIX (V.14.6.8): usa activeIntDocs (correcto) en lugar de activeIntsSnap (no definido).
         const intStateRefs = activeIntDocs.map(doc => db.collection("oysta_vehicle_states").doc(`prev_${doc.id}`));
         const allStatesSnaps = intStateRefs.length > 0 ? await db.getAll(...intStateRefs) : [];
         const statesMap = {};
@@ -714,8 +714,8 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 const distToDest = iCoords ? calculateHaversineDist(pos, iCoords) : 999;
                 let vehicleStateChanged = false;
 
-                // Reset de arribo si se aleja del punto (V.14.6.7)
-                if (vs.hasArrived && isMoving && distToDest > 0.2) {
+                // Reset de arribo agresivo (V.14.6.8: resetea siempre > 150m sin depender de isMoving)
+                if (vs.hasArrived && distToDest > 0.15) {
                     vs.hasArrived = false;
                     vehicleStateChanged = true;
                 }
@@ -745,12 +745,12 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                     vs.moving = true;
                     vehicleStateChanged = true;
                 }
-                // 2. Llegada Final (Radio aumentado a 100m en V.14.6.7)
+                // 2. Llegada Final (Radio aumentado a 100m en V.14.6.8)
                 else if (!isMoving && distToDest < 0.1 && !vs.hasArrived && vs.hasDeparted) {
                     const exists = (iData.comentarios || []).some(c => {
                         if (!c.texto) return false;
                         const t = c.texto.toUpperCase();
-                        // Match exacto con prefijo ⚡️ para evitar colisiones (V.14.6.7)
+                        // Match exacto con prefijo ⚡️ para evitar colisiones (V.14.6.8)
                         const searchPattern = `⚡️ ${indicativo.toUpperCase()}`;
                         return t.includes(searchPattern) && t.includes("LLEGADA AL LUGAR");
                     });
@@ -786,8 +786,9 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                     }
 
                     if (isMoving && !vs.moving && distToDest > 0.1) {
-                        // REANUDA marcha (V.14.6.7: Relajado el check de SALE si el estado interno ya era parado)
-                        if (!lastActionStr.includes("REANUDA") && !lastActionStr.includes("EN MOVIMIENTO") && !lastActionStr.includes("INTERVENCIÓN INICIADA")) {
+                        // REANUDA marcha (V.14.6.8: Solo bloquea si el último mensaje ya era de movimiento activo)
+                        const isAlreadyMovingMsg = lastActionStr.includes("REANUDA") || lastActionStr.includes("EN MOVIMIENTO") || lastActionStr.includes("SALE") || lastActionStr.includes("INTERVENCIÓN INICIADA");
+                        if (!isAlreadyMovingMsg) {
                             const text = `⚡️ ${indicativo} REANUDA marcha hacia el lugar.`;
                             await iRef.update({
                                 comentarios: admin.firestore.FieldValue.arrayUnion({
@@ -805,7 +806,8 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                         vehicleStateChanged = true;
                     } else if (!isMoving && vs.moving && distToDest > 0.1) {
                         // Parada en trayecto
-                        if (!lastActionStr.includes("PARADA") && !lastActionStr.includes("LLEGADA") && !lastActionStr.includes("SE HA DETENIDO")) {
+                        const isAlreadyStoppedMsg = lastActionStr.includes("PARADA") || lastActionStr.includes("LLEGADA") || lastActionStr.includes("SE HA DETENIDO") || lastActionStr.includes("FINALIZADA");
+                        if (!isAlreadyStoppedMsg) {
                             const arrivalText = `⚡️ ${indicativo} PARADA en trayecto.`;
                             await iRef.update({ 
                                 comentarios: admin.firestore.FieldValue.arrayUnion({
@@ -850,7 +852,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 fecha: admin.firestore.FieldValue.serverTimestamp(),
                 usuario: "Oysta (BG)",
                 tipo: "Oysta",
-                // BUG FIX (V.14.6.7): activeIntsSnap no existía; usa activeIntDocs.length
+                // BUG FIX (V.14.6.8): activeIntsSnap no existía; usa activeIntDocs.length
                 detalle: `Monitor activo: Supervisando ${oystaVehicleCount} recurso(s) en ${activeIntDocs.length} int(s) preventiva(s).`
             });
         }
