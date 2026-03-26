@@ -573,7 +573,7 @@ exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
 let vehiculosCache = {};
 let vehiculosCacheTime = {};
 
-// 5. Monitor Oysta Vehicles (V.14.7.5)
+// 5. Monitor Oysta Vehicles (V.14.8.0)
 // Detecta llegadas y salidas en segundo plano cada 2 minutos.
 // Solo procesa intervenciones PREVENTIVAS. No seguimiento de emergencias en BG.
 exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRun(async (context) => {
@@ -583,7 +583,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
 
     try {
         // 1. Lectura inteligente: Solo consultamos preventivos activos.
-        // BUG FIX (V.14.7.5): No consultamos emergencias porque no se hace seguimiento en BG.
+        // BUG FIX (V.14.8.0): No consultamos emergencias porque no se hace seguimiento en BG.
         const rawIntsSnap = await db.collectionGroup("intervenciones").where("abierta", "==", true).get();
 
         // 1.5. Filtrar intervenciones cuyos preventivos padres estén realmente abiertos (V.14.1.3)
@@ -611,7 +611,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
             }
         }
 
-        // BUG FIX (V.14.7.5): Salimos si no hay preventivos activos.
+        // BUG FIX (V.14.8.0): Salimos si no hay preventivos activos.
         // La existencia de emergencias con coches NO debe activar el login en Oysta.
         if (activeIntDocs.length === 0) {
             console.log("[Monitor] Sin intervenciones preventivas activas. Finalizando para ahorro de cuota Firebase.");
@@ -619,7 +619,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         }
 
         // 2. Obtener mapeo de vehículos locales vinculados a Oysta.
-        // BUG FIX (V.14.7.5): Solo recursos de PREVENTIVOS (no de emergencias).
+        // BUG FIX (V.14.8.0): Solo recursos de PREVENTIVOS (no de emergencias).
         const assignedIds = new Set();
         activeIntDocs.forEach(doc => {
             (doc.data().recursosAsignados || []).forEach(rid => assignedIds.add(rid));
@@ -680,7 +680,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         let diagnosticLogged = false;
 
         // 4. Obtener todos los estados agregados en batch.
-        // BUG FIX (V.14.7.5): usa activeIntDocs (correcto) en lugar de activeIntsSnap (no definido).
+        // BUG FIX (V.14.8.0): usa activeIntDocs (correcto) en lugar de activeIntsSnap (no definido).
         const intStateRefs = activeIntDocs.map(doc => db.collection("oysta_vehicle_states").doc(`prev_${doc.id}`));
         const allStatesSnaps = intStateRefs.length > 0 ? await db.getAll(...intStateRefs) : [];
         const statesMap = {};
@@ -706,12 +706,12 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
 
                 const pos = { lat: parseFloat(v.lat), lng: parseFloat(v.lng) };
                 const speed = parseFloat(v.speed);
-                // V.14.7.5: Detección más robusta. Si Oysta no envía speed, intentamos detectar por status o movimiento
+                // V.14.8.0: Detección más robusta. Si Oysta no envía speed, intentamos detectar por status o movimiento
                 let isMoving = speed > 3;
                 if (v.status && v.status.toUpperCase().includes("MOVING")) isMoving = true;
                 if (v.moving === true || v.moving === "true") isMoving = true;
 
-                // Log de diagnóstico temporal (V.14.7.5): logueamos las claves del primer objeto que veamos
+                // Log de diagnóstico temporal (V.14.8.0): logueamos las claves del primer objeto que veamos
                 if (!diagnosticLogged) {
                     await db.collection("oysta_logs").add({
                         fecha: admin.firestore.FieldValue.serverTimestamp(), usuario: "Sist. Debug", tipo: "Debug",
@@ -730,107 +730,109 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 const distToDest = iCoords ? calculateHaversineDist(pos, iCoords) : 999;
                 let vehicleStateChanged = false;
 
-                // Reset de arribo agresivo (V.14.7.5: resetea siempre > 250m para evitar botes)
+                // Reset de arribo agresivo (V.14.8.0: resetea siempre > 250m para evitar botes)
                 if (vs.hasArrived && distToDest > 0.25) {
                     vs.hasArrived = false;
                     vehicleStateChanged = true;
                 }
 
-                const MSG_SALE = `⚡️ ${indicativo} SALE desde ${addr} hacia ${iData.direccion || 'el lugar'}.`;
-                const MSG_LLEGADA = `✅ ${indicativo} LLEGADA al lugar (${iData.direccion || 'sin dirección'}).`;
-                const MSG_REANUDA = `⚡️ ${indicativo} REANUDA marcha desde ${addr}.`;
-                const MSG_PARADA = `⚡️ ${indicativo} PARADA en ${addr}.`;
-
-                // 1. Salida Inicial
-                if (isMoving && !vs.hasDeparted) {
-                    const searchPattern = `⚡️ ${indicativo.toUpperCase()} SALE `;
-                    const exists = (iData.comentarios || []).some(c => {
-                        if (!c.texto) return false;
-                        const t = c.texto.toUpperCase();
-                        return t.includes(searchPattern) || t.includes("INTERVENCIÓN INICIADA");
-                    });
-                    if (!exists) {
+                // --- NUEVA LÓGICA V.14.8.0 (Reglas de Casos A, B y C) ---
+                
+                // 1. DETECCIÓN DE SALIDA (Inicia movimiento o reinicia tras parada)
+                if (isMoving && (!vs.moving || !vs.hasDeparted)) {
+                    const target = iData.direccion || "destino";
+                    const msg = `${indicativo} sale desde ${addr} hacia ${target}`;
+                    
+                    const newComm = {
+                        texto: msg,
+                        autor: 'Sist. Oysta (BG)',
+                        autorId: 'system',
+                        timestamp: oystaTime,
+                        fecha: formatCommentFecha(new Date(oystaTime))
+                    };
+                    
+                    // Evitar duplicados si el monitor re-procesa el mismo evento exacto
+                    const alreadySent = (iData.comentarios || []).some(c => 
+                        c.timestamp === oystaTime && c.texto.includes("sale desde")
+                    );
+                    
+                    if (!alreadySent) {
                         await iRef.update({
-                            comentarios: admin.firestore.FieldValue.arrayUnion({
-                                texto: MSG_SALE, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
-                            })
+                            comentarios: admin.firestore.FieldValue.arrayUnion(newComm),
+                            actualizadoEn: admin.firestore.FieldValue.serverTimestamp()
                         });
-                        await db.collection("oysta_logs").add({
-                            fecha: admin.firestore.FieldValue.serverTimestamp(),
-                            usuario: "Sist. Oysta (BG)",
-                            tipo: "Oysta",
-                            detalle: MSG_SALE
-                        });
-                    } else {
-                        // Log de depuración (V.14.7.5)
-                        await db.collection("oysta_logs").add({
-                            fecha: admin.firestore.FieldValue.serverTimestamp(), usuario: "Sist. Debug", tipo: "Debug",
-                            detalle: `Bloqueado SALE duplicado para ${indicativo}.`
-                        });
-                    }
-                    vs.hasDeparted = true;
-                    vs.moving = true;
-                    vehicleStateChanged = true;
-                }
-                // 2. Llegada Final (Radio 100m)
-                else if (!isMoving && distToDest < 0.1 && !vs.hasArrived && vs.hasDeparted) {
-                    const text = `✅ ${indicativo} LLEGADA al lugar (${iData.direccion || 'sin dirección'}).`;
-                    await iRef.update({
-                        comentarios: admin.firestore.FieldValue.arrayUnion({
-                            texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
-                        })
-                    });
-                    await db.collection("oysta_logs").add({
-                        fecha: admin.firestore.FieldValue.serverTimestamp(),
-                        usuario: "Oysta (BG)", tipo: "Oysta", detalle: text
-                    });
-                    vs.hasArrived = true;
-                    vs.moving = false;
-                    vehicleStateChanged = true;
-                }
-                          // 3. Seguimiento Intermedio (Trayecto)
-                else if (vs.hasDeparted && !vs.hasArrived) {
-                    // REANUDA marcha (Transición parado -> moviéndose)
-                    if (isMoving && !vs.moving && distToDest > 0.1) {
-                        await iRef.update({
-                            comentarios: admin.firestore.FieldValue.arrayUnion({
-                                texto: MSG_REANUDA, coords: pos, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
-                            })
-                        });
-                        await db.collection("oysta_logs").add({
-                            fecha: admin.firestore.FieldValue.serverTimestamp(),
-                            usuario: "Oysta (BG)", tipo: "Oysta", detalle: MSG_REANUDA
-                        });
+                        
+                        // Guardamos datos para edición retroactiva posterior (Caso B/C)
+                        vs.lastSaleTs = oystaTime;
+                        vs.lastSaleAddr = addr;
+                        vs.hasDeparted = true;
+                        vs.hasArrived = false;
                         vs.moving = true;
                         vehicleStateChanged = true;
-                    } 
-                    // PARADA en trayecto (Transición moviéndose -> parado)
-                    else if (!isMoving && vs.moving && distToDest > 0.1) {
-                        // V.14.7.5: Usamos distToDest > 0.1 (100m) para evitar que la parada se marque si ya está en el lugar
-                        await iRef.update({ 
-                            comentarios: admin.firestore.FieldValue.arrayUnion({
-                                texto: MSG_PARADA, coords: pos, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
-                            }),
-                            actualizadoEn: admin.firestore.FieldValue.serverTimestamp() 
-                        });
+
                         await db.collection("oysta_logs").add({
                             fecha: admin.firestore.FieldValue.serverTimestamp(),
-                            usuario: "Oysta (BG)", tipo: "Oysta", detalle: MSG_PARADA
+                            usuario: "Sist. Oysta (BG)", tipo: "Oysta", detalle: msg
                         });
-                        vs.moving = false;
-                        vehicleStateChanged = true;
-                    } 
-                    // Log de cambio de estado sin comentario (para diagnóstico)
-                    else if (isMoving !== vs.moving) {
-                        await db.collection("oysta_logs").add({
-                            fecha: admin.firestore.FieldValue.serverTimestamp(),
-                            usuario: "Sist. Oysta (BG)",
-                            tipo: "Oysta",
-                            detalle: `[Recurso] ${indicativo} ahora está ${isMoving ? 'EN MOVIMIENTO' : 'PARADO'} en ${addr}. (Speed: ${v.speed || '?'})`
-                        });
-                        vs.moving = isMoving;
-                        vehicleStateChanged = true;
                     }
+                }
+                
+                // 2. DETECCIÓN DE LLEGADA / PARADA (Se detiene tras estar en movimiento)
+                else if (!isMoving && vs.moving) {
+                    let msg = "";
+                    const isGoal = distToDest < 0.1; // Radio 100m
+                    
+                    if (isGoal) {
+                        // CASO A: Llegada al destino final de la intervención
+                        msg = `${indicativo} llega a lugar del aviso (${iData.direccion || 'sin dirección'})`;
+                        vs.hasArrived = true;
+                    } else {
+                        // CASO B/C: Parada intermedia
+                        msg = `${indicativo} llega a ${addr}`;
+                        
+                        // Edición retroactiva del mensaje de salida previo si el destino era desconocido
+                        if (vs.lastSaleTs && vs.lastSaleAddr) {
+                            const currentComms = [...(iData.comentarios || [])];
+                            const idx = currentComms.findIndex(c => c.timestamp === vs.lastSaleTs && c.autorId === 'system');
+                            if (idx !== -1) {
+                                const oldText = currentComms[idx].texto;
+                                const newSaleText = `${indicativo} sale desde ${vs.lastSaleAddr} hacia ${addr}`;
+                                if (oldText !== newSaleText) {
+                                    currentComms[idx].texto = newSaleText;
+                                    await iRef.update({ comentarios: currentComms });
+                                }
+                            }
+                        }
+                    }
+                    
+                    await iRef.update({
+                        comentarios: admin.firestore.FieldValue.arrayUnion({
+                            texto: msg,
+                            autor: 'Sist. Oysta (BG)',
+                            autorId: 'system',
+                            timestamp: oystaTime,
+                            fecha: formatCommentFecha(new Date(oystaTime))
+                        }),
+                        actualizadoEn: admin.firestore.FieldValue.serverTimestamp()
+                    });
+                    
+                    vs.moving = false;
+                    vehicleStateChanged = true;
+
+                    await db.collection("oysta_logs").add({
+                        fecha: admin.firestore.FieldValue.serverTimestamp(),
+                        usuario: "Oysta (BG)", tipo: "Oysta", detalle: msg
+                    });
+                }
+                // 3. Log de cambio de estado silencioso (Para diagnóstico de botes)
+                else if (isMoving !== vs.moving) {
+                    await db.collection("oysta_logs").add({
+                        fecha: admin.firestore.FieldValue.serverTimestamp(),
+                        usuario: "Sist. Debug", tipo: "Debug",
+                        detalle: `[Cambio Estado] ${indicativo} -> ${isMoving ? 'EN MOVIMIENTO' : 'PARADO'} en ${addr}. Speed: ${v.speed}.`
+                    });
+                    vs.moving = isMoving;
+                    vehicleStateChanged = true;
                 }
 
                 if (vehicleStateChanged) {
@@ -849,7 +851,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 fecha: admin.firestore.FieldValue.serverTimestamp(),
                 usuario: "Oysta (BG)",
                 tipo: "Oysta",
-                // BUG FIX (V.14.7.5): activeIntsSnap no existía; usa activeIntDocs.length
+                // BUG FIX (V.14.8.0): activeIntsSnap no existía; usa activeIntDocs.length
                 detalle: `Monitor activo: Supervisando ${oystaVehicleCount} recurso(s) en ${activeIntDocs.length} int(s) preventiva(s).`
             });
         }
@@ -889,7 +891,7 @@ function formatCommentFecha(d) {
     return `${day}/${month}/${year} ${hour}:${min}`;
 }
 
-// V.14.7.5: Geocodificación inversa robusta con fallback a link de Google Maps
+// V.14.8.0: Geocodificación inversa robusta con fallback a link de Google Maps
 async function getReverseGeocoding(lat, lng) {
     const apiKey = process.env.PENITENTE_API_KEY || "";
     const coordsStr = `[${lat.toFixed(4)}, ${lng.toFixed(4)}]`;
