@@ -572,19 +572,18 @@ exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
 let vehiculosCache = {};
 let vehiculosCacheTime = {};
 
-// 5. Monitor Oysta Vehicles (V.13.28.0)
+// 5. Monitor Oysta Vehicles (V.14.6.5)
 // Detecta llegadas y salidas en segundo plano cada 2 minutos.
+// Solo procesa intervenciones PREVENTIVAS. No seguimiento de emergencias en BG.
 exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRun(async (context) => {
     const db = admin.firestore();
     const bridgeUrl = process.env.OYSTA_BRIDGE_URL;
     if (!bridgeUrl) return null;
 
     try {
-        // 1. Lectura inteligente: Verificar primero si hay actividad para ahorrar consultas
-        const [activeOpsSnap, rawIntsSnap] = await Promise.all([
-            db.collection("operaciones").where("estado", "==", "activa").get(),
-            db.collectionGroup("intervenciones").where("abierta", "==", true).get()
-        ]);
+        // 1. Lectura inteligente: Solo consultamos preventivos activos.
+        // BUG FIX (V.14.6.5): No consultamos emergencias porque no se hace seguimiento en BG.
+        const rawIntsSnap = await db.collectionGroup("intervenciones").where("abierta", "==", true).get();
 
         // 1.5. Filtrar intervenciones cuyos preventivos padres estén realmente abiertos (V.14.1.3)
         const activeIntDocs = [];
@@ -611,23 +610,22 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
             }
         }
 
-        // Si no hay nada abierto ni emergencias activas, salimos inmediatamente sin gastar más
-        if (activeOpsSnap.empty && activeIntDocs.length === 0) {
-            console.log("[Monitor] Sin actividad detectada (0 ops, 0 preventivos válidos). Finalizando para ahorro de cuota Firebase.");
+        // BUG FIX (V.14.6.5): Salimos si no hay preventivos activos.
+        // La existencia de emergencias con coches NO debe activar el login en Oysta.
+        if (activeIntDocs.length === 0) {
+            console.log("[Monitor] Sin intervenciones preventivas activas. Finalizando para ahorro de cuota Firebase.");
             return null;
         }
 
-        // 2. Obtener mapeo de vehículos locales vinculados a Oysta
+        // 2. Obtener mapeo de vehículos locales vinculados a Oysta.
+        // BUG FIX (V.14.6.5): Solo recursos de PREVENTIVOS (no de emergencias).
         const assignedIds = new Set();
-        activeOpsSnap.forEach(doc => {
-            (doc.data().recursosAsignadosIds || []).forEach(rid => assignedIds.add(rid));
-        });
         activeIntDocs.forEach(doc => {
             (doc.data().recursosAsignados || []).forEach(rid => assignedIds.add(rid));
         });
 
         if (assignedIds.size === 0) {
-            console.log("[Monitor] No hay recursos asignados en la actividad abierta. Finalizando.");
+            console.log("[Monitor] No hay recursos asignados en intervenciones preventivas abiertas. Finalizando.");
             return null;
         }
 
@@ -679,155 +677,17 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
 
         const now = Date.now();
 
-        // 4. Obtener todos los estados agregados en batch
-        const opStateRefs = activeOpsSnap.docs.map(doc => db.collection("oysta_vehicle_states").doc(`eme_${doc.id}`));
-        const intStateRefs = activeIntsSnap.docs.map(doc => db.collection("oysta_vehicle_states").doc(`prev_${doc.id}`));
-        const allStateRefs = [...opStateRefs, ...intStateRefs];
-        const allStatesSnaps = allStateRefs.length > 0 ? await db.getAll(...allStateRefs) : [];
+        // 4. Obtener todos los estados agregados en batch.
+        // BUG FIX (V.14.6.5): usa activeIntDocs (correcto) en lugar de activeIntsSnap (no definido).
+        const intStateRefs = activeIntDocs.map(doc => db.collection("oysta_vehicle_states").doc(`prev_${doc.id}`));
+        const allStatesSnaps = intStateRefs.length > 0 ? await db.getAll(...intStateRefs) : [];
         const statesMap = {};
         allStatesSnaps.forEach(snap => {
             statesMap[snap.id] = snap.exists ? snap.data() : {};
         });
 
-        // --- PROCESAR EMERGENCIAS ---
-        for (const opDoc of activeOpsSnap.docs) {
-            const op = opDoc.data();
-            const opId = opDoc.id;
-            const docKey = `eme_${opId}`;
-            const opStates = statesMap[docKey] || {};
-            let opStatesChanged = false;
-
-            const opCoords = op.coords;
-            const opAssignedIds = op.recursosAsignadosIds || [];
-
-            for (const rid of opAssignedIds) {
-                const oystaId = Object.keys(localVehiclesByOystaId).find(key => localVehiclesByOystaId[key].id === rid);
-                const v = oystaId ? vehiclesMap[oystaId] : null;
-                if (!v) continue;
-
-                const pos = { lat: parseFloat(v.lat), lng: parseFloat(v.lng) };
-                const speed = parseFloat(v.speed);
-                const isMoving = speed > 5;
-                const indicativo = localVehiclesByOystaId[oystaId].alias || localVehiclesByOystaId[oystaId].indicativo || v.name;
-
-                const oystaTsStr = v.last_pos ? v.last_pos.replace(' ', 'T') : null;
-                const oystaTime = oystaTsStr ? new Date(oystaTsStr).getTime() : now;
-
-                const vs = opStates[oystaId] || { moving: isMoving, hasDeparted: false, hasArrived: false, lastStopAddr: "" };
-                const distToDest = opCoords ? calculateHaversineDist(pos, opCoords) : 999;
-                let vehicleStateChanged = false;
-
-                // 1. Salida Inicial
-                if (isMoving && !vs.hasDeparted) {
-                    const exists = await checkExistingAction(db, opId, indicativo, "SALE");
-                    if (!exists) {
-                        const text = `⚡️ ${indicativo} SALE hacia el lugar (${op.dir || 'sin dirección'}).`;
-                        await db.collection("operaciones").doc(opId).collection("acciones").add({
-                            texto: text, coords: pos, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
-                        });
-                        // V.13.28.0: Duplicar en oysta_logs para visibilidad general
-                        await db.collection("oysta_logs").add({
-                            fecha: admin.firestore.FieldValue.serverTimestamp(),
-                            usuario: "Oysta (BG)",
-                            tipo: "Oysta",
-                            detalle: text
-                        });
-                    }
-                    vs.hasDeparted = true;
-                    vs.moving = true;
-                    vehicleStateChanged = true;
-                }
-                // 2. Llegada Final
-                else if (!isMoving && distToDest < 0.1 && !vs.hasArrived && vs.hasDeparted) {
-                    const exists = await checkExistingAction(db, opId, indicativo, "LLEGADA al lugar");
-                    if (!exists) {
-                        const text = `✅ ${indicativo} LLEGADA al lugar del aviso (${op.dir || 'sin dirección'}).`;
-                        await db.collection("operaciones").doc(opId).collection("acciones").add({
-                            texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
-                        });
-                        // V.13.28.0: Duplicar en oysta_logs
-                        await db.collection("oysta_logs").add({
-                            fecha: admin.firestore.FieldValue.serverTimestamp(),
-                            usuario: "Oysta (BG)",
-                            tipo: "Oysta",
-                            detalle: text
-                        });
-                    }
-                    vs.hasArrived = true;
-                    vs.moving = false;
-                    vehicleStateChanged = true;
-                } 
-                // 3. Seguimiento Intermedio (Solo si ya salió y no ha llegado)
-                else if (vs.hasDeparted && !vs.hasArrived) {
-                    
-                    // Extraer último estado de Emergencias para chequeo inteligente
-                    const logSnap = await db.collection("operaciones").doc(opId).collection("acciones").get();
-                    const sortedDocs = logSnap.docs.sort((a, b) => (b.data().timestamp || 0) - (a.data().timestamp || 0));
-                    const lastDoc = sortedDocs.find(d => (d.data().texto || "").toUpperCase().includes(indicativo.toUpperCase()));
-                    const lastActionStr = lastDoc ? (lastDoc.data().texto || "").toUpperCase() : "";
-
-                    // Reanudo marcha
-                    if (isMoving && !vs.moving && vs.lastStopAddr && distToDest > 0.1) {
-                        // Solo añadimos log si el último log no fue de ponerse de nuevo en marcha/salir
-                        if (!lastActionStr.includes("SALE") && !lastActionStr.includes("REANUDA") && !lastActionStr.includes("EN MOVIMIENTO")) {
-                            const text = `⚡️ ${indicativo} REANUDA marcha hacia el lugar del aviso.`;
-                            await db.collection("operaciones").doc(opId).collection("acciones").add({
-                                texto: text, coords: pos, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, prioridad: 'Baja'
-                            });
-                            // V.13.28.0: Duplicar en oysta_logs
-                            await db.collection("oysta_logs").add({
-                                fecha: admin.firestore.FieldValue.serverTimestamp(),
-                                usuario: "Oysta (BG)",
-                                tipo: "Oysta",
-                                detalle: text
-                            });
-                        }
-                        vs.moving = true;
-                        vs.lastStopAddr = "";
-                        vehicleStateChanged = true;
-                    }
-                    // Parada en el camino
-                    else if (!isMoving && vs.moving && distToDest > 0.1) {
-                        if (!lastActionStr.includes("PARADA") && !lastActionStr.includes("DETENIDO") && !lastActionStr.includes("LLEGADA")) {
-                            const text = `⚡️ ${indicativo} PARADA en trayecto.`;
-                            await db.collection("operaciones").doc(opId).collection("acciones").add({
-                                texto: text, 
-                                coords: pos,
-                                autor: 'Sist. Oysta (BG)', 
-                                autorId: 'system', 
-                                timestamp: oystaTime, 
-                                prioridad: 'Baja'
-                            });
-                            // V.13.28.0: Duplicar en oysta_logs
-                            await db.collection("oysta_logs").add({
-                                fecha: admin.firestore.FieldValue.serverTimestamp(),
-                                usuario: "Oysta (BG)",
-                                tipo: "Oysta",
-                                detalle: text
-                            });
-                        }
-                        vs.moving = false;
-                        vs.lastStopAddr = "punto intermedio";
-                        vehicleStateChanged = true;
-                    } else if (isMoving !== vs.moving) {
-                        vs.moving = isMoving;
-                        vehicleStateChanged = true;
-                    }
-                }
-
-                if (vehicleStateChanged) {
-                    opStates[oystaId] = vs;
-                    opStatesChanged = true;
-                }
-            }
-
-            if (opStatesChanged) {
-                await db.collection("oysta_vehicle_states").doc(docKey).set(opStates, { merge: true });
-            }
-        }
-
         // --- PROCESAR PREVENTIVOS ---
-        for (const intDoc of activeIntsSnap.docs) {
+        for (const intDoc of activeIntDocs) {
             const iData = intDoc.data();
             const iRef = intDoc.ref;
             const docKey = `prev_${iRef.id}`;
@@ -868,7 +728,6 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                                 texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
                             })
                         });
-                        // V.13.28.0: Duplicar en oysta_logs
                         await db.collection("oysta_logs").add({
                             fecha: admin.firestore.FieldValue.serverTimestamp(),
                             usuario: "Oysta (BG)",
@@ -894,7 +753,6 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                                 texto: text, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
                             })
                         });
-                        // V.13.28.0: Duplicar en oysta_logs
                         await db.collection("oysta_logs").add({
                             fecha: admin.firestore.FieldValue.serverTimestamp(),
                             usuario: "Oysta (BG)",
@@ -927,7 +785,6 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                                     texto: text, coords: pos, autor: 'Sist. Oysta (BG)', autorId: 'system', timestamp: oystaTime, fecha: formatCommentFecha(new Date(oystaTime))
                                 })
                             });
-                            // V.13.28.0: Duplicar en oysta_logs
                             await db.collection("oysta_logs").add({
                                 fecha: admin.firestore.FieldValue.serverTimestamp(),
                                 usuario: "Oysta (BG)",
@@ -952,7 +809,6 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                                 }),
                                 actualizadoEn: admin.firestore.FieldValue.serverTimestamp() 
                             });
-                            // V.13.28.0: Duplicar en oysta_logs
                             await db.collection("oysta_logs").add({
                                 fecha: admin.firestore.FieldValue.serverTimestamp(),
                                 usuario: "Oysta (BG)",
@@ -985,10 +841,12 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 fecha: admin.firestore.FieldValue.serverTimestamp(),
                 usuario: "Oysta (BG)",
                 tipo: "Oysta",
-                detalle: `Monitor activo: Supervisando ${oystaVehicleCount} recurso(s) en ${activeOpsSnap.size} op(s) y ${activeIntsSnap.size} int(s).`
+                // BUG FIX (V.14.6.5): activeIntsSnap no existía; usa activeIntDocs.length
+                detalle: `Monitor activo: Supervisando ${oystaVehicleCount} recurso(s) en ${activeIntDocs.length} int(s) preventiva(s).`
             });
         }
         return null;
+
     } catch (err) {
         console.error("Monitor Oysta Error:", err);
         return null;
