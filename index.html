@@ -1654,7 +1654,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.0.2 Loaded');
+    console.log('EmerCRE V.15.0.3 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -8162,6 +8162,13 @@ ${dataContext}
             const indMatch = text.match(/^(T-\d+\.\d+\s+[A-Z]+)/);
             const ind = indMatch ? indMatch[1] : (indicativoInput || "");
 
+            // C. Limpiar enlaces de mapa (V.15.0.3)
+            const mapRegex = /\s*\(Ver mapa: https:\/\/www\.google\.com\/maps\?q=[^\)]+\)/g;
+            if (text.match(mapRegex)) {
+              text = text.replace(mapRegex, "");
+              changed = true;
+            }
+
             // A. Destino Inteligente (Caso A de RULES.md)
             if (textLower.includes("sale") && textLower.includes("hacia destino") && opAddr) {
               text = text.replace(/hacia destino/i, `hacia ${opAddr}`);
@@ -8234,6 +8241,13 @@ ${dataContext}
         // Identificar indicativo
         const indMatch = text.match(/^(T-\d+\.\d+\s+[A-Z]+)/);
         const ind = indMatch ? indMatch[1] : (indicativo || "");
+
+        // C. Limpiar enlaces de mapa (V.15.0.3)
+        const mapRegex = /\s*\(Ver mapa: https:\/\/www\.google\.com\/maps\?q=[^\)]+\)/g;
+        if (text.match(mapRegex)) {
+          text = text.replace(mapRegex, "");
+          changed = true;
+        }
 
         // A. Destino inteligente (Caso A)
         const opAddr = (iData.direccion && iData.direccion !== 'Ubicación en mapa') ? iData.direccion : "";
@@ -14962,7 +14976,7 @@ ${dataContext}
 <body>
 
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-4); font-family: monospace; pointer-events: none; font-weight: 600; opacity: 0.8;">
-    EmerCRE V.15.0.2
+    EmerCRE V.15.0.3
   </div>
 
   <!-- LOGIN -->
