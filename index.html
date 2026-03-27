@@ -273,7 +273,12 @@
 
       const key = lat.toFixed(4) + ',' + lng.toFixed(4);
       if (reverseGeocodeCache[key]) {
-        callback(reverseGeocodeCache[key]);
+        // V.15.0.15: Negative Caching. Si falló antes, no volver a intentar.
+        if (reverseGeocodeCache[key] === '__FAILED__') {
+          callback(null);
+        } else {
+          callback(reverseGeocodeCache[key]);
+        }
         return;
       }
 
@@ -285,9 +290,13 @@
             _saveRgcCache();
             callback(results[0].formatted_address);
           } else {
+            // V.15.0.15: Guardamos el fallo para evitar martillear la API
+            reverseGeocodeCache[key] = '__FAILED__';
+            _saveRgcCache();
+            console.warn(`[API Guard] Coordenada enviada a Negative Cache: ${lat}, ${lng} (${status})`);
             callback(null);
           }
-          setTimeout(resolve, 300); // 300ms delay between requests to avoid OVER_QUERY_LIMIT
+          setTimeout(resolve, 300); // 300ms delay between requests
         });
       }));
     }
@@ -1654,7 +1663,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.0.14 Loaded');
+    console.log('EmerCRE V.15.0.15 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -14939,7 +14948,7 @@ ${dataContext}
 <body>
 
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-4); font-family: monospace; pointer-events: none; font-weight: 600; opacity: 0.8;">
-    EmerCRE V.15.0.14
+    EmerCRE V.15.0.15
   </div>
 
   <!-- LOGIN -->

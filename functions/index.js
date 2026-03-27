@@ -745,9 +745,9 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                     );
                     
                     if (!alreadySent) {
-                        const addr = await getReverseGeocoding(pos.lat, pos.lng);
+                        const addrStr = `[${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}] (Ver mapa: https://www.google.com/maps?q=${pos.lat},${pos.lng})`;
                         const target = iData.direccion || "destino";
-                        const msg = `${indicativo} sale desde ${addr} hacia ${target}`;
+                        const msg = `${indicativo} sale desde ${addrStr} hacia ${target}`;
                         
                         const newComm = {
                             texto: msg,
@@ -765,7 +765,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                         
                         // Guardamos datos para edición retroactiva posterior (Caso B/C)
                         vs.lastSaleTs = oystaTime;
-                        vs.lastSaleAddr = addr;
+                        vs.lastSaleAddr = addrStr;
                         vs.hasDeparted = true;
                         vs.hasArrived = false;
                         vs.moving = true;
@@ -789,8 +789,8 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                         vs.hasArrived = true;
                     } else {
                         // CASO B/C: Parada intermedia
-                        const addr = await getReverseGeocoding(pos.lat, pos.lng);
-                        msg = `${indicativo} llega a ${addr}`;
+                        const addrStr = `[${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}] (Ver mapa: https://www.google.com/maps?q=${pos.lat},${pos.lng})`;
+                        msg = `${indicativo} llega a ${addrStr}`;
                         
                         // Edición retroactiva del mensaje de salida previo si el destino era desconocido
                         if (vs.lastSaleTs && vs.lastSaleAddr) {
@@ -798,7 +798,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                             const idx = currentComms.findIndex(c => c.timestamp === vs.lastSaleTs && c.autorId === 'system');
                             if (idx !== -1) {
                                 const oldText = currentComms[idx].texto;
-                                const newSaleText = `${indicativo} sale desde ${vs.lastSaleAddr} hacia ${addr}`;
+                                const newSaleText = `${indicativo} sale desde ${vs.lastSaleAddr} hacia ${addrStr}`;
                                 if (oldText !== newSaleText) {
                                     currentComms[idx].texto = newSaleText;
                                     await iRef.update({ comentarios: currentComms });
@@ -896,35 +896,7 @@ function formatCommentFecha(d) {
     return `${day}/${month}/${year} ${hour}:${min}`;
 }
 
-// V.15.0.1: Geocodificación inversa robusta con fallback a link de Google Maps
-// BUG FIX (V.15.0.1): Se corrige el uso incorrecto de PENITENTE_API_KEY por GOOGLE_MAPS_API_KEY
-async function getReverseGeocoding(lat, lng) {
-    const apiKey = process.env.GOOGLE_MAPS_API_KEY || "";
-    const coordsStr = `[${lat.toFixed(4)}, ${lng.toFixed(4)}]`;
-    const mapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
-    const fallback = `${coordsStr} (Ver mapa: ${mapsLink})`;
-    
-    // Si no hay API Key o es inválida, usamos el fallback directo
-    if (!apiKey || apiKey.length < 10) return fallback;
-    
-    return new Promise((resolve) => {
-        const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${apiKey}&language=es`;
-        https.get(url, (res) => {
-            let data = '';
-            res.on('data', (chunk) => data += chunk);
-            res.on('end', () => {
-                try {
-                    const json = JSON.parse(data);
-                    if (json.results && json.results.length > 0) {
-                        resolve(json.results[0].formatted_address);
-                    } else {
-                        resolve(fallback);
-                    }
-                } catch (e) {
-                    resolve(fallback);
-                }
-            });
-        }).on('error', () => resolve(fallback));
-    });
-}
+// V.15.0.15: Función getReverseGeocoding eliminada en su totalidad del backend para supresión 
+// completa de consumo de Google Maps. Ahora el backend emite unívocamente coordenadas
+// crudas y el Frontend (UI) recae en la labor del enriquecimiento con "lazy/negative cache".
 
