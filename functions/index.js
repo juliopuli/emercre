@@ -724,7 +724,6 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
 
                 const oystaTsStr = v.last_pos ? v.last_pos.replace(' ', 'T') : null;
                 const oystaTime = oystaTsStr ? new Date(oystaTsStr).getTime() : now;
-                const addr = await getReverseGeocoding(pos.lat, pos.lng);
 
                 const vs = intStates[rid] || { moving: isMoving, hasDeparted: false, hasArrived: false, lastStopAddr: "" };
                 const distToDest = iCoords ? calculateHaversineDist(pos, iCoords) : 999;
@@ -740,24 +739,25 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 
                 // 1. DETECCIÓN DE SALIDA (Inicia movimiento o reinicia tras parada)
                 if (isMoving && (!vs.moving || !vs.hasDeparted)) {
-                    const target = iData.direccion || "destino";
-                    const msg = `${indicativo} sale desde ${addr} hacia ${target}`;
-                    
-                    const newComm = {
-                        texto: msg,
-                        coords: pos,
-                        autor: 'Sist. Oysta (BG)',
-                        autorId: 'system',
-                        timestamp: oystaTime,
-                        fecha: formatCommentFecha(new Date(oystaTime))
-                    };
-                    
                     // Evitar duplicados si el monitor re-procesa el mismo evento exacto
                     const alreadySent = (iData.comentarios || []).some(c => 
                         c.timestamp === oystaTime && c.texto.includes("sale desde")
                     );
                     
                     if (!alreadySent) {
+                        const addr = await getReverseGeocoding(pos.lat, pos.lng);
+                        const target = iData.direccion || "destino";
+                        const msg = `${indicativo} sale desde ${addr} hacia ${target}`;
+                        
+                        const newComm = {
+                            texto: msg,
+                            coords: pos,
+                            autor: 'Sist. Oysta (BG)',
+                            autorId: 'system',
+                            timestamp: oystaTime,
+                            fecha: formatCommentFecha(new Date(oystaTime))
+                        };
+                        
                         await iRef.update({
                             comentarios: admin.firestore.FieldValue.arrayUnion(newComm),
                             actualizadoEn: admin.firestore.FieldValue.serverTimestamp()
@@ -789,6 +789,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                         vs.hasArrived = true;
                     } else {
                         // CASO B/C: Parada intermedia
+                        const addr = await getReverseGeocoding(pos.lat, pos.lng);
                         msg = `${indicativo} llega a ${addr}`;
                         
                         // Edición retroactiva del mensaje de salida previo si el destino era desconocido
@@ -828,10 +829,12 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 }
                 // 3. Log de cambio de estado silencioso (Para diagnóstico de botes)
                 else if (isMoving !== vs.moving) {
+                    // Coste de API 0 para estado intermedio de debug
+                    const addrFallback = `[${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}]`;
                     await db.collection("oysta_logs").add({
                         fecha: admin.firestore.FieldValue.serverTimestamp(),
                         usuario: "Sist. Debug", tipo: "Debug",
-                        detalle: `[Cambio Estado] ${indicativo} -> ${isMoving ? 'EN MOVIMIENTO' : 'PARADO'} en ${addr}. Speed: ${v.speed}.`
+                        detalle: `[Cambio Estado] ${indicativo} -> ${isMoving ? 'EN MOVIMIENTO' : 'PARADO'} en ${addrFallback}. Speed: ${v.speed}.`
                     });
                     vs.moving = isMoving;
                     vehicleStateChanged = true;
@@ -893,9 +896,10 @@ function formatCommentFecha(d) {
     return `${day}/${month}/${year} ${hour}:${min}`;
 }
 
-// V.15.0.0: Geocodificación inversa robusta con fallback a link de Google Maps
+// V.15.0.1: Geocodificación inversa robusta con fallback a link de Google Maps
+// BUG FIX (V.15.0.1): Se corrige el uso incorrecto de PENITENTE_API_KEY por GOOGLE_MAPS_API_KEY
 async function getReverseGeocoding(lat, lng) {
-    const apiKey = process.env.PENITENTE_API_KEY || "";
+    const apiKey = process.env.GOOGLE_MAPS_API_KEY || "";
     const coordsStr = `[${lat.toFixed(4)}, ${lng.toFixed(4)}]`;
     const mapsLink = `https://www.google.com/maps?q=${lat},${lng}`;
     const fallback = `${coordsStr} (Ver mapa: ${mapsLink})`;
