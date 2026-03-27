@@ -1654,7 +1654,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.0.7 Loaded');
+    console.log('EmerCRE V.15.0.8 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -4437,7 +4437,7 @@
           ${editBtn}
         </div>
       </div>
-      <div class="tl-text" style="font-size:12px; color:var(--text); line-height:1.4;">${escapeHTML(a.texto)}</div>
+      <div class="tl-text" style="font-size:12px; color:var(--text); line-height:1.4;">${escapeHTML(a.texto).replace(/\s*\([\s\S]*?(google\.com\/maps|Ver mapa)[\s\S]*?\)/gi, "")}</div>
       <div class="tl-author" style="font-size:10px; font-style:italic; color:var(--text-4); border-top:1px dashed var(--border-mid); padding-top:6px; text-align:right;">
         — ${escapeHTML(a.autor || '—')}
       </div>
@@ -9706,7 +9706,7 @@ ${dataContext}
               ${canDelete ? `<span onclick="window.borrarComentarioGeneral(${idx})" style="cursor:pointer; font-size:11px;" title="Borrar">🗑️</span>` : ''}
             </div>
           </div>
-          <div style="font-size:12px; line-height:1.4; white-space: pre-wrap;">${c.texto}</div>
+          <div style="font-size:12px; line-height:1.4; white-space: pre-wrap;">${escapeHTML(c.texto).replace(/\s*\([\s\S]*?(google\.com\/maps|Ver mapa)[\s\S]*?\)/gi, "")}</div>
         </div>
         `;
         }).join('');
@@ -10284,9 +10284,20 @@ ${dataContext}
             return;
           }
 
-          snap.forEach(docSnap => {
+          for (const docSnap of snap.docs) {
             const d = docSnap.data();
             const tr = document.createElement('tr');
+
+            let detail = d.detalle || d.info || d.texto || '';
+            // V.15.0.8: Limpieza y traducción en tiempo de carga del log
+            detail = detail.replace(/\s*\([\s\S]*?(google\.com\/maps|Ver mapa)[\s\S]*?\)/gi, "").trim();
+            const coordRegex = /\[(-?\d+\.\d+),\s*(-?\d+\.\d+)\]/g;
+            const coordMatches = [...detail.matchAll(coordRegex)];
+            for (const match of coordMatches) {
+              const coords = { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
+              const addr = await new Promise(res => reverseGeocodeWithCache(coords, res));
+              if (addr) detail = detail.replace(match[0], addr);
+            }
 
             let fechaStr = '--';
             if (d.fecha) {
@@ -10297,10 +10308,10 @@ ${dataContext}
             tr.innerHTML = `
             <td style="font-family: monospace;">${fechaStr}</td>
             <td style="color: var(--text-2); font-weight: 600;">${d.usuario || 'Invitado'}</td>
-            <td style="font-size: 11px; opacity: 0.8;">${d.detalle || d.info || d.texto || ''}</td>
+            <td style="font-size: 11px; opacity: 0.8;">${detail}</td>
           `;
             tbody.appendChild(tr);
-          });
+          }
 
         } catch (e) {
           console.error(e);
@@ -14917,7 +14928,7 @@ ${dataContext}
 <body>
 
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-4); font-family: monospace; pointer-events: none; font-weight: 600; opacity: 0.8;">
-    EmerCRE V.15.0.7
+    EmerCRE V.15.0.8
   </div>
 
   <!-- LOGIN -->
