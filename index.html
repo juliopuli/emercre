@@ -1654,7 +1654,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.0.8 Loaded');
+    console.log('EmerCRE V.15.0.9 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3198,6 +3198,12 @@
             }
           });
         }
+        // V.15.0.9: Enriquecer comentarios de Preventivos (Intervenciones)
+        if (typeof lastGlobalInterventionDocs !== 'undefined' && lastGlobalInterventionDocs.length > 0) {
+          lastGlobalInterventionDocs.forEach(d => {
+            window.enrichOystaComments(d.ref, d.data());
+          });
+        }
 
         // V.12.4.2: Tracking de rutas activas en Emergencias para limpiar las obsoletas
         const vehicleIds = data.vehicles.map(v => String(v.id));
@@ -4437,7 +4443,7 @@
           ${editBtn}
         </div>
       </div>
-      <div class="tl-text" style="font-size:12px; color:var(--text); line-height:1.4;">${escapeHTML(a.texto).replace(/\s*\([\s\S]*?(google\.com\/maps|Ver mapa)[\s\S]*?\)/gi, "")}</div>
+      <div class="tl-text" style="font-size:12px; color:var(--text); line-height:1.4;">${escapeHTML(a.texto.replace(/\s*\([\s\S]*?(google\.com\/maps|Ver mapa)[\s\S]*?\)/gi, ""))}</div>
       <div class="tl-author" style="font-size:10px; font-style:italic; color:var(--text-4); border-top:1px dashed var(--border-mid); padding-top:6px; text-align:right;">
         — ${escapeHTML(a.autor || '—')}
       </div>
@@ -9706,7 +9712,7 @@ ${dataContext}
               ${canDelete ? `<span onclick="window.borrarComentarioGeneral(${idx})" style="cursor:pointer; font-size:11px;" title="Borrar">🗑️</span>` : ''}
             </div>
           </div>
-          <div style="font-size:12px; line-height:1.4; white-space: pre-wrap;">${escapeHTML(c.texto).replace(/\s*\([\s\S]*?(google\.com\/maps|Ver mapa)[\s\S]*?\)/gi, "")}</div>
+          <div style="font-size:12px; line-height:1.4; white-space: pre-wrap;">${escapeHTML(c.texto.replace(/\s*\([\s\S]*?(google\.com\/maps|Ver mapa)[\s\S]*?\)/gi, ""))}</div>
         </div>
         `;
         }).join('');
@@ -14928,7 +14934,7 @@ ${dataContext}
 <body>
 
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-4); font-family: monospace; pointer-events: none; font-weight: 600; opacity: 0.8;">
-    EmerCRE V.15.0.8
+    EmerCRE V.15.0.9
   </div>
 
   <!-- LOGIN -->
