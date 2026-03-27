@@ -1654,7 +1654,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.0.1 Loaded');
+    console.log('EmerCRE V.15.0.2 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -8136,37 +8136,85 @@ ${dataContext}
     };
 
     // V.14.1.2: Función para añadir direcciones a los comentarios del proceso de fondo
-    window.enrichOystaComments = async function(iRef, iDataOrType, indicativo) {
+    // V.15.0.2: Mejorada con edición retroactiva (sale hacia -> llega a) y destino inteligente
+    window.enrichOystaComments = async function(iRef, iDataOrType, indicativoInput) {
       // Si iDataOrType es string "EMERGENCY", tratamos iRef como docRef de operación y buscamos subcolección 'acciones'
       if (typeof iDataOrType === 'string' && iDataOrType === 'EMERGENCY') {
         try {
-          const accionesSnap = await getDocs(query(collection(iRef, 'acciones'), where('autor', '==', 'Sist. Oysta (BG)')));
-          accionesSnap.forEach(async (doc) => {
-            const c = doc.data();
-            if (c.coords && !c.enriquecido) {
-              const textLower = (c.texto || "").toLowerCase();
-              if (textLower.includes("parada") || textLower.includes("sale") || textLower.includes("reanuda") || textLower.includes("llega") || textLower.includes("hacia")) {
-                const addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
+          const opSnap = await getDoc(iRef);
+          if (!opSnap.exists()) return;
+          const opData = opSnap.data();
+          const opAddr = (opData.direccion && opData.direccion !== 'Ubicación en mapa') ? opData.direccion : "";
+
+          const accionesSnap = await getDocs(query(collection(iRef, 'acciones'), 
+            where('autor', '==', 'Sist. Oysta (BG)'), 
+            orderBy('timestamp', 'asc')));
+            
+          const actions = accionesSnap.docs.map(d => ({ ref: d.ref, ...d.data() }));
+
+          for (let i = 0; i < actions.length; i++) {
+            const c = actions[i];
+            let text = c.texto || "";
+            let textLower = text.toLowerCase();
+            let changed = false;
+
+            // Identificar indicativo (ej: T-12.2 MA)
+            const indMatch = text.match(/^(T-\d+\.\d+\s+[A-Z]+)/);
+            const ind = indMatch ? indMatch[1] : (indicativoInput || "");
+
+            // A. Destino Inteligente (Caso A de RULES.md)
+            if (textLower.includes("sale") && textLower.includes("hacia destino") && opAddr) {
+              text = text.replace(/hacia destino/i, `hacia ${opAddr}`);
+              changed = true;
+            }
+
+            // B. Enriquecimiento por Coordenadas y Retro-edición (Caso B/C de RULES.md)
+            if (c.coords && !c.enriquecido && (textLower.includes("parada") || textLower.includes("sale") || textLower.includes("reanuda") || textLower.includes("llega") || textLower.includes("hacia"))) {
+              const addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
               if (addr) {
-                let newText = c.texto;
                 const regexFallback = /\[-?\d+\.\d+,\s*-?\d+\.\d+\]/;
                 
-                if (newText.match(regexFallback)) {
-                  newText = newText.replace(regexFallback, addr);
-                } else if (newText.includes("en trayecto")) {
-                  newText = newText.replace("en trayecto", `en ${addr}`);
-                } else if (newText.includes("hacia el lugar")) {
-                  if (textLower.includes("sale")) newText = newText.replace("SALE", `SALE desde ${addr}`);
-                  else newText = newText.replace("hacia el lugar", `hacia ${addr}`);
-                } else if (!newText.includes(addr)) {
-                  newText = newText.replace(/\.?$/, ` (${addr}).`);
+                if (text.match(regexFallback)) {
+                  text = text.replace(regexFallback, addr);
+                  changed = true;
+                } else if (textLower.includes("en trayecto")) {
+                  text = text.replace("en trayecto", `en ${addr}`);
+                  changed = true;
+                } else if (textLower.includes("hacia el lugar")) {
+                  if (textLower.includes("sale")) text = text.replace("SALE", `SALE desde ${addr}`);
+                  else text = text.replace("hacia el lugar", `hacia ${addr}`);
+                  changed = true;
+                } else if (!text.includes(addr)) {
+                  text = text.replace(/\.?$/, ` (${addr}).`);
+                  changed = true;
                 }
-                
-                await updateDoc(doc.ref, { texto: newText, enriquecido: true, editado: true });
-              }
+
+                // Retro-edición: Si hemos llegado, actualizar el 'sale' anterior
+                if (textLower.includes("llega") && ind) {
+                  for (let j = i - 1; j >= 0; j--) {
+                    const prev = actions[j];
+                    const pText = (prev.texto || "");
+                    const pTextLower = pText.toLowerCase();
+                    if (pText.includes(ind) && pTextLower.includes("sale") && 
+                       (pTextLower.includes("hacia destino") || pTextLower.includes("hacia el lugar") || pTextLower.includes("hacia lugar del aviso"))) {
+                      const newPrevText = pText.replace(/hacia (destino|el lugar del aviso|el lugar|lugar del aviso)/i, `hacia ${addr}`);
+                      if (newPrevText !== pText) {
+                        await updateDoc(prev.ref, { texto: newPrevText, editado: true });
+                        actions[j].texto = newPrevText; 
+                      }
+                      break; 
+                    }
+                  }
+                }
               }
             }
-          });
+            
+            if (changed) {
+              await updateDoc(c.ref, { texto: text, enriquecido: true, editado: true });
+              actions[i].texto = text;
+              actions[i].enriquecido = true;
+            }
+          }
         } catch (e) { console.error("[Oysta Enrichment EME] Error:", e); }
         return;
       }
@@ -8180,40 +8228,62 @@ ${dataContext}
       
       for (let k = 0; k < newComms.length; k++) {
         const c = newComms[k];
-        // Solo actuar sobre mensajes de Oysta (BG) que tengan coordenadas y no estén enriquecidos
+        let text = c.texto || "";
+        let textLower = text.toLowerCase();
+        
+        // Identificar indicativo
+        const indMatch = text.match(/^(T-\d+\.\d+\s+[A-Z]+)/);
+        const ind = indMatch ? indMatch[1] : (indicativo || "");
+
+        // A. Destino inteligente (Caso A)
+        const opAddr = (iData.direccion && iData.direccion !== 'Ubicación en mapa') ? iData.direccion : "";
+        if (textLower.includes("sale") && textLower.includes("hacia destino") && opAddr) {
+          text = text.replace(/hacia destino/i, `hacia ${opAddr}`);
+          newComms[k] = { ...c, texto: text, editado: true };
+          changed = true;
+        }
+
+        // B. Coordenadas y Retro-edición (Caso B/C)
         if (c.autor === 'Sist. Oysta (BG)' && c.coords && !c.enriquecido) {
-          const textLower = (c.texto || "").toLowerCase();
-          // Detectar si es un mensaje de parada o salida que necesita dirección
           if (textLower.includes("parada") || textLower.includes("sale") || textLower.includes("reanuda") || textLower.includes("llega") || textLower.includes("hacia")) {
             try {
               const addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
               if (addr) {
-                let newText = c.texto;
                 const regexFallback = /\[-?\d+\.\d+,\s*-?\d+\.\d+\]/;
                 
-                if (newText.match(regexFallback)) {
-                  newText = newText.replace(regexFallback, addr);
-                } else if (newText.includes("en trayecto")) {
-                  newText = newText.replace("en trayecto", `en ${addr}`);
-                } else if (newText.includes("hacia el lugar")) {
-                  if (textLower.includes("sale")) {
-                    newText = newText.replace("SALE", `SALE desde ${addr}`);
-                  } else {
-                    newText = newText.replace("hacia el lugar", `hacia ${addr}`);
-                  }
-                } else if (!newText.includes(addr)) {
-                  newText = newText.replace(/\.?$/, ` (${addr}).`);
+                if (text.match(regexFallback)) {
+                  text = text.replace(regexFallback, addr);
+                } else if (textLower.includes("en trayecto")) {
+                  text = text.replace("en trayecto", `en ${addr}`);
+                } else if (textLower.includes("hacia el lugar")) {
+                  if (textLower.includes("sale")) text = text.replace("SALE", `SALE desde ${addr}`);
+                  else text = text.replace("hacia el lugar", `hacia ${addr}`);
+                } else if (!text.includes(addr)) {
+                  text = text.replace(/\.?$/, ` (${addr}).`);
                 }
                 
                 newComms[k] = { 
                   ...c, 
-                  texto: newText, 
+                  texto: text, 
                   enriquecido: true, 
                   editado: true,
                   actualizadoEn: Date.now() 
                 };
                 changed = true;
-                console.log(`[Oysta Enrichment] Enriquecido: ${indicativo} -> ${addr}`);
+
+                // Retro-edición
+                if (textLower.includes("llega") && ind) {
+                  for (let j = k - 1; j >= 0; j--) {
+                    const pText = newComms[j].texto || "";
+                    const pTextLower = pText.toLowerCase();
+                    if (pText.includes(ind) && pTextLower.includes("sale") && 
+                       (pTextLower.includes("hacia (destino|el lugar del aviso|el lugar|lugar del aviso)") || pTextLower.includes("hacia destino") || pTextLower.includes("hacia el lugar"))) {
+                      newComms[j].texto = pText.replace(/hacia (destino|el lugar del aviso|el lugar|lugar del aviso)/i, `hacia ${addr}`);
+                      newComms[j].editado = true;
+                      break;
+                    }
+                  }
+                }
               }
             } catch (e) {
               console.warn("[Oysta Enrichment] Error geocodificando:", e);
@@ -14892,7 +14962,7 @@ ${dataContext}
 <body>
 
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-4); font-family: monospace; pointer-events: none; font-weight: 600; opacity: 0.8;">
-    EmerCRE V.15.0.1
+    EmerCRE V.15.0.2
   </div>
 
   <!-- LOGIN -->
