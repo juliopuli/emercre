@@ -1654,7 +1654,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.0.10 Loaded');
+    console.log('EmerCRE V.15.0.11 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -8242,7 +8242,7 @@ ${dataContext}
         
         // Identificar indicativo (V.15.0.4)
         const indMatch = text.match(/^([A-Z0-9.\-]+(\s+[A-Z0-9.\-]+)?)/i);
-        const ind = indMatch ? indMatch[1].trim() : (indicativo || "");
+        const ind = indMatch ? indMatch[1].trim() : (indicativoInput || "");
 
         // C. Limpiar enlaces de mapa (V.15.0.7) - Máxima agresividad
         const mapRegex = /\s*\([\s\S]*?(google\.com\/maps|Ver mapa)[\s\S]*?\)/gi;
@@ -14934,7 +14934,7 @@ ${dataContext}
 <body>
 
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-4); font-family: monospace; pointer-events: none; font-weight: 600; opacity: 0.8;">
-    EmerCRE V.15.0.10
+    EmerCRE V.15.0.11
   </div>
 
   <!-- LOGIN -->
