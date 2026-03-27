@@ -1654,7 +1654,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.0.5 Loaded');
+    console.log('EmerCRE V.15.0.7 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -8162,8 +8162,8 @@ ${dataContext}
             const indMatch = text.match(/^([A-Z0-9.\-]+(\s+[A-Z0-9.\-]+)?)/i);
             const ind = indMatch ? indMatch[1].trim() : (indicativoInput || "");
 
-            // C. Limpiar enlaces de mapa (V.15.0.5) - Más agresivo y abarcativo
-            const mapRegex = /\s*\(Ver mapa: [^\)]+\)/gi;
+            // C. Limpiar enlaces de mapa y residuos parentéticos (V.15.0.7: Máxima agresividad)
+            const mapRegex = /\s*\([\s\S]*?(google\.com\/maps|Ver mapa)[\s\S]*?\)/gi;
             if (text.match(mapRegex)) {
               text = text.replace(mapRegex, "").trim();
               changed = true;
@@ -8238,8 +8238,8 @@ ${dataContext}
         const indMatch = text.match(/^([A-Z0-9.\-]+(\s+[A-Z0-9.\-]+)?)/i);
         const ind = indMatch ? indMatch[1].trim() : (indicativo || "");
 
-        // C. Limpiar enlaces de mapa (V.15.0.4)
-        const mapRegex = /\s*\(Ver mapa: [^\)]+\)/gi;
+        // C. Limpiar enlaces de mapa (V.15.0.7) - Máxima agresividad
+        const mapRegex = /\s*\([\s\S]*?(google\.com\/maps|Ver mapa)[\s\S]*?\)/gi;
         if (text.match(mapRegex)) {
           text = text.replace(mapRegex, "").trim();
           changed = true;
@@ -9221,44 +9221,6 @@ ${dataContext}
 
                 let baseMsg = `${icon} Asignado: ${indicativo}`;
 
-                // Verificación Oysta inmediata
-                if (v && v.oystaId && Array.isArray(oystaVehiclesCache)) {
-                  const ov = oystaVehiclesCache.find(x => String(x.id) === String(v.oystaId));
-                  if (ov && parseFloat(ov.speed) > 5) {
-                    const globalLast = window._oystaGlobalLastStop[String(v.oystaId)];
-                    let origin = "";
-                    let delayStr = "";
-
-                    // V.13.8.4: Verificación más robusta de dirección (evitar fechas/horas tipo Oysta)
-                    const containsDate = (s) => (s && (s.includes(':') || /\d{4}-\d{2}-\d{2}/.test(s)));
-
-                    if (globalLast && globalLast.addr && !containsDate(globalLast.addr)) {
-                      origin = ` desde ${globalLast.addr}`;
-                      const diffMin = Math.round((Date.now() - globalLast.timestamp) / 60000);
-                      const saleTime = new Date(Date.now() - (diffMin * 60000)).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
-                      if (diffMin > 1) delayStr = ` [Decalaje: Hace ${diffMin} min]`;
-                      const speed = parseFloat(ov.speed);
-                      baseMsg += ` y ⚡️ SALE${origin} a las ${saleTime} hacia el lugar (${speed} km/h)${delayStr}`;
-                    } else {
-                      // Si no hay parada previa clara o el addr es basura (ej: fecha), intentamos geocodificar pos actual
-                      const currentPos = { lat: parseFloat(ov.lat), lng: parseFloat(ov.lng) };
-                      const addr = await new Promise(res => reverseGeocodeWithCache(currentPos, res));
-                      if (addr) origin = ` desde ${addr}`;
-                      const speed = parseFloat(ov.speed);
-                      baseMsg += ` y ⚡️ SALE${origin} hacia el lugar (${speed} km/h)`;
-                    }
-
-                    // V.13.10.7: Asegurar estado inicial coincidente
-                    const stateKey = `prev_${v.id}_${v.oystaId}`;
-                    if (!window._oystaVehicleState) window._oystaVehicleState = {};
-                    window._oystaVehicleState[stateKey] = { 
-                      moving: true, 
-                      hasDeparted: true, 
-                      hasArrived: false,
-                      lastStopAddr: (globalLast && globalLast.addr) || origin.replace(" desde ", "") 
-                    };
-                  }
-                }
                 return baseMsg;
               }));
 
@@ -14955,7 +14917,7 @@ ${dataContext}
 <body>
 
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-4); font-family: monospace; pointer-events: none; font-weight: 600; opacity: 0.8;">
-    EmerCRE V.15.0.5
+    EmerCRE V.15.0.7
   </div>
 
   <!-- LOGIN -->
