@@ -582,9 +582,13 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
     if (!bridgeUrl) return null;
 
     try {
-        // 1. Lectura inteligente: Solo consultamos preventivos activos.
-        // BUG FIX (V.15.0.0): No consultamos emergencias porque no se hace seguimiento en BG.
-        const rawIntsSnap = await db.collectionGroup("intervenciones").where("abierta", "==", true).get();
+        // 1. Lectura inteligente y ultra-ligera: Solo consultamos preventivos activos.
+        // BUG FIX (V.15.0.16): Usar .select() para reducir el tamaño de descarga de cada documento 
+        // al mínimo absoluto (solo campos necesarios).
+        const rawIntsSnap = await db.collectionGroup("intervenciones")
+            .where("abierta", "==", true)
+            .select("recursosAsignados", "coords", "direccion", "comentarios")
+            .get();
 
         // 1.5. Filtrar intervenciones cuyos preventivos padres estén realmente abiertos (V.14.1.3)
         const activeIntDocs = [];
@@ -596,8 +600,10 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
             });
 
             if (prevIds.size > 0) {
-                // Consultamos el estado de los preventivos padres
-                const prevSnaps = await Promise.all(Array.from(prevIds).map(pid => db.collection("preventivos").doc(pid).get()));
+                // Consultamos el estado de los preventivos padres (solo el campo abierta)
+                const prevSnaps = await Promise.all(Array.from(prevIds).map(pid => 
+                    db.collection("preventivos").doc(pid).get()
+                ));
                 const openPrevs = new Set();
                 prevSnaps.forEach(s => {
                     // Un preventivo se considera abierto si existe y 'abierta' no es explícitamente false
@@ -634,6 +640,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         const missingIds = Array.from(assignedIds).filter(rid => !vehiculosCache[rid] || (Date.now() - vehiculosCacheTime[rid] > 3600000));
         
         if (missingIds.length > 0) {
+            // V.15.0.16: Usamos get() directamente pero como los vehículos no cambian de peso, está bien.
             const vSnaps = await Promise.all(missingIds.map(rid => db.collection("vehiculos").doc(rid).get()));
             vSnaps.forEach(doc => {
                 if (doc.exists) {
@@ -711,14 +718,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 if (v.status && v.status.toUpperCase().includes("MOVING")) isMoving = true;
                 if (v.moving === true || v.moving === "true") isMoving = true;
 
-                // Log de diagnóstico temporal (V.15.0.0): logueamos las claves del primer objeto que veamos
-                if (!diagnosticLogged) {
-                    await db.collection("oysta_logs").add({
-                        fecha: admin.firestore.FieldValue.serverTimestamp(), usuario: "Sist. Debug", tipo: "Debug",
-                        detalle: `[Diagnóstico Raw] Claves Oysta: ${Object.keys(v).join(', ')}. Speed: ${v.speed}. Status: ${v.status}. Name: ${v.name}.`
-                    });
-                    diagnosticLogged = true;
-                }
+                // V.15.0.16: ELIMINADO log de diagnóstico basura que insertaba un documento por ciclo.
 
                 const indicativo = localVehiclesByOystaId[oystaId].alias || localVehiclesByOystaId[oystaId].indicativo || v.name;
 
@@ -827,15 +827,8 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                         usuario: "Oysta (BG)", tipo: "Oysta", detalle: msg
                     });
                 }
-                // 3. Log de cambio de estado silencioso (Para diagnóstico de botes)
+                // V.15.0.16: ELIMINADO log de cambio de estado silencioso para ahorrar costes.
                 else if (isMoving !== vs.moving) {
-                    // Coste de API 0 para estado intermedio de debug
-                    const addrFallback = `[${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}]`;
-                    await db.collection("oysta_logs").add({
-                        fecha: admin.firestore.FieldValue.serverTimestamp(),
-                        usuario: "Sist. Debug", tipo: "Debug",
-                        detalle: `[Cambio Estado] ${indicativo} -> ${isMoving ? 'EN MOVIMIENTO' : 'PARADO'} en ${addrFallback}. Speed: ${v.speed}.`
-                    });
                     vs.moving = isMoving;
                     vehicleStateChanged = true;
                 }
@@ -851,15 +844,9 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
             }
         }
 
-        if (oystaVehicleCount > 0) {
-            await db.collection("oysta_logs").add({
-                fecha: admin.firestore.FieldValue.serverTimestamp(),
-                usuario: "Oysta (BG)",
-                tipo: "Oysta",
-                // BUG FIX (V.15.0.0): activeIntsSnap no existía; usa activeIntDocs.length
-                detalle: `Monitor activo: Supervisando ${oystaVehicleCount} recurso(s) en ${activeIntDocs.length} int(s) preventiva(s).`
-            });
-        }
+        /* V.15.0.16: ELIMINADO log de latido "Monitor activo: Supervisando X recursos..." 
+           que generaba 720 documentos inútiles al día en Firestore. */
+        
         return null;
 
     } catch (err) {
