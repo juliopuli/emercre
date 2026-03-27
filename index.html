@@ -125,6 +125,8 @@
     let showMovingOysta = false; // V.12.4.1: Toggle para ver vehículos en movimiento
     let oystaVehiclesCache = []; // Última lista de vehículos recibida
     window._oystaGlobalLastStop = {}; // V.13.0.4: Cache global de últimas paradas para decalajes y origen de salida
+    window._assignedVehiclesInEmergencies = new Set(); // V.15.0.1: Para seguimiento proactivo
+    window._assignedVehiclesInOpenPreventivos = new Set(); // V.15.0.1
 
     let localVehiclesByOystaId = {}; // V.12.4.1: Mapeo OystaID -> Datos Vehículo Local
     let localVehiclesById = {};       // V.12.4.1: Mapeo FirestoreID -> Datos Vehículo Local
@@ -1652,7 +1654,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.0.0 Loaded');
+    console.log('EmerCRE V.15.0.1 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -2852,6 +2854,15 @@
         renderMapa();
         actualizarContadores();
         if (selOpId && ops[selOpId]) renderDetalle(ops[selOpId]);
+
+        // V.15.0.1: Recopilar todos los recursos asignados a operaciones activas para Oysta sync
+        const activeEmeRids = new Set();
+        Object.values(ops).forEach(op => {
+          if (op.estado === 'activa' && op.recursosAsignadosIds) {
+            op.recursosAsignadosIds.forEach(rid => activeEmeRids.add(String(rid)));
+          }
+        });
+        window._assignedVehiclesInEmergencies = activeEmeRids;
       }, err => {
         console.error("Ops listener error:", err);
       });
@@ -3176,6 +3187,16 @@
           if (typeof window.refreshGlobalPreventivoMarkers === 'function') {
             window.refreshGlobalPreventivoMarkers();
           }
+        }
+
+        // V.15.0.1: Enriquecer comentarios de Emergencias (Operaciones) de forma proactiva
+        if (typeof ops !== 'undefined') {
+          Object.values(ops).forEach(op => {
+            if (op.estado === 'activa') {
+              const opRef = doc(db, 'operaciones', op.id);
+              window.enrichOystaComments(opRef, "EMERGENCY");
+            }
+          });
         }
 
         // V.12.4.2: Tracking de rutas activas en Emergencias para limpiar las obsoletas
@@ -8124,7 +8145,7 @@ ${dataContext}
             const c = doc.data();
             if (c.coords && !c.enriquecido) {
               const textLower = (c.texto || "").toLowerCase();
-              if (textLower.includes("parada") || textLower.includes("sale") || textLower.includes("reanuda")) {
+              if (textLower.includes("parada") || textLower.includes("sale") || textLower.includes("reanuda") || textLower.includes("llega") || textLower.includes("hacia")) {
                 const addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
               if (addr) {
                 let newText = c.texto;
@@ -8163,7 +8184,7 @@ ${dataContext}
         if (c.autor === 'Sist. Oysta (BG)' && c.coords && !c.enriquecido) {
           const textLower = (c.texto || "").toLowerCase();
           // Detectar si es un mensaje de parada o salida que necesita dirección
-          if (textLower.includes("parada") || textLower.includes("sale") || textLower.includes("reanuda")) {
+          if (textLower.includes("parada") || textLower.includes("sale") || textLower.includes("reanuda") || textLower.includes("llega") || textLower.includes("hacia")) {
             try {
               const addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
               if (addr) {
@@ -14871,7 +14892,7 @@ ${dataContext}
 <body>
 
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-4); font-family: monospace; pointer-events: none; font-weight: 600; opacity: 0.8;">
-    EmerCRE V.15.0.0
+    EmerCRE V.15.0.1
   </div>
 
   <!-- LOGIN -->
