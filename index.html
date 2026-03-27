@@ -1654,7 +1654,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.0.4 Loaded');
+    console.log('EmerCRE V.15.0.5 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -8162,55 +8162,51 @@ ${dataContext}
             const indMatch = text.match(/^([A-Z0-9.\-]+(\s+[A-Z0-9.\-]+)?)/i);
             const ind = indMatch ? indMatch[1].trim() : (indicativoInput || "");
 
-            // C. Limpiar enlaces de mapa (V.15.0.4) - Más agresivo (insensible a mayúsculas) y abarcativo
+            // C. Limpiar enlaces de mapa (V.15.0.5) - Más agresivo y abarcativo
             const mapRegex = /\s*\(Ver mapa: [^\)]+\)/gi;
             if (text.match(mapRegex)) {
               text = text.replace(mapRegex, "").trim();
               changed = true;
             }
 
+            // B. Enriquecimiento por Coordenadas (V.15.0.5: Traducir TODAS las coordenadas encontradas en el texto)
+            const coordRegex = /\[(-?\d+\.\d+),\s*(-?\d+\.\d+)\]/g;
+            const coordMatches = [...text.matchAll(coordRegex)];
+            
+            for (const match of coordMatches) {
+              const coords = { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
+              const addr = await new Promise(res => reverseGeocodeWithCache(coords, res));
+              if (addr) {
+                text = text.replace(match[0], addr);
+                changed = true;
+              }
+            }
+
             // A. Destino Inteligente (Caso A de RULES.md)
-            if (textLower.includes("sale") && textLower.includes("hacia destino") && opAddr) {
-              text = text.replace(/hacia destino/i, `hacia ${opAddr}`);
+            if (textLower.includes("sale") && (textLower.includes("hacia destino") || textLower.includes("hacia el lugar")) && opAddr) {
+              text = text.replace(/hacia (destino|el lugar del aviso|el lugar)/i, `hacia ${opAddr}`);
               changed = true;
             }
 
-            // B. Enriquecimiento por Coordenadas y Retro-edición (Caso B/C de RULES.md)
-            if (c.coords && !c.enriquecido && (textLower.includes("parada") || textLower.includes("sale") || textLower.includes("reanuda") || textLower.includes("llega") || textLower.includes("hacia"))) {
-              const addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
-              if (addr) {
-                const regexFallback = /\[-?\d+\.\d+,\s*-?\d+\.\d+\]/;
-                
-                if (text.match(regexFallback)) {
-                  text = text.replace(regexFallback, addr);
-                  changed = true;
-                } else if (textLower.includes("en trayecto")) {
-                  text = text.replace("en trayecto", `en ${addr}`);
-                  changed = true;
-                } else if (textLower.includes("hacia el lugar")) {
-                  if (textLower.includes("sale")) text = text.replace("SALE", `SALE desde ${addr}`);
-                  else text = text.replace("hacia el lugar", `hacia ${addr}`);
-                  changed = true;
-                } else if (!text.includes(addr)) {
-                  text = text.replace(/\.?$/, ` (${addr}).`);
-                  changed = true;
-                }
+            // Retro-edición: Si hemos llegado, actualizar el 'sale' anterior
+            if (textLower.includes("llega") && ind) {
+              // Extraer la dirección de llegada para retro-editar el sale anterior si procede
+              const llegadaAddrMatch = text.match(/llega a ([^(\[]+)/i);
+              const addrLlegada = llegadaAddrMatch ? llegadaAddrMatch[1].trim() : "";
 
-                // Retro-edición: Si hemos llegado, actualizar el 'sale' anterior
-                if (textLower.includes("llega") && ind) {
-                  for (let j = i - 1; j >= 0; j--) {
-                    const prev = actions[j];
-                    const pText = (prev.texto || "");
-                    const pTextLower = pText.toLowerCase();
-                    if (pText.includes(ind) && pTextLower.includes("sale") && 
-                       (pTextLower.includes("hacia destino") || pTextLower.includes("hacia el lugar") || pTextLower.includes("hacia lugar del aviso"))) {
-                      const newPrevText = pText.replace(/hacia (destino|el lugar del aviso|el lugar|lugar del aviso)/i, `hacia ${addr}`);
-                      if (newPrevText !== pText) {
-                        await updateDoc(prev.ref, { texto: newPrevText, editado: true });
-                        actions[j].texto = newPrevText; 
-                      }
-                      break; 
+              if (addrLlegada) {
+                for (let j = i - 1; j >= 0; j--) {
+                  const prev = actions[j];
+                  const pText = (prev.texto || "");
+                  const pTextLower = pText.toLowerCase();
+                  if (pText.includes(ind) && pTextLower.includes("sale") && 
+                     (pTextLower.includes("hacia destino") || pTextLower.includes("hacia el lugar") || pTextLower.includes("hacia lugar del aviso"))) {
+                    const newPrevText = pText.replace(/hacia (destino|el lugar del aviso|el lugar|lugar del aviso)/i, `hacia ${addrLlegada}`);
+                    if (newPrevText !== pText) {
+                      await updateDoc(prev.ref, { texto: newPrevText, editado: true });
+                      actions[j].texto = newPrevText; 
                     }
+                    break; 
                   }
                 }
               }
@@ -8249,58 +8245,41 @@ ${dataContext}
           changed = true;
         }
 
+        // B. Enriquecimiento por Coordenadas (V.15.0.5)
+        const coordRegex = /\[(-?\d+\.\d+),\s*(-?\d+\.\d+)\]/g;
+        const coordMatches = [...text.matchAll(coordRegex)];
+        for (const match of coordMatches) {
+          const coords = { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
+          const addr = await new Promise(res => reverseGeocodeWithCache(coords, res));
+          if (addr) {
+            text = text.replace(match[0], addr);
+            changed = true;
+          }
+        }
+
         // A. Destino inteligente (Caso A)
         const opAddr = (iData.direccion && iData.direccion !== 'Ubicación en mapa') ? iData.direccion : "";
-        if (textLower.includes("sale") && textLower.includes("hacia destino") && opAddr) {
-          text = text.replace(/hacia destino/i, `hacia ${opAddr}`);
+        if (textLower.includes("sale") && (textLower.includes("hacia destino") || textLower.includes("hacia el lugar")) && opAddr) {
+          text = text.replace(/hacia (destino|el lugar del aviso|el lugar)/i, `hacia ${opAddr}`);
           newComms[k] = { ...c, texto: text, editado: true };
           changed = true;
         }
 
-        // B. Coordenadas y Retro-edición (Caso B/C)
-        if (c.autor === 'Sist. Oysta (BG)' && c.coords && !c.enriquecido) {
-          if (textLower.includes("parada") || textLower.includes("sale") || textLower.includes("reanuda") || textLower.includes("llega") || textLower.includes("hacia")) {
-            try {
-              const addr = await new Promise(res => reverseGeocodeWithCache(c.coords, res));
-              if (addr) {
-                const regexFallback = /\[-?\d+\.\d+,\s*-?\d+\.\d+\]/;
-                
-                if (text.match(regexFallback)) {
-                  text = text.replace(regexFallback, addr);
-                } else if (textLower.includes("en trayecto")) {
-                  text = text.replace("en trayecto", `en ${addr}`);
-                } else if (textLower.includes("hacia el lugar")) {
-                  if (textLower.includes("sale")) text = text.replace("SALE", `SALE desde ${addr}`);
-                  else text = text.replace("hacia el lugar", `hacia ${addr}`);
-                } else if (!text.includes(addr)) {
-                  text = text.replace(/\.?$/, ` (${addr}).`);
-                }
-                
-                newComms[k] = { 
-                  ...c, 
-                  texto: text, 
-                  enriquecido: true, 
-                  editado: true,
-                  actualizadoEn: Date.now() 
-                };
+        // D. Retro-edición
+        if (textLower.includes("llega") && ind) {
+          const llegadaAddrMatch = text.match(/llega a ([^(\[]+)/i);
+          const addrLlegada = llegadaAddrMatch ? llegadaAddrMatch[1].trim() : "";
+          if (addrLlegada) {
+            for (let j = k - 1; j >= 0; j--) {
+              const pText = newComms[j].texto || "";
+              const pTextLower = pText.toLowerCase();
+              if (pText.includes(ind) && pTextLower.includes("sale") && 
+                 (pTextLower.includes("hacia destino") || pTextLower.includes("hacia el lugar") || pTextLower.includes("hacia lugar del aviso"))) {
+                newComms[j].texto = pText.replace(/hacia (destino|el lugar del aviso|el lugar|lugar del aviso)/i, `hacia ${addrLlegada}`);
+                newComms[j].editado = true;
                 changed = true;
-
-                // Retro-edición
-                if (textLower.includes("llega") && ind) {
-                  for (let j = k - 1; j >= 0; j--) {
-                    const pText = newComms[j].texto || "";
-                    const pTextLower = pText.toLowerCase();
-                    if (pText.includes(ind) && pTextLower.includes("sale") && 
-                       (pTextLower.includes("hacia (destino|el lugar del aviso|el lugar|lugar del aviso)") || pTextLower.includes("hacia destino") || pTextLower.includes("hacia el lugar"))) {
-                      newComms[j].texto = pText.replace(/hacia (destino|el lugar del aviso|el lugar|lugar del aviso)/i, `hacia ${addr}`);
-                      newComms[j].editado = true;
-                      break;
-                    }
-                  }
-                }
+                break;
               }
-            } catch (e) {
-              console.warn("[Oysta Enrichment] Error geocodificando:", e);
             }
           }
         }
@@ -14976,7 +14955,7 @@ ${dataContext}
 <body>
 
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-4); font-family: monospace; pointer-events: none; font-weight: 600; opacity: 0.8;">
-    EmerCRE V.15.0.4
+    EmerCRE V.15.0.5
   </div>
 
   <!-- LOGIN -->
