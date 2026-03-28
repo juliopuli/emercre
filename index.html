@@ -10558,22 +10558,23 @@ ${dataContext}
           const costEl2 = document.getElementById('cost-acc2');
           const bq = data.exactBillingCost || {};
 
-          const renderCost = (el, estCost, realCost) => {
+          const renderCost = (el, estCost, realCost, accLabel = 'Acc1') => {
             if (!el) return;
             let html = `~$${estCost.toFixed(2)} <span style="font-size:10px;opacity:0.6">(aprox.)</span>`;
             if (realCost !== null && realCost !== undefined) {
               html += `<br><span style="font-size:12px;color:var(--text-1)">$${realCost.toFixed(2)} (Factura Google Cloud)</span>`;
-            } else if (bq.bqError === 'bq_table_not_found') {
+            } else if (bq.bqError && bq.bqError.includes('bq_table_not_found') && bq.bqError.includes(accLabel) || bq.bqError === 'bq_table_not_found' || bq.bqError === 'bq_table_not_found (Ambas)') {
               html += `<br><span style="font-size:10px;color:var(--text-3);font-style:italic">Factura real: Export BQ configurándose (24h)</span>`;
-            } else if (bq.bqError) {
+            } else if (bq.bqError && (bq.bqError.includes(accLabel) || bq.bqError.includes('Ambas'))) {
               html += `<br><span style="font-size:10px;color:var(--crit-1)">Factura real: Error BQ (${bq.bqError.substring(0, 30)}...)</span>`;
             }
             el.innerHTML = html;
             el.style.color = estCost > 0 || (realCost && realCost > 0) ? 'var(--crit-3)' : 'var(--crit-1)';
           };
 
-          renderCost(costEl1, cost1, bq.acc1);
-          renderCost(costEl2, cost2, bq.acc2);
+          renderCost(costEl1, cost1, bq.acc1, 'Acc1');
+          renderCost(costEl2, cost2, bq.acc2, 'Acc2');
+
 
           // Gemini + Firestore + Estimaciones locales (real data path)
           try {

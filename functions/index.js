@@ -449,45 +449,55 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
         return { results, errors };
     };
 
-    // Consulta de Facturación Real Exacta (V.15.2.1 BigQuery Export)
     const getExactBillingCost = async () => {
         let exactCostAcc1 = null;
         let exactCostAcc2 = null;
         let errorMsg = null;
         
         try {
-            // Buscamos tablas que empiecen por gcp_billing_export_v1 en el dataset billing_export
-            const [tables] = await bqClient.dataset('billing_export').getTables();
-            const billingTable = tables.find(t => t.id.startsWith('gcp_billing_export_v1_'));
+            // -- CUENTA 1 (emercre + emercre-488009) --
+            const bqClient1 = new BigQuery({ credentials: key, projectId: "emercre" });
+            const [tables1] = await bqClient1.dataset('billing_export').getTables();
+            const billingTable1 = tables1.find(t => t.id.startsWith('gcp_billing_export_v1_'));
             
-            if (billingTable) {
-                const tableId = `emercre.billing_export.${billingTable.id}`;
-                // Agrupamos por los proyectos de cada cuenta
-                const query = `
-                    SELECT 
-                        project.id as projectId,
-                        SUM(cost) as total_cost
-                    FROM \`${tableId}\`
+            if (billingTable1) {
+                const tableId1 = `emercre.billing_export.${billingTable1.id}`;
+                const query1 = `
+                    SELECT project.id as projectId, SUM(cost) as total_cost
+                    FROM \`${tableId1}\`
                     WHERE usage_start_time >= TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), MONTH)
                     GROUP BY project.id
                 `;
-                
-                const [rows] = await bqClient.query({ query });
-                
-                // Account 1: emercre + emercre-488009
-                exactCostAcc1 = rows.filter(r => ['emercre', 'emercre-488009'].includes(r.projectId))
-                                    .reduce((acc, row) => acc + (row.total_cost || 0), 0);
-                                    
-                // Account 2: emercre-mapsec
-                exactCostAcc2 = rows.filter(r => r.projectId === 'emercre-mapsec')
-                                    .reduce((acc, row) => acc + (row.total_cost || 0), 0);
+                const [rows1] = await bqClient1.query({ query1 });
+                exactCostAcc1 = rows1.filter(r => ['emercre', 'emercre-488009'].includes(r.projectId))
+                                     .reduce((acc, row) => acc + (row.total_cost || 0), 0);
             } else {
-                errorMsg = "bq_table_not_found";
+                errorMsg = "bq_table_not_found (Acc1)";
             }
+
+            // -- CUENTA 2 (emercre-mapsec) --
+            const bqClient2 = new BigQuery({ credentials: key, projectId: "emercre-mapsec" });
+            const [tables2] = await bqClient2.dataset('billing_export_acc2').getTables();
+            const billingTable2 = tables2.find(t => t.id.startsWith('gcp_billing_export_v1_'));
+            
+            if (billingTable2) {
+                const tableId2 = `emercre-mapsec.billing_export_acc2.${billingTable2.id}`;
+                const query2 = `
+                    SELECT SUM(cost) as total_cost
+                    FROM \`${tableId2}\`
+                    WHERE usage_start_time >= TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), MONTH)
+                `;
+                const [rows2] = await bqClient2.query({ query2 });
+                if (rows2 && rows2.length > 0) {
+                    exactCostAcc2 = rows2[0].total_cost || 0;
+                }
+            } else {
+                errorMsg = errorMsg ? "bq_table_not_found (Ambas)" : "bq_table_not_found (Acc2)";
+            }
+            
         } catch (e) {
-            // Es normal que falle si el usuario aún no ha configurado el export o no han pasado 24h
             errorMsg = e.message;
-            console.warn("No se pudo obtener el coste exacto de BigQuery (normal si aún no está configurado):", e.message);
+            console.warn("No se pudo obtener el coste exacto de BigQuery:", e.message);
         }
         
         return { acc1: exactCostAcc1, acc2: exactCostAcc2, bqError: errorMsg };
