@@ -357,6 +357,7 @@ exports.sendPushNotification = functions.https.onCall(async (data, context) => {
 
 // 3. Get Real API Usage (V.9.5.4 - Corrected metric query)
 const monitoring = require("@google-cloud/monitoring");
+const { BigQuery } = require("@google-cloud/bigquery");
 const path = require("path");
 
 exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
@@ -377,6 +378,7 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     const targetProjectIds = ["emercre", "emercre-488009", "emercre-mapsec"];
 
     const monitoringClient = new monitoring.MetricServiceClient({ credentials: key });
+    const bqClient = new BigQuery({ credentials: key, projectId: "emercre" });
 
     const now = Math.floor(Date.now() / 1000);
     const startOfMonth = Math.floor(new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime() / 1000);
@@ -447,11 +449,56 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
         return { results, errors };
     };
 
+    // Consulta de Facturación Real Exacta (V.15.2.1 BigQuery Export)
+    const getExactBillingCost = async () => {
+        let exactCostAcc1 = null;
+        let exactCostAcc2 = null;
+        let errorMsg = null;
+        
+        try {
+            // Buscamos tablas que empiecen por gcp_billing_export_v1 en el dataset billing_export
+            const [tables] = await bqClient.dataset('billing_export').getTables();
+            const billingTable = tables.find(t => t.id.startsWith('gcp_billing_export_v1_'));
+            
+            if (billingTable) {
+                const tableId = `emercre.billing_export.${billingTable.id}`;
+                // Agrupamos por los proyectos de cada cuenta
+                const query = `
+                    SELECT 
+                        project.id as projectId,
+                        SUM(cost) as total_cost
+                    FROM \`${tableId}\`
+                    WHERE usage_start_time >= TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), MONTH)
+                    GROUP BY project.id
+                `;
+                
+                const [rows] = await bqClient.query({ query });
+                
+                // Account 1: emercre + emercre-488009
+                exactCostAcc1 = rows.filter(r => ['emercre', 'emercre-488009'].includes(r.projectId))
+                                    .reduce((acc, row) => acc + (row.total_cost || 0), 0);
+                                    
+                // Account 2: emercre-mapsec
+                exactCostAcc2 = rows.filter(r => r.projectId === 'emercre-mapsec')
+                                    .reduce((acc, row) => acc + (row.total_cost || 0), 0);
+            } else {
+                errorMsg = "bq_table_not_found";
+            }
+        } catch (e) {
+            // Es normal que falle si el usuario aún no ha configurado el export o no han pasado 24h
+            errorMsg = e.message;
+            console.warn("No se pudo obtener el coste exacto de BigQuery (normal si aún no está configurado):", e.message);
+        }
+        
+        return { acc1: exactCostAcc1, acc2: exactCostAcc2, bqError: errorMsg };
+    };
+
     // Consultamos datos reales
     const [
         mapsLoadRes, mapsPlacesRes, mapsRouteRes, mapsGeocodeRes,
         geminiDayRes, geminiMonthRes,
-        fsReadsRes, fsWritesRes, fsDeletesRes
+        fsReadsRes, fsWritesRes, fsDeletesRes,
+        billingRes
     ] = await Promise.all([
         getMetric("maps-backend.googleapis.com", startOfMonth),
         getMetric("places-backend.googleapis.com", startOfMonth),
@@ -461,7 +508,8 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
         getMetric("generativelanguage.googleapis.com", startOfMonth),
         getFirestoreMetric("firestore.googleapis.com/document/read_ops_count", startOfDay),
         getFirestoreMetric("firestore.googleapis.com/document/write_ops_count", startOfDay),
-        getFirestoreMetric("firestore.googleapis.com/document/delete_ops_count", startOfDay)
+        getFirestoreMetric("firestore.googleapis.com/document/delete_ops_count", startOfDay),
+        getExactBillingCost()
     ]);
 
     const allErrors = [
@@ -521,9 +569,12 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
             places:    5.00,
             route:     5.00
         },
-        // NOTA: El coste real NO se puede calcular desde Cloud Monitoring porque
-        // request_count incluye llamadas no facturables (tiles, errores, internas).
-        // Para coste real de factura se necesitaría BigQuery Billing Export.
+        // V.15.2.1: Integración con BigQuery Billing Export
+        exactBillingCost: {
+            acc1: billingRes.acc1,
+            acc2: billingRes.acc2,
+            bqError: billingRes.bqError
+        },
         pricingModel: 'per_sku_2025'
     };
 });
