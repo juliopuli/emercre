@@ -521,41 +521,9 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
             places:    5.00,
             route:     5.00
         },
-        // V.15.2.0: Coste real calculado desde datos de Cloud Monitoring
-        realCost: {
-            acc1: (() => {
-                const ft = { maps_load: 10000, geocode: 10000, places: 10000, route: 10000 };
-                const cpm = { maps_load: 7.00, geocode: 5.00, places: 5.00, route: 5.00 };
-                const load = sumAcc1(mapsLoadRes);
-                const geo = sumAcc1(mapsGeocodeRes);
-                const plc = sumAcc1(mapsPlacesRes);
-                const rte = sumAcc1(mapsRouteRes);
-                const calc = (v, f, r) => Math.max(0, v - f) * r / 1000;
-                return {
-                    total: +(calc(load, ft.maps_load, cpm.maps_load) + calc(geo, ft.geocode, cpm.geocode) + calc(plc, ft.places, cpm.places) + calc(rte, ft.route, cpm.route)).toFixed(4),
-                    maps_load: +(calc(load, ft.maps_load, cpm.maps_load)).toFixed(4),
-                    geocode:   +(calc(geo, ft.geocode, cpm.geocode)).toFixed(4),
-                    places:    +(calc(plc, ft.places, cpm.places)).toFixed(4),
-                    route:     +(calc(rte, ft.route, cpm.route)).toFixed(4)
-                };
-            })(),
-            acc2: (() => {
-                const ft = { maps_load: 10000, geocode: 10000, places: 10000, route: 10000 };
-                const cpm = { maps_load: 7.00, geocode: 5.00, places: 5.00, route: 5.00 };
-                const load = getP(mapsLoadRes, "emercre-mapsec");
-                const geo = getP(mapsGeocodeRes, "emercre-mapsec");
-                const plc = getP(mapsPlacesRes, "emercre-mapsec");
-                const rte = getP(mapsRouteRes, "emercre-mapsec");
-                const calc = (v, f, r) => Math.max(0, v - f) * r / 1000;
-                return {
-                    total: +(calc(load, ft.maps_load, cpm.maps_load) + calc(geo, ft.geocode, cpm.geocode) + calc(plc, ft.places, cpm.places) + calc(rte, ft.route, cpm.route)).toFixed(4),
-                    maps_load: +(calc(load, ft.maps_load, cpm.maps_load)).toFixed(4),
-                    geocode:   +(calc(geo, ft.geocode, cpm.geocode)).toFixed(4),
-                    places:    +(calc(plc, ft.places, cpm.places)).toFixed(4),
-                    route:     +(calc(rte, ft.route, cpm.route)).toFixed(4)
-                };
-            })()
-        },
+        // NOTA: El coste real NO se puede calcular desde Cloud Monitoring porque
+        // request_count incluye llamadas no facturables (tiles, errores, internas).
+        // Para coste real de factura se necesitaría BigQuery Billing Export.
         pricingModel: 'per_sku_2025'
     };
 });

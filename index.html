@@ -10544,7 +10544,7 @@ ${dataContext}
           updateUsageUI('sku-2-places',  n(data.acc2.maps.places),  ft.places,    `${n(data.acc2.maps.places).toLocaleString()}`, `${n(data.acc2.maps.places).toLocaleString()} peticiones (Real)`);
           updateUsageUI('sku-2-route',   n(data.acc2.maps.route),   ft.route,     `${n(data.acc2.maps.route).toLocaleString()}`, `${n(data.acc2.maps.route).toLocaleString()} peticiones (Real)`);
 
-          // Cost summaries — Estimated (frontend) vs Real (Cloud Monitoring)
+          // Cost summaries — Solo estimación (Cloud Monitoring incluye calls no facturables)
           const cost1 = calcSkuCost(n(data.acc1.maps.load), ft.maps_load, cpm.maps_load)
                       + calcSkuCost(n(data.acc1.maps.geocode), ft.geocode, cpm.geocode)
                       + calcSkuCost(n(data.acc1.maps.places), ft.places, cpm.places)
@@ -10553,24 +10553,15 @@ ${dataContext}
                       + calcSkuCost(n(data.acc2.maps.geocode), ft.geocode, cpm.geocode)
                       + calcSkuCost(n(data.acc2.maps.places), ft.places, cpm.places)
                       + calcSkuCost(n(data.acc2.maps.route), ft.route, cpm.route);
-          const rc = data.realCost || {};
-          const realCost1 = rc.acc1 ? rc.acc1.total : null;
-          const realCost2 = rc.acc2 ? rc.acc2.total : null;
           const costEl1 = document.getElementById('cost-acc1');
           const costEl2 = document.getElementById('cost-acc2');
           if (costEl1) {
-            const maxC1 = Math.max(cost1, realCost1 || 0);
-            costEl1.innerHTML = realCost1 !== null
-              ? `$${cost1.toFixed(2)} <span style="font-size:11px;opacity:0.7">(Est)</span> / $${realCost1.toFixed(2)} <span style="font-size:11px;opacity:0.7">(Real)</span>`
-              : `$${cost1.toFixed(2)}`;
-            costEl1.style.color = maxC1 > 0 ? 'var(--crit-3)' : 'var(--crit-1)';
+            costEl1.innerHTML = `~$${cost1.toFixed(2)} <span style="font-size:10px;opacity:0.6">(aprox.)</span>`;
+            costEl1.style.color = cost1 > 0 ? 'var(--crit-3)' : 'var(--crit-1)';
           }
           if (costEl2) {
-            const maxC2 = Math.max(cost2, realCost2 || 0);
-            costEl2.innerHTML = realCost2 !== null
-              ? `$${cost2.toFixed(2)} <span style="font-size:11px;opacity:0.7">(Est)</span> / $${realCost2.toFixed(2)} <span style="font-size:11px;opacity:0.7">(Real)</span>`
-              : `$${cost2.toFixed(2)}`;
-            costEl2.style.color = maxC2 > 0 ? 'var(--crit-3)' : 'var(--crit-1)';
+            costEl2.innerHTML = `~$${cost2.toFixed(2)} <span style="font-size:10px;opacity:0.6">(aprox.)</span>`;
+            costEl2.style.color = cost2 > 0 ? 'var(--crit-3)' : 'var(--crit-1)';
           }
 
           // Gemini + Firestore + Estimaciones locales (real data path)
