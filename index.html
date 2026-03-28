@@ -1827,7 +1827,7 @@
             info.style.display = 'block';
           }
         } else {
-          showToast('No se pudo calcular la ruta');
+          mostrarToast('No se pudo calcular la ruta. Comprueba el log para detalles (¿API habilitada?).');
           console.error('Routes API error:', status);
         }
       });
