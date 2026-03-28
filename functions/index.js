@@ -468,7 +468,7 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
                     WHERE usage_start_time >= TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), MONTH)
                     GROUP BY project.id
                 `;
-                const [rows1] = await bqClient1.query({ query1 });
+                const [rows1] = await bqClient1.query({ query: query1 });
                 exactCostAcc1 = rows1.filter(r => ['emercre', 'emercre-488009'].includes(r.projectId))
                                      .reduce((acc, row) => acc + (row.total_cost || 0), 0);
             } else {
@@ -487,7 +487,7 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
                     FROM \`${tableId2}\`
                     WHERE usage_start_time >= TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), MONTH)
                 `;
-                const [rows2] = await bqClient2.query({ query2 });
+                const [rows2] = await bqClient2.query({ query: query2 });
                 if (rows2 && rows2.length > 0) {
                     exactCostAcc2 = rows2[0].total_cost || 0;
                 }
