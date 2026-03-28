@@ -7,6 +7,16 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
+  <!-- V.15.1.0: Content Security Policy -->
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self';
+    script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://maps.googleapis.com https://www.google.com https://apis.google.com;
+    style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+    font-src https://fonts.gstatic.com;
+    img-src 'self' data: https: blob:;
+    connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.cloudfunctions.net wss://*.firebaseio.com https://script.google.com https://api.elpenitente.app wss://stream.aisstream.io;
+    frame-src https://www.google.com https://www.recaptcha.net;
+    media-src 'self';">
   <link rel="apple-touch-icon" href="assets/logo_emercre.png?v=13.10.0">
   <link rel="icon" type="image/png" href="assets/logo_emercre.png?v=13.10.0">
   <link rel="manifest" href="manifest.json">
@@ -1089,8 +1099,8 @@
         content.className = 'ss-marker';
         content.style.position = 'relative';
         content.innerHTML = `
-          <div class="ss-marker-label">${labelText}</div>
-          <div class="ss-marker-icon" style="background-image: url('${iconUrl}'), url('${t.escudo}');"></div>
+          <div class="ss-marker-label">${escapeHTML(labelText)}</div>
+          <div class="ss-marker-icon" style="background-image: url('${escapeHTML(iconUrl)}'), url('${escapeHTML(t.escudo)}');"></div>
         `;
 
         const m = new google.maps.marker.AdvancedMarkerElement({
@@ -1318,7 +1328,7 @@
 
       div.innerHTML = `
         <div style="background: ${bg}; color: white; padding: 2px 6px; border-radius: 10px; font-size: 9px; font-weight: 800; border: 1.5px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3); white-space: nowrap; transform: translate(-50%, -50%);">
-          ⚓ ${label}
+          ⚓ ${escapeHTML(label)}
         </div>`;
       return div;
     }
@@ -1490,7 +1500,7 @@
       if (line === 'C5') color = '#ffcc00';
 
       el.style.cssText = `background:#fff; border:2px solid ${color}; border-radius:4px; padding:2px 4px; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(0,0,0,0.3); font-family:"IBM Plex Mono", monospace; font-size:10px; font-weight:700; color:${color}; white-space:nowrap; cursor:pointer;`;
-      el.innerHTML = `<span>🚄</span><span>${line}</span>`;
+      el.innerHTML = `<span>🚄</span><span>${escapeHTML(line)}</span>`;
       return el;
     }
 
@@ -1630,7 +1640,7 @@
 
       // V.12.4.1: Borde más grueso (3.5px) para mejor visibilidad
       el.style.cssText = `background:#fff; border:3.5px solid ${color}; border-radius:4px; padding:2px 4px; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(0,0,0,0.3); font-family:"IBM Plex Mono", monospace; font-size:10px; font-weight:700; color:${color}; white-space:nowrap; cursor:pointer;`;
-      el.innerHTML = `<span>🚅</span><span>${t.codComercial}</span>`;
+      el.innerHTML = `<span>🚅</span><span>${escapeHTML(t.codComercial)}</span>`;
       return el;
     }
 
@@ -2351,6 +2361,23 @@
             timestamp: serverTimestamp()
           });
         } catch (e) { console.warn("Presencia no registrada (posible falta de reglas):", e); }
+
+        // V.15.1.0: Idle timeout — cerrar sesión tras 30 minutos de inactividad
+        let idleTimer = null;
+        const IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+        function resetIdleTimer() {
+          if (idleTimer) clearTimeout(idleTimer);
+          idleTimer = setTimeout(async () => {
+            if (currentUser) {
+              mostrarToast('Sesión cerrada por inactividad (30 min).');
+              await window.doLogout();
+            }
+          }, IDLE_TIMEOUT_MS);
+        }
+        ['click', 'keydown', 'mousemove', 'touchstart', 'scroll'].forEach(evt => {
+          document.addEventListener(evt, resetIdleTimer, { passive: true });
+        });
+        resetIdleTimer();
 
         // V.12.4.1: Se deshabilitada la persistencia de visibilidad al inicio
         // para asegurar que todos los vehículos empiecen desmarcados y no lancen peticiones automáticas.
@@ -3723,16 +3750,16 @@
       <div class="card-top" style="position:relative;">
         <div>
           <div class="card-scope" style="font-size:9px; font-weight:700; color:var(--accent); text-transform:uppercase; margin-bottom:2px; opacity:0.8;">
-            ${op.provincia === 'Andalucía' ? 'Oficina Autonómica de Andalucía' : `Oficina Provincial de ${op.provincia}`}
+            ${op.provincia === 'Andalucía' ? 'Oficina Autonómica de Andalucía' : `Oficina Provincial de ${escapeHTML(op.provincia)}`}
           </div>
-          <div class="card-id">${op.id.substring(0, 8).toUpperCase()}</div>
-          <div class="card-name" style="padding-right:16px;">${op.nombre}</div>
+          <div class="card-id">${escapeHTML(op.id.substring(0, 8).toUpperCase())}</div>
+          <div class="card-name" style="padding-right:16px;">${escapeHTML(op.nombre)}</div>
         </div>
         ${badgeHtml}
-        <span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${TIPOS[op.tipo] ? t.label : op.tipo}</span>
+        <span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${TIPOS[op.tipo] ? t.label : escapeHTML(op.tipo)}</span>
       </div>
       <div class="card-meta">
-        <span class="card-loc">📍 ${op.loc || 'Sin ubicación'}</span>
+        <span class="card-loc">📍 ${escapeHTML(op.loc || 'Sin ubicación')}</span>
         <div style="display:flex; gap:4px; align-items:center;">
           ${op.estado === 'finalizada' ? '<span style="font-size:9px;font-weight:700;padding:2px 6px;border-radius:2px;background:var(--bg-3);color:var(--text-3);border:1px solid var(--border-mid);">FINALIZADA</span>' : ''}
           <span class="nivel-pill pill-${op.nivel}">${NIVEL_LABELS[op.nivel]}</span>
@@ -4074,7 +4101,7 @@
         filtered = filtered.filter(v => !currentAssignedIds.includes(v.id));
 
         filtered.forEach(v => {
-          sel.innerHTML += `<option value="${v.id}">${v.alias || v.indicativo} - ${v.tipo} (${v.matricula})</option>`;
+          sel.innerHTML += `<option value="${escapeHTML(v.id)}">${escapeHTML(v.alias || v.indicativo)} - ${escapeHTML(v.tipo)} (${escapeHTML(v.matricula)})</option>`;
         });
       } else if (cat === 'erbes') {
         // V.12.4.1: Filtrar por provincia directamente en el servidor
@@ -4085,7 +4112,7 @@
         filtered = filtered.filter(e => !currentAssignedIds.includes(e.id));
 
         filtered.forEach(e => {
-          sel.innerHTML += `<option value="${e.id}">ERBE ${e.localidad} (${e.provincia})</option>`;
+          sel.innerHTML += `<option value="${escapeHTML(e.id)}">ERBE ${escapeHTML(e.localidad)} (${escapeHTML(e.provincia)})</option>`;
         });
       } else if (cat === 'eries') {
         // V.12.4.1: Filtrar por provincia directamente en el servidor
@@ -4096,7 +4123,7 @@
         filtered = filtered.filter(e => !currentAssignedIds.includes(e.id));
 
         filtered.forEach(e => {
-          sel.innerHTML += `<option value="${e.id}">ERIE ${e.especialidad} (${e.provincia})</option>`;
+          sel.innerHTML += `<option value="${escapeHTML(e.id)}">ERIE ${escapeHTML(e.especialidad)} (${escapeHTML(e.provincia)})</option>`;
         });
       }
     };
@@ -4314,7 +4341,7 @@
       locSpan.textContent = op.loc ? op.loc : (op.coords ? `${op.coords.lat.toFixed(4)}, ${op.coords.lng.toFixed(4)}` : 'Sin ubicación');
       locEl.appendChild(locSpan);
       document.getElementById('dp-type-tag').innerHTML =
-        `<span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${TIPOS[op.tipo] ? t.label : op.tipo}</span>`;
+        `<span class="card-type-tag" style="color:${t.color};border-color:${t.color}30;background:${t.color}12">${t.emoji} ${TIPOS[op.tipo] ? t.label : escapeHTML(op.tipo)}</span>`;
 
       document.querySelectorAll('.nsel-opt').forEach(b => {
         b.classList.toggle('on', parseInt(b.dataset.n) === op.nivel);
@@ -5879,36 +5906,28 @@ ${dataContext}
           await updateDoc(doc(db, 'users', editingUserId), updateData);
           mostrarToast('Usuario actualizado.');
         } else {
+          // V.15.1.0: Creación segura vía Cloud Function (sustituye REST Identity Toolkit)
           if (!pass || pass.length < 6) { alert('La contraseña debe tener al menos 6 caracteres.'); btn.disabled = false; btn.textContent = 'Guardar'; return; }
-          const res = await fetch(
-            `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${firebaseConfig.apiKey}`,
-            {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ email, password: pass, returnSecureToken: true })
-            }
-          );
-          const data = await res.json();
-          if (data.error) throw new Error(data.error.message);
-          let newData = {
-            nombre, email, role, provincia, activo,
-            canSeeVehicles: document.getElementById('u-can-see-vehicles').checked, // V.12.4.1
+          
+          // Import dynamic function
+          const { httpsCallable } = await import("https://www.gstatic.com/firebasejs/10.12.0/firebase-functions.js");
+          const createUserFn = httpsCallable(window.functions, 'createUser');
+          
+          await createUserFn({
+            email, password: pass, nombre, role, provincia, activo,
+            canSeeVehicles: document.getElementById('u-can-see-vehicles').checked,
             accesoEmergencias: document.getElementById('u-acc-emergencias').checked,
             accesoPreventivos: document.getElementById('u-acc-preventivos').checked,
-            creadoPor: currentUser.uid,
-            creadoEn: serverTimestamp()
-          };
-          if (currentUserDoc.role === 'super_admin') {
-            newData.aparecerEnTodosLosChats = document.getElementById('u-todos-chats').checked && provincia === 'Andalucía';
-          }
-          await setDoc(doc(db, 'users', data.localId), newData);
+            aparecerEnTodosLosChats: (currentUserDoc.role === 'super_admin' && document.getElementById('u-todos-chats').checked && provincia === 'Andalucía')
+          });
           mostrarToast('Usuario creado.');
         }
         window.cerrarModalUsuario();
       } catch (e) {
-        if (e.message === 'EMAIL_EXISTS') {
+        if (e.code === 'functions/already-exists' || e.message === 'EMAIL_EXISTS') {
           alert('Este correo ya está dado de alta. Al borrar un usuario, queda un rastro en Firebase. Dile al usuario que vuelva a iniciar sesión con su cuenta de siempre y nosotros reactivaremos su perfil.');
         } else {
-          alert('Error: ' + e.message);
+          alert('Error: ' + (e.message || e));
         }
       }
       btn.disabled = false; btn.textContent = 'Guardar';
@@ -6061,14 +6080,14 @@ ${dataContext}
         const svgTrash = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td><strong>${v.alias || v.indicativo}</strong>${v.alias ? `<br><span style="font-size:11px;color:var(--text-2);">${v.indicativo}</span>` : ''}</td>
-          <td style="font-weight:600; color:var(--accent);">${v.alias || '-'}</td>
-          <td style="font-family:'IBM Plex Mono',monospace; font-size:12px;">${v.matricula}</td>
-          <td>${v.tipo || '-'}</td>
-          <td style="font-size:11px; color:#6c757d;">${v.provincia || 'Málaga'}</td>
+          <td><strong>${escapeHTML(v.alias || v.indicativo)}</strong>${v.alias ? `<br><span style="font-size:11px;color:var(--text-2);">${escapeHTML(v.indicativo)}</span>` : ''}</td>
+          <td style="font-weight:600; color:var(--accent);">${escapeHTML(v.alias || '-')}</td>
+          <td style="font-family:'IBM Plex Mono',monospace; font-size:12px;">${escapeHTML(v.matricula)}</td>
+          <td>${escapeHTML(v.tipo || '-')}</td>
+          <td style="font-size:11px; color:#6c757d;">${escapeHTML(v.provincia || 'Málaga')}</td>
           <td>
-            <button class="tbl-btn" onclick="editarVehiculo('${v.id}')" title="Editar">${svgEdit}</button>
-            <button class="tbl-btn danger" onclick="borrarVehiculo('${v.id}')" title="Eliminar">${svgTrash}</button>
+            <button class="tbl-btn" onclick="editarVehiculo('${escapeHTML(v.id)}')" title="Editar">${svgEdit}</button>
+            <button class="tbl-btn danger" onclick="borrarVehiculo('${escapeHTML(v.id)}')" title="Eliminar">${svgTrash}</button>
           </td>`;
         tbody.appendChild(tr);
       });
@@ -6274,11 +6293,11 @@ ${dataContext}
         const svgTrash = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td><strong>ERBE ${e.localidad || '-'}</strong></td>
-          <td style="font-size:11px; color:#6c757d;">${e.provincia || 'Málaga'}</td>
+          <td><strong>ERBE ${escapeHTML(e.localidad || '-')}</strong></td>
+          <td style="font-size:11px; color:#6c757d;">${escapeHTML(e.provincia || 'Málaga')}</td>
           <td>
-            <button class="tbl-btn" onclick="editarErbe('${e.id}')" title="Editar">${svgEdit}</button>
-            <button class="tbl-btn danger" onclick="borrarErbe('${e.id}')" title="Eliminar">${svgTrash}</button>
+            <button class="tbl-btn" onclick="editarErbe('${escapeHTML(e.id)}')" title="Editar">${svgEdit}</button>
+            <button class="tbl-btn danger" onclick="borrarErbe('${escapeHTML(e.id)}')" title="Eliminar">${svgTrash}</button>
           </td>`;
         tbody.appendChild(tr);
       });
@@ -6394,11 +6413,11 @@ ${dataContext}
         const svgTrash = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`;
         const tr = document.createElement('tr');
         tr.innerHTML = `
-          <td><strong>ERIE ${e.especialidad || '-'}</strong></td>
-          <td style="font-size:11px; color:#6c757d;">${e.provincia || 'Málaga'}</td>
+          <td><strong>ERIE ${escapeHTML(e.especialidad || '-')}</strong></td>
+          <td style="font-size:11px; color:#6c757d;">${escapeHTML(e.provincia || 'Málaga')}</td>
           <td>
-            <button class="tbl-btn" onclick="editarErie('${e.id}')" title="Editar">${svgEdit}</button>
-            <button class="tbl-btn danger" onclick="borrarErie('${e.id}')" title="Eliminar">${svgTrash}</button>
+            <button class="tbl-btn" onclick="editarErie('${escapeHTML(e.id)}')" title="Editar">${svgEdit}</button>
+            <button class="tbl-btn danger" onclick="borrarErie('${escapeHTML(e.id)}')" title="Eliminar">${svgTrash}</button>
           </td>`;
         tbody.appendChild(tr);
       });
@@ -7713,7 +7732,7 @@ ${dataContext}
 
       const bread = document.getElementById('prev-breadcrumb');
       bread.style.display = 'block';
-      bread.innerHTML = `<span style="color:var(--text-3); cursor:pointer;" onclick="backToPreventivosList()">🗓️ Preventivo:</span> <span style="font-weight:700;">${p.nombre}</span>`;
+      bread.innerHTML = `<span style="color:var(--text-3); cursor:pointer;" onclick="backToPreventivosList()">🗓️ Preventivo:</span> <span style="font-weight:700;">${escapeHTML(p.nombre)}</span>`;
 
       cargarSubpreventivos(id, (subIds) => {
         // V.12.4.1: Asegurar que el acordeón se expande antes de intentar seleccionar
@@ -14948,7 +14967,7 @@ ${dataContext}
 <body>
 
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-4); font-family: monospace; pointer-events: none; font-weight: 600; opacity: 0.8;">
-    EmerCRE V.15.0.17
+    EmerCRE V.15.1.0
   </div>
 
   <!-- LOGIN -->

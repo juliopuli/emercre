@@ -511,6 +511,69 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     };
 });
 
+// 3.5. Create User (V.15.1.0 - Server-side user creation with role verification)
+exports.createUser = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "Debe estar autenticado.");
+    }
+
+    // Verify caller's role
+    const callerSnap = await admin.firestore().collection("users").doc(context.auth.uid).get();
+    const callerRole = callerSnap.exists ? callerSnap.data().role : null;
+
+    if (!['super_admin', 'manager'].includes(callerRole)) {
+        throw new functions.https.HttpsError("permission-denied", "Sin permisos para crear usuarios.");
+    }
+
+    // Managers can only create 'admin' and 'usuario' roles
+    if (callerRole === 'manager' && !['admin', 'usuario'].includes(data.role)) {
+        throw new functions.https.HttpsError("permission-denied", "Un manager solo puede crear roles admin y usuario.");
+    }
+
+    // Validate required fields
+    if (!data.email || !data.password || !data.nombre) {
+        throw new functions.https.HttpsError("invalid-argument", "Email, contraseña y nombre son obligatorios.");
+    }
+
+    if (data.password.length < 6) {
+        throw new functions.https.HttpsError("invalid-argument", "La contraseña debe tener al menos 6 caracteres.");
+    }
+
+    try {
+        // Create Firebase Auth account
+        const userRecord = await admin.auth().createUser({
+            email: data.email,
+            password: data.password,
+            displayName: data.nombre
+        });
+
+        // Create Firestore user document
+        await admin.firestore().collection("users").doc(userRecord.uid).set({
+            nombre: data.nombre,
+            email: data.email,
+            role: data.role || 'usuario',
+            provincia: data.provincia || 'Andalucía',
+            activo: data.activo !== false,
+            canSeeVehicles: !!data.canSeeVehicles,
+            accesoEmergencias: data.accesoEmergencias !== false,
+            accesoPreventivos: !!data.accesoPreventivos,
+            aparecerEnTodosLosChats: !!data.aparecerEnTodosLosChats,
+            creadoPor: context.auth.uid,
+            creadoEn: admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        console.log(`[createUser] Usuario ${data.email} creado por ${context.auth.token.email}`);
+        return { uid: userRecord.uid };
+    } catch (error) {
+        console.error("[createUser] Error:", error);
+        if (error.code === 'auth/email-already-exists') {
+            throw new functions.https.HttpsError("already-exists",
+                "Este correo ya está dado de alta. Al borrar un usuario, queda un rastro en Firebase. Dile al usuario que vuelva a iniciar sesión con su cuenta de siempre y nosotros reactivaremos su perfil.");
+        }
+        throw new functions.https.HttpsError("internal", "Error al crear usuario: " + error.message);
+    }
+});
+
 // 4. Purge Oysta Logs (V.9.6.4 - Robustecida con más memoria y timeout)
 exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' }).https.onCall(async (data, context) => {
     // 1. Verify Authentication
