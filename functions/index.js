@@ -713,10 +713,32 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
 
                 const pos = { lat: parseFloat(v.lat), lng: parseFloat(v.lng) };
                 const speed = parseFloat(v.speed);
-                // V.15.0.0: Detección más robusta. Si Oysta no envía speed, intentamos detectar por status o movimiento
+                // V.15.0.0: Detección de movimiento
                 let isMoving = speed > 3;
                 if (v.status && v.status.toUpperCase().includes("MOVING")) isMoving = true;
                 if (v.moving === true || v.moving === "true") isMoving = true;
+
+                // Detección de estado Parado explícito
+                let isStoppedExplicit = false;
+                if (v.status) {
+                    const st = v.status.toUpperCase();
+                    if (st.includes("STOP") || st.includes("PARAD")) isStoppedExplicit = true;
+                }
+
+                const distToDest = iCoords ? calculateHaversineDist(pos, iCoords) : 999;
+                const hasRealDest = (iData.direccion && iData.direccion.trim() !== "" && iData.direccion.toLowerCase() !== "destino");
+                const isGoal = hasRealDest && (distToDest < 0.05); // Radio 50m
+
+                // Lógica de mantenimiento de viaje:
+                // Si ha llegado a la meta (menos de 50m), forzamos parada.
+                if (isGoal) {
+                    isMoving = false;
+                } 
+                // Si no se mueve rápido ni está explícitamente parado, 
+                // asumimos Ralentí/Semáforo y mantenemos el estado de ruta anterior
+                else if (!isMoving && !isStoppedExplicit) {
+                    isMoving = vs.moving;
+                }
 
                 // V.15.0.16: ELIMINADO log de diagnóstico basura que insertaba un documento por ciclo.
 
@@ -726,7 +748,6 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 const oystaTime = oystaTsStr ? new Date(oystaTsStr).getTime() : now;
 
                 const vs = intStates[rid] || { moving: isMoving, hasDeparted: false, hasArrived: false, lastStopAddr: "" };
-                const distToDest = iCoords ? calculateHaversineDist(pos, iCoords) : 999;
                 let vehicleStateChanged = false;
 
                 // Reset de arribo agresivo (V.15.0.0: resetea siempre > 250m para evitar botes)
@@ -781,14 +802,13 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 // 2. DETECCIÓN DE LLEGADA / PARADA (Se detiene tras estar en movimiento)
                 else if (!isMoving && vs.moving) {
                     let msg = "";
-                    const isGoal = distToDest < 0.1; // Radio 100m
                     
                     if (isGoal) {
-                        // CASO A: Llegada al destino final de la intervención
+                        // CASO A: Llegada al destino final de la intervención (O si < 50m)
                         msg = `${indicativo} llega a lugar del aviso (${iData.direccion || 'sin dirección'})`;
                         vs.hasArrived = true;
                     } else {
-                        // CASO B/C: Parada intermedia
+                        // CASO B/C: Parada intermedia (Estado PARADO detectado explícitamente)
                         const addrStr = `[${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}] (Ver mapa: https://www.google.com/maps?q=${pos.lat},${pos.lng})`;
                         msg = `${indicativo} llega a ${addrStr}`;
                         
