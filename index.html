@@ -165,6 +165,8 @@
     let renfeAVERefreshInterval = null; // V.12.4.1
     let directionsService = null;
     let directionsRenderer = null;
+    let routePolyline = null; // V.15.2.0: Polyline manual para Routes API
+    let activeMapsApiKey = null; // V.15.2.0: Clave para Routes API REST
     let aisMarkers = {};
     let aisLayerEnabled = false;
     let aisRefreshInterval = null;
@@ -313,9 +315,9 @@
 
 
 
-    // Helper: Cálculo de Rutas con Caché (V.12.4.1)
-    function calculateRouteWithCache(origin, destination, travelMode, callback) {
-      const mode = travelMode || google.maps.TravelMode.DRIVING;
+    // Helper: Cálculo de Rutas con Caché — V.15.2.0: Migrado a Routes API (Essentials, 10K gratis/mes)
+    async function calculateRouteWithCache(origin, destination, travelMode, callback) {
+      const mode = travelMode || 'DRIVE';
       const getPKey = (p) => {
         if (!p) return 'null';
         if (typeof p === 'string') return p;
@@ -330,17 +332,92 @@
         callback(routeCache[key], 'OK');
         return;
       }
-      if (!directionsService) directionsService = new google.maps.DirectionsService();
-      directionsService.route({
-        origin: origin,
-        destination: destination,
-        travelMode: mode
-      }, (result, status) => {
-        if (status === 'OK') {
-          routeCache[key] = result;
+
+      // Convertir inputs a coordenadas si son strings (usar Geocoder)
+      const toLatLng = async (input) => {
+        if (typeof input === 'string') {
+          return new Promise((resolve, reject) => {
+            const geocoder = new google.maps.Geocoder();
+            geocoder.geocode({ address: input }, (results, status) => {
+              if (status === 'OK' && results[0]) {
+                const loc = results[0].geometry.location;
+                resolve({ latitude: loc.lat(), longitude: loc.lng() });
+              } else {
+                reject(new Error('Geocode failed: ' + status));
+              }
+            });
+          });
         }
-        callback(result, status);
-      });
+        const lat = typeof input.lat === 'function' ? input.lat() : input.lat;
+        const lng = typeof input.lng === 'function' ? input.lng() : input.lng;
+        return { latitude: lat, longitude: lng };
+      };
+
+      try {
+        const [originLL, destLL] = await Promise.all([toLatLng(origin), toLatLng(destination)]);
+
+        const body = {
+          origin: { location: { latLng: originLL } },
+          destination: { location: { latLng: destLL } },
+          travelMode: mode,
+          routingPreference: 'TRAFFIC_UNAWARE',
+          languageCode: 'es'
+        };
+
+        const res = await fetch(
+          `https://routes.googleapis.com/directions/v2:computeRoutes?key=${activeMapsApiKey}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.distanceMeters,routes.legs.duration'
+            },
+            body: JSON.stringify(body)
+          }
+        );
+        const data = await res.json();
+
+        if (data.routes && data.routes.length > 0) {
+          const route = data.routes[0];
+          // Adaptar a formato compatible con nuestro UI
+          const result = {
+            routes: [{
+              polyline: route.polyline,
+              legs: route.legs ? route.legs.map(leg => ({
+                distance: { text: formatDistance(leg.distanceMeters), value: leg.distanceMeters },
+                duration: { text: formatDuration(leg.duration), value: parseInt(leg.duration) }
+              })) : [{
+                distance: { text: formatDistance(route.distanceMeters), value: route.distanceMeters },
+                duration: { text: formatDuration(route.duration), value: parseInt(route.duration) }
+              }]
+            }]
+          };
+          routeCache[key] = result;
+          callback(result, 'OK');
+        } else {
+          console.error('Routes API error:', data);
+          callback(null, data.error?.message || 'UNKNOWN_ERROR');
+        }
+      } catch (e) {
+        console.error('Routes API fetch error:', e);
+        callback(null, 'FETCH_ERROR');
+      }
+    }
+
+    // Helpers para formatear respuesta Routes API
+    function formatDistance(meters) {
+      if (!meters) return '0 m';
+      return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${meters} m`;
+    }
+    function formatDuration(duration) {
+      if (!duration) return '0 min';
+      const secs = parseInt(duration.replace('s', ''));
+      if (secs < 60) return `${secs} s`;
+      const mins = Math.round(secs / 60);
+      if (mins < 60) return `${mins} min`;
+      const h = Math.floor(mins / 60);
+      const m = mins % 60;
+      return m > 0 ? `${h} h ${m} min` : `${h} h`;
     }
 
     // ── CONFIGURACIÓN PUENTE NOTIFICACIONES (V.12.4.1) ─────────────────
@@ -493,12 +570,7 @@
       });
 
       trafficLayer = new google.maps.TrafficLayer();
-      directionsService = new google.maps.DirectionsService();
-      directionsRenderer = new google.maps.DirectionsRenderer({
-        map: mapEmergencias,
-        suppressMarkers: false,
-        polylineOptions: { strokeColor: '#1a3a6e', strokeOpacity: 0.7, strokeWeight: 5 }
-      });
+      // V.15.2.0: DirectionsService/Renderer eliminados — ahora usamos Routes API + Polyline manual
 
       google.maps.event.addListenerOnce(mapEmergencias, 'tilesloaded', function () {
         mapReady = true;
@@ -1725,24 +1797,45 @@
       calculateRouteWithCache(origin, dest, null, (result, status) => {
         btn.disabled = false; btn.textContent = 'Calcular';
         if (status === 'OK') {
-          directionsRenderer.setDirections(result);
+          // V.15.2.0: Dibujar ruta con polyline manual (Routes API)
+          if (routePolyline) { routePolyline.setMap(null); routePolyline = null; }
+          if (result.routes[0] && result.routes[0].polyline) {
+            const path = google.maps.geometry ?
+              google.maps.geometry.encoding.decodePath(result.routes[0].polyline.encodedPolyline) :
+              [];
+            if (path.length) {
+              routePolyline = new google.maps.Polyline({
+                path: path,
+                geodesic: true,
+                strokeColor: '#1a3a6e',
+                strokeOpacity: 0.7,
+                strokeWeight: 5,
+                map: mapEmergencias
+              });
+              // Ajustar vista al bounds de la ruta
+              const bounds = new google.maps.LatLngBounds();
+              path.forEach(p => bounds.extend(p));
+              mapEmergencias.fitBounds(bounds, 60);
+            }
+          }
           if (info && result.routes[0] && result.routes[0].legs[0]) {
             const leg = result.routes[0].legs[0];
             info.innerHTML = `
-              <div style="font-weight:700; color:var(--accent); font-size:12px; margin-bottom:2px;">${leg.distance.text}</div>
-              <div style="font-size:11px; color:var(--text-3);">Duración est.: <b>${leg.duration.text}</b></div>
+              <div style="font-weight:700; color:var(--accent); font-size:12px; margin-bottom:2px;">${escapeHTML(leg.distance.text)}</div>
+              <div style="font-size:11px; color:var(--text-3);">Duración est.: <b>${escapeHTML(leg.duration.text)}</b></div>
             `;
             info.style.display = 'block';
           }
         } else {
           showToast('No se pudo calcular la ruta');
-          console.error('Directions error:', status);
+          console.error('Routes API error:', status);
         }
       });
     };
 
     window.clearRoute = () => {
-      directionsRenderer.setDirections({ routes: [] });
+      // V.15.2.0: Limpiar polyline manual en vez de DirectionsRenderer
+      if (routePolyline) { routePolyline.setMap(null); routePolyline = null; }
       document.getElementById('route-origin').value = '';
       document.getElementById('route-dest').value = '';
       if (routeMarkers.origin) { routeMarkers.origin.setMap(null); routeMarkers.origin = null; }
@@ -2462,10 +2555,11 @@
       }
 
       const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,marker&callback=onGoogleMapsReady&language=es&loading=async`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,marker,geometry&callback=onGoogleMapsReady&language=es&loading=async`;
       script.async = true;
       script.defer = true;
       document.head.appendChild(script);
+      activeMapsApiKey = apiKey; // V.15.2.0: Guardar para Routes API REST
     }
     cargarGoogleMaps();
 
@@ -10527,7 +10621,7 @@ ${dataContext}
           updateUsageUI('sku-1-load', n(mData.maps_load), 10000, `${n(mData.maps_load)} (Est)`, `Peticiones este mes`);
           updateUsageUI('sku-1-geocode', n(mData.maps_geocode), 10000, `${n(mData.maps_geocode)} (Est)`, `Peticiones este mes`);
           updateUsageUI('sku-1-places', n(mData.maps_places), 10000, `${n(mData.maps_places)} (Est)`, `Peticiones este mes`);
-          updateUsageUI('sku-1-route', n(mData.maps_route), 1, `${n(mData.maps_route)} (Est)`, `⚠️ Legacy — cada petición se cobra`);
+          updateUsageUI('sku-1-route', n(mData.maps_route), 10000, `${n(mData.maps_route)} (Est)`, `Peticiones este mes`);
           // V.12.4.1: Restaurado a 1500 peticiones/día (Límite Gemini Flash Lite Free)
           updateUsageUI('gemini', n(dData.ia_report), 1500, `${n(dData.ia_report)} (Est) / - (Real)`, `Peticiones hoy (Límite: 1500 | Reset: 09:00 PT)`);
           updateUsageUI('fs-reads', n(dData.fs_read), 50000, `${n(dData.fs_read)} (Est) / - (Real)`, `Lecturas hoy (Límite: 50,000)`);
@@ -17121,17 +17215,17 @@ ${dataContext}
             <div class="usage-estimated" id="est-sku-1-places">Búsqueda de lugares</div>
           </div>
 
-          <div class="usage-card" style="border-left: 3px solid var(--crit-3);">
+          <div class="usage-card">
             <div class="usage-header">
-              <div class="usage-title">Directions ⚠️</div>
-              <div class="usage-meta">Legacy · SIN free tier</div>
+              <div class="usage-title">Routes (Rutas)</div>
+              <div class="usage-meta">Essentials · 10,000 gratis/mes</div>
             </div>
-            <div class="progress-container"><div id="pb-sku-1-route" class="progress-bar" style="background:var(--crit-3);"></div></div>
+            <div class="progress-container"><div id="pb-sku-1-route" class="progress-bar"></div></div>
             <div class="usage-stats">
               <span class="usage-current" id="val-sku-1-route">0</span>
-              <span class="usage-limit" style="color:var(--crit-3);">$5/1000</span>
+              <span class="usage-limit">10,000</span>
             </div>
-            <div class="usage-estimated" id="est-sku-1-route">Cálculo de rutas (Legacy, cada petición se cobra)</div>
+            <div class="usage-estimated" id="est-sku-1-route">Cálculo de rutas</div>
           </div>
 
           <div style="grid-column: 1 / -1; padding: 8px 12px; background:var(--bg-1); border-radius:6px; border:1px solid var(--border); font-size:12px; display:flex; justify-content:space-between; align-items:center;">
@@ -17181,17 +17275,17 @@ ${dataContext}
             <div class="usage-estimated" id="est-sku-2-places">Búsqueda de lugares</div>
           </div>
 
-          <div class="usage-card" style="border-left: 3px solid var(--crit-3);">
+          <div class="usage-card" style="border-left: 4px solid var(--accent);">
             <div class="usage-header">
-              <div class="usage-title">Directions ⚠️</div>
-              <div class="usage-meta">Legacy · SIN free tier</div>
+              <div class="usage-title">Routes (Rutas)</div>
+              <div class="usage-meta">Essentials · 10,000 gratis/mes</div>
             </div>
-            <div class="progress-container"><div id="pb-sku-2-route" class="progress-bar" style="background:var(--crit-3);"></div></div>
+            <div class="progress-container"><div id="pb-sku-2-route" class="progress-bar"></div></div>
             <div class="usage-stats">
               <span class="usage-current" id="val-sku-2-route">0</span>
-              <span class="usage-limit" style="color:var(--crit-3);">$5/1000</span>
+              <span class="usage-limit">10,000</span>
             </div>
-            <div class="usage-estimated" id="est-sku-2-route">Cálculo de rutas (Legacy, cada petición se cobra)</div>
+            <div class="usage-estimated" id="est-sku-2-route">Cálculo de rutas</div>
           </div>
 
           <div style="grid-column: 1 / -1; padding: 8px 12px; background:var(--bg-1); border-radius:6px; border:1px solid var(--accent); font-size:12px; display:flex; justify-content:space-between; align-items:center;">

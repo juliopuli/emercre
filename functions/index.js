@@ -455,7 +455,7 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     ] = await Promise.all([
         getMetric("maps-backend.googleapis.com", startOfMonth),
         getMetric("places-backend.googleapis.com", startOfMonth),
-        getMetric("directions-backend.googleapis.com", startOfMonth),
+        getMetric("routes.googleapis.com", startOfMonth),  // V.15.2.0: Migrado de directions-backend a Routes API
         getMetric("geocoding-backend.googleapis.com", startOfMonth),
         getMetric("generativelanguage.googleapis.com", startOfDay),
         getMetric("generativelanguage.googleapis.com", startOfMonth),
@@ -513,7 +513,7 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
             maps_load: 10000,   // Dynamic Maps — Essentials
             geocode:   10000,   // Geocoding — Essentials
             places:    10000,   // Places — Essentials
-            route:     0        // Directions — Legacy (sin free tier)
+            route:     10000   // Routes API — Essentials (V.15.2.0: migrado de Directions Legacy)
         },
         cpmRates: {             // $/1000 peticiones (tras superar free tier)
             maps_load: 7.00,
