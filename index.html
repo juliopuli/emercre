@@ -10533,16 +10533,16 @@ ${dataContext}
           const cpm = data.cpmRates || { maps_load: 7.00, geocode: 5.00, places: 5.00, route: 5.00 };
 
           // Per-SKU bars — Account 1
-          updateUsageUI('sku-1-load',    n(data.acc1.maps.load),    ft.maps_load, `${n(data.acc1.maps.load).toLocaleString()}`, `Peticiones este mes`);
-          updateUsageUI('sku-1-geocode', n(data.acc1.maps.geocode), ft.geocode,   `${n(data.acc1.maps.geocode).toLocaleString()}`, `Peticiones este mes`);
-          updateUsageUI('sku-1-places',  n(data.acc1.maps.places),  ft.places,    `${n(data.acc1.maps.places).toLocaleString()}`, `Peticiones este mes`);
-          updateUsageUI('sku-1-route',   n(data.acc1.maps.route),   Math.max(ft.route, 1), `${n(data.acc1.maps.route).toLocaleString()}`, ft.route === 0 ? `⚠️ $${(n(data.acc1.maps.route) * cpm.route / 1000).toFixed(2)} cobrados` : `Peticiones este mes`);
+          updateUsageUI('sku-1-load',    n(data.acc1.maps.load),    ft.maps_load, `${n(data.acc1.maps.load).toLocaleString()}`, `${n(data.acc1.maps.load).toLocaleString()} peticiones (Real)`);
+          updateUsageUI('sku-1-geocode', n(data.acc1.maps.geocode), ft.geocode,   `${n(data.acc1.maps.geocode).toLocaleString()}`, `${n(data.acc1.maps.geocode).toLocaleString()} peticiones (Real)`);
+          updateUsageUI('sku-1-places',  n(data.acc1.maps.places),  ft.places,    `${n(data.acc1.maps.places).toLocaleString()}`, `${n(data.acc1.maps.places).toLocaleString()} peticiones (Real)`);
+          updateUsageUI('sku-1-route',   n(data.acc1.maps.route),   ft.route,     `${n(data.acc1.maps.route).toLocaleString()}`, `${n(data.acc1.maps.route).toLocaleString()} peticiones (Real)`);
 
           // Per-SKU bars — Account 2
-          updateUsageUI('sku-2-load',    n(data.acc2.maps.load),    ft.maps_load, `${n(data.acc2.maps.load).toLocaleString()}`, `Peticiones este mes`);
-          updateUsageUI('sku-2-geocode', n(data.acc2.maps.geocode), ft.geocode,   `${n(data.acc2.maps.geocode).toLocaleString()}`, `Peticiones este mes`);
-          updateUsageUI('sku-2-places',  n(data.acc2.maps.places),  ft.places,    `${n(data.acc2.maps.places).toLocaleString()}`, `Peticiones este mes`);
-          updateUsageUI('sku-2-route',   n(data.acc2.maps.route),   Math.max(ft.route, 1), `${n(data.acc2.maps.route).toLocaleString()}`, ft.route === 0 ? `⚠️ $${(n(data.acc2.maps.route) * cpm.route / 1000).toFixed(2)} cobrados` : `Peticiones este mes`);
+          updateUsageUI('sku-2-load',    n(data.acc2.maps.load),    ft.maps_load, `${n(data.acc2.maps.load).toLocaleString()}`, `${n(data.acc2.maps.load).toLocaleString()} peticiones (Real)`);
+          updateUsageUI('sku-2-geocode', n(data.acc2.maps.geocode), ft.geocode,   `${n(data.acc2.maps.geocode).toLocaleString()}`, `${n(data.acc2.maps.geocode).toLocaleString()} peticiones (Real)`);
+          updateUsageUI('sku-2-places',  n(data.acc2.maps.places),  ft.places,    `${n(data.acc2.maps.places).toLocaleString()}`, `${n(data.acc2.maps.places).toLocaleString()} peticiones (Real)`);
+          updateUsageUI('sku-2-route',   n(data.acc2.maps.route),   ft.route,     `${n(data.acc2.maps.route).toLocaleString()}`, `${n(data.acc2.maps.route).toLocaleString()} peticiones (Real)`);
 
           // Cost summaries
           const cost1 = calcSkuCost(n(data.acc1.maps.load), ft.maps_load, cpm.maps_load)
@@ -10558,7 +10558,7 @@ ${dataContext}
           if (costEl1) { costEl1.textContent = `$${cost1.toFixed(2)}`; costEl1.style.color = cost1 > 0 ? 'var(--crit-3)' : 'var(--crit-1)'; }
           if (costEl2) { costEl2.textContent = `$${cost2.toFixed(2)}`; costEl2.style.color = cost2 > 0 ? 'var(--crit-3)' : 'var(--crit-1)'; }
 
-          // Gemini + Firestore (real data path)
+          // Gemini + Firestore + Estimaciones locales (real data path)
           try {
             const nowComp = new Date();
             const monthId = `${nowComp.getFullYear()}-${String(nowComp.getMonth() + 1).padStart(2, '0')}`;
@@ -10567,10 +10567,25 @@ ${dataContext}
               getDoc(doc(db, 'api_usage', monthId)),
               getDoc(doc(db, 'api_usage', dayId))
             ]);
+            const mData = monthSnap.exists() ? monthSnap.data() : {};
             const dData = daySnap.exists() ? daySnap.data() : {};
+
+            // Enriquecer per-SKU con estimación local (formato: Real / Est)
+            const enrichSku = (skuId, realVal, estKey) => {
+              const estVal = n(mData[estKey]);
+              const est = document.getElementById(`est-${skuId}`) || document.getElementById(`est-${skuId}-units`);
+              if (est) est.textContent = `${realVal.toLocaleString()} (Real) / ${estVal.toLocaleString()} (Est)`;
+            };
+            enrichSku('sku-1-load',    n(data.acc1.maps.load),    'maps_load');
+            enrichSku('sku-1-geocode', n(data.acc1.maps.geocode), 'maps_geocode');
+            enrichSku('sku-1-places',  n(data.acc1.maps.places),  'maps_places');
+            enrichSku('sku-1-route',   n(data.acc1.maps.route),   'maps_route');
+
+            // Gemini
             const geminiFirestore = n(dData.ia_report);
             updateUsageUI('gemini', geminiFirestore, 1500, `${geminiFirestore} peticiones hoy`, `Peticiones hoy · Fuente: Firestore (Límite: 1,500)`);
 
+            // Firestore reads/writes
             const fsR_Real = n(data.acc1.firestore.reads) + n(data.acc2.firestore.reads);
             const fsR_Est = n(dData.fs_read);
             const fsW_Real = n(data.acc1.firestore.writes) + n(data.acc2.firestore.writes);
@@ -10635,7 +10650,8 @@ ${dataContext}
       function updateUsageUI(id, current, limit, labelText = null, metaText = null) {
         const perc = Math.min((current / limit) * 100, 100);
         const pb = document.getElementById(`pb-${id}`);
-        const val = document.getElementById(`val-${id}-consumed`);
+        // V.15.2.0: Buscar ambos formatos de ID (nuevo: val-{id}, antiguo: val-{id}-consumed)
+        const val = document.getElementById(`val-${id}`) || document.getElementById(`val-${id}-consumed`);
 
         if (pb) {
           pb.style.width = `${perc}%`;
@@ -10644,7 +10660,8 @@ ${dataContext}
         }
         if (val) val.textContent = labelText || current.toLocaleString();
         if (metaText) {
-          const est = document.getElementById(`est-${id}-units`);
+          // V.15.2.0: Buscar ambos formatos de ID (nuevo: est-{id}, antiguo: est-{id}-units)
+          const est = document.getElementById(`est-${id}`) || document.getElementById(`est-${id}-units`);
           if (est) est.textContent = metaText;
         }
       }
