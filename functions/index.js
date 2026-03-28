@@ -507,7 +507,21 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
                 deletes: getP(fsDeletesRes, "emercre-mapsec")
             }
         },
-        syncErrors: allErrors
+        syncErrors: allErrors,
+        // V.15.2.0: Nuevo modelo de precios por SKU (Marzo 2025)
+        freeTiers: {
+            maps_load: 10000,   // Dynamic Maps — Essentials
+            geocode:   10000,   // Geocoding — Essentials
+            places:    10000,   // Places — Essentials
+            route:     0        // Directions — Legacy (sin free tier)
+        },
+        cpmRates: {             // $/1000 peticiones (tras superar free tier)
+            maps_load: 7.00,
+            geocode:   5.00,
+            places:    5.00,
+            route:     5.00
+        },
+        pricingModel: 'per_sku_2025'
     };
 });
 

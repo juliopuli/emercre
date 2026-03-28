@@ -10430,46 +10430,60 @@ ${dataContext}
           const data = res.data; // { acc1: {...}, acc2: {...}, syncErrors: [...] }
           const n = (v) => Number(v || 0);
 
-          const calcCost = (acc) => (
-            n(acc.maps.load) * 0.007 +
-            n(acc.maps.route) * 0.005 +
-            n(acc.maps.places) * 0.017 +
-            n(acc.maps.geocode) * 0.005
-          );
-          const calcReqs = (acc) => n(acc.maps.load) + n(acc.maps.route) + n(acc.maps.places) + n(acc.maps.geocode);
+          const calcSkuCost = (reqs, freeTier, cpmRate) => {
+            const excess = Math.max(0, reqs - freeTier);
+            return excess * cpmRate / 1000;
+          };
 
-          const cost1 = calcCost(data.acc1);
-          const cost2 = calcCost(data.acc2);
-          const reqs1 = calcReqs(data.acc1);
-          const reqs2 = calcReqs(data.acc2);
+          const ft = data.freeTiers || { maps_load: 10000, geocode: 10000, places: 10000, route: 0 };
+          const cpm = data.cpmRates || { maps_load: 7.00, geocode: 5.00, places: 5.00, route: 5.00 };
 
-          const nowComp = new Date();
-          const monthId = `${nowComp.getFullYear()}-${String(nowComp.getMonth() + 1).padStart(2, '0')}`;
-          const dayId = `${monthId}-${String(nowComp.getDate()).padStart(2, '0')}`;
+          // Per-SKU bars — Account 1
+          updateUsageUI('sku-1-load',    n(data.acc1.maps.load),    ft.maps_load, `${n(data.acc1.maps.load).toLocaleString()}`, `Peticiones este mes`);
+          updateUsageUI('sku-1-geocode', n(data.acc1.maps.geocode), ft.geocode,   `${n(data.acc1.maps.geocode).toLocaleString()}`, `Peticiones este mes`);
+          updateUsageUI('sku-1-places',  n(data.acc1.maps.places),  ft.places,    `${n(data.acc1.maps.places).toLocaleString()}`, `Peticiones este mes`);
+          updateUsageUI('sku-1-route',   n(data.acc1.maps.route),   Math.max(ft.route, 1), `${n(data.acc1.maps.route).toLocaleString()}`, ft.route === 0 ? `⚠️ $${(n(data.acc1.maps.route) * cpm.route / 1000).toFixed(2)} cobrados` : `Peticiones este mes`);
 
+          // Per-SKU bars — Account 2
+          updateUsageUI('sku-2-load',    n(data.acc2.maps.load),    ft.maps_load, `${n(data.acc2.maps.load).toLocaleString()}`, `Peticiones este mes`);
+          updateUsageUI('sku-2-geocode', n(data.acc2.maps.geocode), ft.geocode,   `${n(data.acc2.maps.geocode).toLocaleString()}`, `Peticiones este mes`);
+          updateUsageUI('sku-2-places',  n(data.acc2.maps.places),  ft.places,    `${n(data.acc2.maps.places).toLocaleString()}`, `Peticiones este mes`);
+          updateUsageUI('sku-2-route',   n(data.acc2.maps.route),   Math.max(ft.route, 1), `${n(data.acc2.maps.route).toLocaleString()}`, ft.route === 0 ? `⚠️ $${(n(data.acc2.maps.route) * cpm.route / 1000).toFixed(2)} cobrados` : `Peticiones este mes`);
+
+          // Cost summaries
+          const cost1 = calcSkuCost(n(data.acc1.maps.load), ft.maps_load, cpm.maps_load)
+                      + calcSkuCost(n(data.acc1.maps.geocode), ft.geocode, cpm.geocode)
+                      + calcSkuCost(n(data.acc1.maps.places), ft.places, cpm.places)
+                      + calcSkuCost(n(data.acc1.maps.route), ft.route, cpm.route);
+          const cost2 = calcSkuCost(n(data.acc2.maps.load), ft.maps_load, cpm.maps_load)
+                      + calcSkuCost(n(data.acc2.maps.geocode), ft.geocode, cpm.geocode)
+                      + calcSkuCost(n(data.acc2.maps.places), ft.places, cpm.places)
+                      + calcSkuCost(n(data.acc2.maps.route), ft.route, cpm.route);
+          const costEl1 = document.getElementById('cost-acc1');
+          const costEl2 = document.getElementById('cost-acc2');
+          if (costEl1) { costEl1.textContent = `$${cost1.toFixed(2)}`; costEl1.style.color = cost1 > 0 ? 'var(--crit-3)' : 'var(--crit-1)'; }
+          if (costEl2) { costEl2.textContent = `$${cost2.toFixed(2)}`; costEl2.style.color = cost2 > 0 ? 'var(--crit-3)' : 'var(--crit-1)'; }
+
+          // Gemini + Firestore (real data path)
           try {
+            const nowComp = new Date();
+            const monthId = `${nowComp.getFullYear()}-${String(nowComp.getMonth() + 1).padStart(2, '0')}`;
+            const dayId = `${monthId}-${String(nowComp.getDate()).padStart(2, '0')}`;
             const [monthSnap, daySnap] = await Promise.all([
               getDoc(doc(db, 'api_usage', monthId)),
               getDoc(doc(db, 'api_usage', dayId))
             ]);
-            const mData = monthSnap.exists() ? monthSnap.data() : {};
             const dData = daySnap.exists() ? daySnap.data() : {};
-
             const geminiFirestore = n(dData.ia_report);
-            const geminiLimit = 1500;
+            updateUsageUI('gemini', geminiFirestore, 1500, `${geminiFirestore} peticiones hoy`, `Peticiones hoy · Fuente: Firestore (Límite: 1,500)`);
 
             const fsR_Real = n(data.acc1.firestore.reads) + n(data.acc2.firestore.reads);
             const fsR_Est = n(dData.fs_read);
             const fsW_Real = n(data.acc1.firestore.writes) + n(data.acc2.firestore.writes);
             const fsW_Est = n(dData.fs_write);
-
-            updateUsageUI('gemini', geminiFirestore, geminiLimit, `${geminiFirestore} peticiones hoy`, `Peticiones hoy · Fuente: Firestore (Límite: ${geminiLimit})`);
             updateUsageUI('fs-reads', fsR_Real, 50000, `${fsR_Est} (Est) / ${fsR_Real} (Real)`, `Lecturas hoy (Límite: 50,000)`);
             updateUsageUI('fs-writes', fsW_Real, 20000, `${fsW_Est} (Est) / ${fsW_Real} (Real)`, `Escrituras hoy (Límite: 20,000)`);
-          } catch (e) { }
-
-          updateUsageUI('maps-1', cost1, 200, `$${cost1.toFixed(2)}`, `${reqs1} peticiones este mes`);
-          updateUsageUI('maps-2', cost2, 200, `$${cost2.toFixed(2)}`, `${reqs2} peticiones este mes`);
+          } catch (e) { console.warn('Error Gemini/FS stats:', e); }
 
           if (statusEl) {
             if (data.syncErrors && data.syncErrors.length > 0) {
@@ -10502,15 +10516,18 @@ ${dataContext}
 
           const n = (v) => Number(v || 0);
 
-          const mapsCost =
+          const mapsCostLocal =
             n(mData.maps_load) * 0.007 +
             n(mData.maps_route) * 0.005 +
-            n(mData.maps_places) * 0.017 +
+            n(mData.maps_places) * 0.005 +
             n(mData.maps_geocode) * 0.005;
 
           const totalMapsReqs = n(mData.maps_load) + n(mData.maps_route) + n(mData.maps_places) + n(mData.maps_geocode);
 
-          updateUsageUI('maps', mapsCost, 200, `$${mapsCost.toFixed(2)} (Est) / - (Real)`, `${totalMapsReqs} (Est) / - (Real) peticiones`);
+          updateUsageUI('sku-1-load', n(mData.maps_load), 10000, `${n(mData.maps_load)} (Est)`, `Peticiones este mes`);
+          updateUsageUI('sku-1-geocode', n(mData.maps_geocode), 10000, `${n(mData.maps_geocode)} (Est)`, `Peticiones este mes`);
+          updateUsageUI('sku-1-places', n(mData.maps_places), 10000, `${n(mData.maps_places)} (Est)`, `Peticiones este mes`);
+          updateUsageUI('sku-1-route', n(mData.maps_route), 1, `${n(mData.maps_route)} (Est)`, `⚠️ Legacy — cada petición se cobra`);
           // V.12.4.1: Restaurado a 1500 peticiones/día (Límite Gemini Flash Lite Free)
           updateUsageUI('gemini', n(dData.ia_report), 1500, `${n(dData.ia_report)} (Est) / - (Real)`, `Peticiones hoy (Límite: 1500 | Reset: 09:00 PT)`);
           updateUsageUI('fs-reads', n(dData.fs_read), 50000, `${n(dData.fs_read)} (Est) / - (Real)`, `Lecturas hoy (Límite: 50,000)`);
@@ -14967,7 +14984,7 @@ ${dataContext}
 <body>
 
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-4); font-family: monospace; pointer-events: none; font-weight: 600; opacity: 0.8;">
-    EmerCRE V.15.1.0
+    EmerCRE V.15.2.0
   </div>
 
   <!-- LOGIN -->
@@ -17047,7 +17064,7 @@ ${dataContext}
   <div class="overlay" id="overlay-api-usage">
     <div class="modal" style="width:700px; max-width:95vw;">
       <div class="modal-head">
-        <div class="modal-title">Monitorización de Consumo (Tier Gratuito)</div>
+        <div class="modal-title">Monitorización de Consumo (Por SKU — Modelo 2025)</div>
         <button class="btn-close-dp" onclick="cerrarModalApiUsage()">✕</button>
       </div>
       <div class="modal-body" style="background: var(--bg-2);">
@@ -17062,37 +17079,124 @@ ${dataContext}
         </div>
 
         <div class="usage-grid">
-          <!-- Maps $200 Credit -->
-          <!-- Google Maps Account 1 -->
+          <!-- V.15.2.0: Per-SKU Cards — Cuenta 1 -->
+          <div style="grid-column: 1 / -1; font-weight:700; font-size:13px; color:var(--text-1); padding:4px 0; border-bottom:2px solid var(--border-mid); margin-bottom:4px;">🗺️ Google Maps — Cuenta 1</div>
+
           <div class="usage-card">
             <div class="usage-header">
-              <div class="usage-title">🗺️ Google Maps (Cuenta 1)</div>
-              <div class="usage-meta">Mensual (Crédito $200)</div>
+              <div class="usage-title">Dynamic Maps</div>
+              <div class="usage-meta">Essentials · 10,000 gratis/mes</div>
             </div>
-            <div class="progress-container">
-              <div id="pb-maps-1" class="progress-bar"></div>
-            </div>
+            <div class="progress-container"><div id="pb-sku-1-load" class="progress-bar"></div></div>
             <div class="usage-stats">
-              <span class="usage-current" id="val-maps-1-consumed">$0.00</span>
-              <span class="usage-limit">$200.00</span>
+              <span class="usage-current" id="val-sku-1-load">0</span>
+              <span class="usage-limit">10,000</span>
             </div>
-            <div class="usage-estimated" id="est-maps-1-units">0 peticiones realizadas</div>
+            <div class="usage-estimated" id="est-sku-1-load">Carga de mapas</div>
           </div>
 
-          <!-- Google Maps Account 2 -->
+          <div class="usage-card">
+            <div class="usage-header">
+              <div class="usage-title">Geocoding</div>
+              <div class="usage-meta">Essentials · 10,000 gratis/mes</div>
+            </div>
+            <div class="progress-container"><div id="pb-sku-1-geocode" class="progress-bar"></div></div>
+            <div class="usage-stats">
+              <span class="usage-current" id="val-sku-1-geocode">0</span>
+              <span class="usage-limit">10,000</span>
+            </div>
+            <div class="usage-estimated" id="est-sku-1-geocode">Traducción de direcciones</div>
+          </div>
+
+          <div class="usage-card">
+            <div class="usage-header">
+              <div class="usage-title">Places</div>
+              <div class="usage-meta">Essentials · 10,000 gratis/mes</div>
+            </div>
+            <div class="progress-container"><div id="pb-sku-1-places" class="progress-bar"></div></div>
+            <div class="usage-stats">
+              <span class="usage-current" id="val-sku-1-places">0</span>
+              <span class="usage-limit">10,000</span>
+            </div>
+            <div class="usage-estimated" id="est-sku-1-places">Búsqueda de lugares</div>
+          </div>
+
+          <div class="usage-card" style="border-left: 3px solid var(--crit-3);">
+            <div class="usage-header">
+              <div class="usage-title">Directions ⚠️</div>
+              <div class="usage-meta">Legacy · SIN free tier</div>
+            </div>
+            <div class="progress-container"><div id="pb-sku-1-route" class="progress-bar" style="background:var(--crit-3);"></div></div>
+            <div class="usage-stats">
+              <span class="usage-current" id="val-sku-1-route">0</span>
+              <span class="usage-limit" style="color:var(--crit-3);">$5/1000</span>
+            </div>
+            <div class="usage-estimated" id="est-sku-1-route">Cálculo de rutas (Legacy, cada petición se cobra)</div>
+          </div>
+
+          <div style="grid-column: 1 / -1; padding: 8px 12px; background:var(--bg-1); border-radius:6px; border:1px solid var(--border); font-size:12px; display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-weight:600;">💰 Coste estimado Cuenta 1:</span>
+            <span id="cost-acc1" style="font-weight:800; font-family:'IBM Plex Mono',monospace; font-size:14px;">$0.00</span>
+          </div>
+
+          <!-- V.15.2.0: Per-SKU Cards — Cuenta 2 -->
+          <div style="grid-column: 1 / -1; font-weight:700; font-size:13px; color:var(--accent); padding:4px 0; border-bottom:2px solid var(--accent); margin-top:8px; margin-bottom:4px;">🗺️ Google Maps — Cuenta 2</div>
+
           <div class="usage-card" style="border-left: 4px solid var(--accent);">
             <div class="usage-header">
-              <div class="usage-title">🗺️ Google Maps (Cuenta 2)</div>
-              <div class="usage-meta">Mensual (Crédito $200)</div>
+              <div class="usage-title">Dynamic Maps</div>
+              <div class="usage-meta">Essentials · 10,000 gratis/mes</div>
             </div>
-            <div class="progress-container">
-              <div id="pb-maps-2" class="progress-bar"></div>
-            </div>
+            <div class="progress-container"><div id="pb-sku-2-load" class="progress-bar"></div></div>
             <div class="usage-stats">
-              <span class="usage-current" id="val-maps-2-consumed">$0.00</span>
-              <span class="usage-limit">$200.00</span>
+              <span class="usage-current" id="val-sku-2-load">0</span>
+              <span class="usage-limit">10,000</span>
             </div>
-            <div class="usage-estimated" id="est-maps-2-units">0 peticiones realizadas</div>
+            <div class="usage-estimated" id="est-sku-2-load">Carga de mapas</div>
+          </div>
+
+          <div class="usage-card" style="border-left: 4px solid var(--accent);">
+            <div class="usage-header">
+              <div class="usage-title">Geocoding</div>
+              <div class="usage-meta">Essentials · 10,000 gratis/mes</div>
+            </div>
+            <div class="progress-container"><div id="pb-sku-2-geocode" class="progress-bar"></div></div>
+            <div class="usage-stats">
+              <span class="usage-current" id="val-sku-2-geocode">0</span>
+              <span class="usage-limit">10,000</span>
+            </div>
+            <div class="usage-estimated" id="est-sku-2-geocode">Traducción de direcciones</div>
+          </div>
+
+          <div class="usage-card" style="border-left: 4px solid var(--accent);">
+            <div class="usage-header">
+              <div class="usage-title">Places</div>
+              <div class="usage-meta">Essentials · 10,000 gratis/mes</div>
+            </div>
+            <div class="progress-container"><div id="pb-sku-2-places" class="progress-bar"></div></div>
+            <div class="usage-stats">
+              <span class="usage-current" id="val-sku-2-places">0</span>
+              <span class="usage-limit">10,000</span>
+            </div>
+            <div class="usage-estimated" id="est-sku-2-places">Búsqueda de lugares</div>
+          </div>
+
+          <div class="usage-card" style="border-left: 3px solid var(--crit-3);">
+            <div class="usage-header">
+              <div class="usage-title">Directions ⚠️</div>
+              <div class="usage-meta">Legacy · SIN free tier</div>
+            </div>
+            <div class="progress-container"><div id="pb-sku-2-route" class="progress-bar" style="background:var(--crit-3);"></div></div>
+            <div class="usage-stats">
+              <span class="usage-current" id="val-sku-2-route">0</span>
+              <span class="usage-limit" style="color:var(--crit-3);">$5/1000</span>
+            </div>
+            <div class="usage-estimated" id="est-sku-2-route">Cálculo de rutas (Legacy, cada petición se cobra)</div>
+          </div>
+
+          <div style="grid-column: 1 / -1; padding: 8px 12px; background:var(--bg-1); border-radius:6px; border:1px solid var(--accent); font-size:12px; display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-weight:600;">💰 Coste estimado Cuenta 2:</span>
+            <span id="cost-acc2" style="font-weight:800; font-family:'IBM Plex Mono',monospace; font-size:14px;">$0.00</span>
           </div>
 
           <!-- Gemini Free Tier -->
