@@ -10561,13 +10561,20 @@ ${dataContext}
           const renderCost = (el, estCost, realCost, accLabel = 'Acc1') => {
             if (!el) return;
             let html = `~$${estCost.toFixed(2)} <span style="font-size:10px;opacity:0.6">(aprox.)</span>`;
+            
             if (realCost !== null && realCost !== undefined) {
               html += `<br><span style="font-size:12px;color:var(--text-1)">$${realCost.toFixed(2)} (Factura Google Cloud)</span>`;
-            } else if (bq.bqError && bq.bqError.includes('bq_table_not_found') && bq.bqError.includes(accLabel) || bq.bqError === 'bq_table_not_found' || bq.bqError === 'bq_table_not_found (Ambas)') {
-              html += `<br><span style="font-size:10px;color:var(--text-3);font-style:italic">Factura real: Export BQ configurándose (24h)</span>`;
-            } else if (bq.bqError && (bq.bqError.includes(accLabel) || bq.bqError.includes('Ambas'))) {
-              html += `<br><span style="font-size:10px;color:var(--crit-1)">Factura real: Error BQ (${bq.bqError.substring(0, 30)}...)</span>`;
+            } else if (bq.bqError) {
+              // Si el error es la ausencia normal de tabla en las 24h
+              if (bq.bqError.includes('bq_table_not_found') && (bq.bqError.includes(accLabel) || bq.bqError.includes('Ambas'))) {
+                html += `<br><span style="font-size:10px;color:var(--text-3);font-style:italic">Factura real: Export BQ configurándose (24h)</span>`;
+              } 
+              // Si es un error real devuelto por la API de Google (permisos, etc)
+              else {
+                html += `<br><span style="font-size:10px;color:var(--crit-1)">Factura real: Error BQ (${bq.bqError.substring(0, 30)}...)</span>`;
+              }
             }
+            
             el.innerHTML = html;
             el.style.color = estCost > 0 || (realCost && realCost > 0) ? 'var(--crit-3)' : 'var(--crit-1)';
           };
