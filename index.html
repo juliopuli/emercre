@@ -1025,6 +1025,9 @@
           list = res.data.geo;
         }
         
+        // V.15.3.4: Guardar lista para "Marcar/Desmarcar todos"
+        window._semanaSantaActiveList = list;
+        
         // V.14.4.0: Gestión de capas KML e itinerarios
         // V.14.5.2: Recuperación dinámica en Preventivos
         list.forEach(t => {
@@ -1091,7 +1094,12 @@
             return;
           }
 
-          let html = `<div style="font-weight:700; color:var(--text-1); margin-bottom:8px; border-bottom:1px solid var(--border-mid); padding-bottom:4px;">✝️ Procesiones Activas</div>`;
+          let html = `<div style="font-weight:700; color:var(--text-1); margin-bottom:8px; border-bottom:1px solid var(--border-mid); padding-bottom:4px; display:flex; justify-content:space-between; align-items:center;">
+                        <span>✝️ Procesiones Activas</span>
+                        <label style="font-size:10px; font-weight:normal; display:flex; align-items:center; gap:4px; cursor:pointer;" title="Marcar/Desmarcar todas">
+                          <input type="checkbox" class="ss-toggle-all" onchange="window.toggleAllSSKml(${isEme}, this.checked)" checked> Todos
+                        </label>
+                      </div>`;
           html += `<div style="display:flex; flex-direction:column; gap:6px;">`;
           
           list.forEach(t => {
@@ -1129,8 +1137,36 @@
         console.error("Error Semana Santa:", e);
       }
     };
+    // V.15.3.4: Toggle global de marcar/desmarcar todos
+    window.toggleAllSSKml = (isEme, show) => {
+      const list = window._semanaSantaActiveList || [];
+      const containerId = isEme ? 'map-ss-legend' : 'map-prev-ss-legend';
+      const container = document.getElementById(containerId);
+      
+      list.forEach(t => {
+        if (t.rutaMapa) {
+          window.toggleSSKml(t.id, isEme, show, true);
+        }
+      });
+      
+      // Sincronizar checkboxes visuales iterativos
+      if (container) {
+        const boxes = container.querySelectorAll('input[type="checkbox"]:not(.ss-toggle-all)');
+        boxes.forEach(b => b.checked = show);
+      }
+    };
+
     // V.15.3.1: Toggle individual de capa KML y escudo/marcador
-    window.toggleSSKml = (cofradiaId, isEme, show) => {
+    window.toggleSSKml = (cofradiaId, isEme, show, isBulk = false) => {
+      if (!show && !isBulk) {
+        const containerId = isEme ? 'map-ss-legend' : 'map-prev-ss-legend';
+        const container = document.getElementById(containerId);
+        if (container) {
+          const checkAll = container.querySelector('.ss-toggle-all');
+          if (checkAll) checkAll.checked = false;
+        }
+      }
+
       const obj = semanaSantaKmlLayers[cofradiaId];
       const mapObj = isEme ? mapEmergencias : mapPreventivos;
       
@@ -15224,6 +15260,9 @@ ${dataContext}
         </div>
       </div>
     </div>
+    <div style="position: absolute; bottom: 12px; left: 12px; font-size: 10px; color: var(--text-4); font-family: monospace; font-weight: 600; opacity: 0.8; z-index: 10;">
+      EmerCRE V.15.3.4
+    </div>
   </div>
 
   <!-- APP -->
@@ -15463,7 +15502,7 @@ ${dataContext}
 
         <!-- Version Watermark -->
         <div class="version-lbl" style="padding: 12px; font-size: 10px; color: var(--text-4); font-family: monospace; font-weight: 600; text-align: center; border-top: 1px solid var(--border-mid); flex-shrink: 0; user-select: none;">
-          EmerCRE V.15.3.3
+          EmerCRE V.15.3.4
         </div>
       </div>
 
@@ -15897,7 +15936,7 @@ ${dataContext}
 
         <!-- Version Watermark -->
         <div class="version-lbl" style="padding: 12px; font-size: 10px; color: var(--text-4); font-family: monospace; font-weight: 600; text-align: center; border-top: 1px solid var(--border-mid); flex-shrink: 0; user-select: none;">
-          EmerCRE V.15.3.3
+          EmerCRE V.15.3.4
         </div>
       </div>
 
