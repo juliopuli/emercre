@@ -15120,7 +15120,7 @@ ${dataContext}
 <body>
 
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-4); font-family: monospace; pointer-events: none; font-weight: 600; opacity: 0.8;">
-    EmerCRE V.15.2.1
+    EmerCRE V.15.2.2
   </div>
 
   <!-- LOGIN -->
@@ -15534,16 +15534,16 @@ ${dataContext}
               <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px;">
                 <label style="font-size: 9px; font-weight: 700; color: #7b1fa2; text-transform: uppercase; margin-left: 4px;">Día de Semana Santa</label>
                 <select id="sel-semanasanta-day" style="padding: 6px; border-radius: 6px; border: 1px solid #7b1fa233; font-size: 11px; background: #fff;" onchange="window.updateSemanaSantaDay(this.value)">
-                  <option value="0">Viernes de Dolores (27/03)</option>
-                  <option value="1">Sábado de Pasión (28/03)</option>
-                  <option value="2" selected>Domingo de Ramos (29/03)</option>
-                  <option value="3">Lunes Santo (30/03)</option>
-                  <option value="4">Martes Santo (31/03)</option>
-                  <option value="5">Miércoles Santo (01/04)</option>
-                  <option value="6">Jueves Santo (02/04)</option>
-                  <option value="7">Viernes Santo (03/04)</option>
-                  <option value="8">Sábado Santo (04/04)</option>
-                  <option value="9">Domingo de Resurrección (05/04)</option>
+                  <option value="1">Viernes de Dolores (27/03)</option>
+                  <option value="2">Sábado de Pasión (28/03)</option>
+                  <option value="3" selected>Domingo de Ramos (29/03)</option>
+                  <option value="4">Lunes Santo (30/03)</option>
+                  <option value="5">Martes Santo (31/03)</option>
+                  <option value="6">Miércoles Santo (01/04)</option>
+                  <option value="7">Jueves Santo (02/04)</option>
+                  <option value="8">Viernes Santo (03/04)</option>
+                  <option value="9">Sábado Santo (04/04)</option>
+                  <option value="10">Domingo de Resurrección (05/04)</option>
                 </select>
               </div>
               <div class="drawer-notif-toggle" style="padding: 10px; cursor: pointer; border-radius: 8px; background: rgba(123, 31, 162, 0.05);" onclick="toggleSemanaSantaLayer(this)">
@@ -15984,16 +15984,16 @@ ${dataContext}
               <div style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px;">
                 <label style="font-size: 9px; font-weight: 700; color: #7b1fa2; text-transform: uppercase; margin-left: 4px;">Día de Semana Santa</label>
                 <select id="sel-semanasanta-day-prev" style="padding: 6px; border-radius: 6px; border: 1px solid #7b1fa233; font-size: 11px; background: #fff;" onchange="window.updateSemanaSantaDay(this.value)">
-                  <option value="0">Viernes de Dolores (27/03)</option>
-                  <option value="1">Sábado de Pasión (28/03)</option>
-                  <option value="2" selected>Domingo de Ramos (29/03)</option>
-                  <option value="3">Lunes Santo (30/03)</option>
-                  <option value="4">Martes Santo (31/03)</option>
-                  <option value="5">Miércoles Santo (01/04)</option>
-                  <option value="6">Jueves Santo (02/04)</option>
-                  <option value="7">Viernes Santo (03/04)</option>
-                  <option value="8">Sábado Santo (04/04)</option>
-                  <option value="9">Domingo de Resurrección (05/04)</option>
+                  <option value="1">Viernes de Dolores (27/03)</option>
+                  <option value="2">Sábado de Pasión (28/03)</option>
+                  <option value="3" selected>Domingo de Ramos (29/03)</option>
+                  <option value="4">Lunes Santo (30/03)</option>
+                  <option value="5">Martes Santo (31/03)</option>
+                  <option value="6">Miércoles Santo (01/04)</option>
+                  <option value="7">Jueves Santo (02/04)</option>
+                  <option value="8">Viernes Santo (03/04)</option>
+                  <option value="9">Sábado Santo (04/04)</option>
+                  <option value="10">Domingo de Resurrección (05/04)</option>
                 </select>
               </div>
               <div class="drawer-notif-toggle" style="padding: 10px; cursor: pointer; border-radius: 8px; background: rgba(123, 31, 162, 0.05);" onclick="toggleSemanaSantaLayer(this)">
@@ -17432,26 +17432,27 @@ ${dataContext}
       }
     }, 1000);
 
-    // V.14.2.4: Auto-seleccionar día de Semana Santa según fecha actual (Málaga 2026)
+    // V.15.2.2: Auto-seleccionar día de Semana Santa según fecha actual (Málaga 2026)
+    // NOTA: dayId 1-based para coincidir con la API de ElPenitente (/geolocalizaciones/{dayId})
     setTimeout(() => {
       const now = new Date();
       const month = now.getMonth();
       const day = now.getDate();
       const year = now.getFullYear();
-      let autoDay = 2; // Por defecto Domingo de Ramos
+      let autoDay = 3; // Por defecto Domingo de Ramos (1-based)
       
       if (year === 2026 && month === 2) { // Marzo
-        if (day === 27) autoDay = 0;
-        else if (day === 28) autoDay = 1;
-        else if (day === 29) autoDay = 2;
-        else if (day === 30) autoDay = 3;
-        else if (day === 31) autoDay = 4;
+        if (day === 27) autoDay = 1;
+        else if (day === 28) autoDay = 2;
+        else if (day === 29) autoDay = 3;
+        else if (day === 30) autoDay = 4;
+        else if (day === 31) autoDay = 5;
       } else if (year === 2026 && month === 3) { // Abril
-        if (day === 1) autoDay = 5;
-        else if (day === 2) autoDay = 6;
-        else if (day === 3) autoDay = 7;
-        else if (day === 4) autoDay = 8;
-        else if (day === 5) autoDay = 9;
+        if (day === 1) autoDay = 6;
+        else if (day === 2) autoDay = 7;
+        else if (day === 3) autoDay = 8;
+        else if (day === 4) autoDay = 9;
+        else if (day === 5) autoDay = 10;
       }
       
       const daySelect = document.getElementById('sel-semanasanta-day');
