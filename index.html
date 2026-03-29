@@ -996,6 +996,12 @@
         });
         semanaSantaKmlLayers = {};
 
+        // V.15.3.0: Limpiar y ocultar leyenda
+        const lEme = document.getElementById('map-ss-legend');
+        const lPrev = document.getElementById('map-prev-ss-legend');
+        if (lEme) { lEme.innerHTML = ''; lEme.style.display = 'none'; }
+        if (lPrev) { lPrev.innerHTML = ''; lPrev.style.display = 'none'; }
+
         const statusText = "Desconectado";
         const s1 = document.getElementById('semanasanta-status-count');
         const s2 = document.getElementById('semanasanta-status-count-prev');
@@ -1094,6 +1100,51 @@
           }
         });
 
+        // V.15.3.0: Renderizar Leyenda
+        const renderLegend = (containerId, isEme) => {
+          const container = document.getElementById(containerId);
+          if (!container) return;
+          
+          if (list.length === 0) {
+            container.style.display = 'none';
+            container.innerHTML = '';
+            return;
+          }
+
+          let html = `<div style="font-weight:700; color:var(--text-1); margin-bottom:8px; border-bottom:1px solid var(--border-mid); padding-bottom:4px;">✝️ Procesiones Activas</div>`;
+          html += `<div style="display:flex; flex-direction:column; gap:6px;">`;
+          
+          list.forEach(t => {
+            const hasKml = t.rutaMapa ? true : false;
+            // Solo mostramos checkbox si hay KML para operar
+            if (hasKml) {
+              const obj = semanaSantaKmlLayers[t.id];
+              const mapObj = isEme ? mapEmergencias : mapPreventivos;
+              const isChecked = obj && ((isEme && obj.kmlEme && obj.kmlEme.getMap() === mapObj) || (!isEme && obj.kmlPrev && obj.kmlPrev.getMap() === mapObj));
+              
+              html += `
+                <label style="display:flex; align-items:center; gap:6px; cursor:pointer;" class="ss-legend-item">
+                  <input type="checkbox" onchange="window.toggleSSKml(${t.id}, ${isEme}, this.checked)" ${isChecked ? 'checked' : ''} style="cursor:pointer;">
+                  <span>${t.nombre}</span>
+                </label>
+              `;
+            } else {
+              // Si no tiene KML, solo listamos el nombre en gris
+              html += `
+                <div style="display:flex; align-items:center; gap:6px; color:var(--text-3); padding-left:20px;" class="ss-legend-item">
+                  <span style="font-size:10px; font-style:italic;">${t.nombre} (Sin ruta)</span>
+                </div>
+              `;
+            }
+          });
+          html += `</div>`;
+          container.innerHTML = html;
+          container.style.display = 'block';
+        };
+
+        if (mapReady) renderLegend('map-ss-legend', true);
+        if (mapPreventivos) renderLegend('map-prev-ss-legend', false);
+
         const statusText = list.length > 0 ? `Mostrando ${list.length} hermandades` : "Sin procesiones ahora";
         if (st) st.textContent = statusText;
         if (stPrev) stPrev.textContent = statusText;
@@ -1112,6 +1163,19 @@
       if (s1 && s1.value != val) s1.value = val;
       if (s2 && s2.value != val) s2.value = val;
       if (window.semanaSantaLayerEnabled) window.cargarSemanaSantaData(true);
+    };
+
+    // V.15.3.0: Toggle individual de capa KML
+    window.toggleSSKml = (cofradiaId, isEme, show) => {
+      const obj = semanaSantaKmlLayers[cofradiaId];
+      if (!obj) return;
+      
+      const mapObj = isEme ? mapEmergencias : mapPreventivos;
+      const layer = isEme ? obj.kmlEme : obj.kmlPrev;
+      
+      if (layer) {
+        layer.setMap(show ? mapObj : null);
+      }
     };
 
     // V.14.4.0: Iconografía mejorada y corrección definitiva de Preventivos
@@ -14706,6 +14770,34 @@ ${dataContext}
       border-radius: 2px;
     }
 
+    /* LEYENDA SEMANA SANTA (V.15.3.0) */
+    .ss-legend {
+      position: absolute;
+      bottom: 80px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.95);
+      backdrop-filter: blur(10px);
+      border: 1px solid var(--border-mid);
+      border-left: 4px solid #7b1fa2;
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 11px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+      z-index: 10;
+      color: var(--text-2);
+      max-height: 250px;
+      overflow-y: auto;
+      min-width: 180px;
+    }
+
+    .ss-legend-item {
+      transition: color 0.15s;
+    }
+    
+    .ss-legend-item:hover {
+      color: #7b1fa2;
+    }
+
     /* ═══════ LOGS ADMIN (V.12.4.1) ═══════ */
     .logs-choice-container {
       display: grid;
@@ -15121,7 +15213,7 @@ ${dataContext}
 <body>
 
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-4); font-family: monospace; pointer-events: none; font-weight: 600; opacity: 0.8;">
-    EmerCRE V.15.2.3
+    EmerCRE V.15.3.0
   </div>
 
   <!-- LOGIN -->
@@ -15496,6 +15588,10 @@ ${dataContext}
 
       <button id="btn-mobile-map-toggle" class="btn-mobile-map-toggle" onclick="toggleMobileMap()">Ver Mapa 🗺</button>
       <div class="map-zone">
+      
+        <!-- LEYENDAS (V.15.3.0) -->
+        <div id="map-ss-legend" class="ss-legend" style="display: none;"></div>
+        
         <div class="map-controls-floating">
           <div id="oysta-status-indicator" class="map-btn-float" onclick="cargarVehiculosOysta(true)"
             title="Forzar sincronización Oysta"
@@ -15511,6 +15607,9 @@ ${dataContext}
           <button id="btn-toggle-railway" class="map-btn-float" onclick="toggleRailwayPanel()">🛤️ Ferrocarril</button>
           <button id="btn-toggle-ais" class="map-btn-float" onclick="toggleAISPanel()">⚓ Marítimo</button>
           <button id="btn-toggle-semanasanta" class="map-btn-float" onclick="toggleSemanaSantaPanel()" title="Semana Santa Málaga">✝️ S. Santa</button>
+          
+          <!-- LEYENDAS (V.15.3.0) -->
+          <div id="map-prev-ss-legend" class="ss-legend" style="display: none;"></div>
 
           <!-- V.12.4.1: Buscador de direcciones -->
           <div class="map-search-container">
