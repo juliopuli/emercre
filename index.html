@@ -1021,15 +1021,16 @@
       if (stPrev && force) stPrev.textContent = "Sincronizando...";
 
       try {
-        // V.14.5.5: Obtener día preferiblemente del selector activo
-        const daySelect = document.getElementById('sel-semanasanta-day') || document.getElementById('sel-semanasanta-day-prev');
-        if (daySelect) semanaSantaDay = parseInt(daySelect.value);
+        // V.15.2.3: La API de ElPenitente es un tracker en tiempo real.
+        // Solo dayId=1 devuelve datos (las procesiones activas del día actual).
+        // Los demás dayId siempre devuelven geo:[] vacío.
+        const apiDayId = 1;
         
-        console.log("[SS] Llamando a getSemanaSantaData (Callable) para día:", semanaSantaDay);
+        console.log("[SS] Llamando a getSemanaSantaData (Callable) — API dayId fijo = 1 (jornada activa)");
         
         // V.14.5.5: Revertir a httpsCallable para evitar errores CORS
         const getSS = httpsCallable(functions, 'getSemanaSantaData');
-        const res = await getSS({ dayId: semanaSantaDay });
+        const res = await getSS({ dayId: apiDayId });
         
         let list = [];
         if (res.data && res.data.data && Array.isArray(res.data.data.geo)) {
@@ -15120,7 +15121,7 @@ ${dataContext}
 <body>
 
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-4); font-family: monospace; pointer-events: none; font-weight: 600; opacity: 0.8;">
-    EmerCRE V.15.2.2
+    EmerCRE V.15.2.3
   </div>
 
   <!-- LOGIN -->
