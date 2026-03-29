@@ -15185,10 +15185,6 @@ ${dataContext}
 
 <body>
 
-  <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-4); font-family: monospace; pointer-events: none; font-weight: 600; opacity: 0.8;">
-    EmerCRE V.15.3.2
-  </div>
-
   <!-- LOGIN -->
   <div id="screen-login">
     <div class="login-hero">
@@ -15465,6 +15461,10 @@ ${dataContext}
           </div>
         </div>
 
+        <!-- Version Watermark -->
+        <div class="version-lbl" style="padding: 12px; font-size: 10px; color: var(--text-4); font-family: monospace; font-weight: 600; text-align: center; border-top: 1px solid var(--border-mid); flex-shrink: 0; user-select: none;">
+          EmerCRE V.15.3.3
+        </div>
       </div>
 
       <!-- PANEL DETALLE (Movido aquí a la izquierda) -->
@@ -15581,9 +15581,6 @@ ${dataContext}
           <button id="btn-toggle-ais" class="map-btn-float" onclick="toggleAISPanel()">⚓ Marítimo</button>
           <button id="btn-toggle-semanasanta" class="map-btn-float" onclick="toggleSemanaSantaPanel()" title="Semana Santa Málaga">✝️ S. Santa</button>
           
-          <!-- LEYENDAS (V.15.3.0) -->
-          <div id="map-prev-ss-legend" class="ss-legend" style="display: none;"></div>
-
           <!-- V.12.4.1: Buscador de direcciones -->
           <div class="map-search-container">
             <button id="btn-search-trigger-eme" class="map-btn-float search-trigger"
@@ -15898,7 +15895,10 @@ ${dataContext}
           <div id="prev-dias-container"></div>
         </div>
 
-
+        <!-- Version Watermark -->
+        <div class="version-lbl" style="padding: 12px; font-size: 10px; color: var(--text-4); font-family: monospace; font-weight: 600; text-align: center; border-top: 1px solid var(--border-mid); flex-shrink: 0; user-select: none;">
+          EmerCRE V.15.3.3
+        </div>
       </div>
 
       <!-- V.12.4.1: Nuevo Panel de Detalle Deslizable -->
@@ -15978,6 +15978,9 @@ ${dataContext}
         </div>
 
         <!-- Mapa Principal de Preventivos -->
+        <!-- LEYENDAS (V.15.3.0) -->
+        <div id="map-prev-ss-legend" class="ss-legend" style="display: none;"></div>
+        
         <div class="map-controls-floating">
           <!-- V.12.4.1: Status Oysta para Super Admin (Clickable) -->
           <div id="oysta-status-indicator-prev" class="map-btn-float" onclick="window.cargarVehiculosOysta(true)"
