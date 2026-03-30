@@ -6261,9 +6261,18 @@ ${dataContext}
       });
     }
 
+    window.toggleVehiculoCampos = () => {
+      const tipo = document.getElementById('v-tipo').value;
+      const esRecursoEspecial = ['Puesto Sanitario', 'Patrulla'].includes(tipo);
+      const matField = document.getElementById('v-matricula').closest('.field');
+      const oystaField = document.getElementById('v-oysta-link').closest('.field');
+      if (matField) matField.style.display = esRecursoEspecial ? 'none' : 'block';
+      if (oystaField) oystaField.style.display = esRecursoEspecial ? 'none' : 'block';
+    };
+
     window.abrirModalVehiculo = () => {
       editingVehiculoId = null;
-      document.getElementById('modal-vehiculo-title').textContent = 'Nuevo vehículo';
+      document.getElementById('modal-vehiculo-title').textContent = 'Nuevo Vehículo/Recurso';
       ['v-indicativo', 'v-matricula', 'v-alias'].forEach(id => {
         const el = document.getElementById(id);
         if (el) el.value = '';
@@ -6297,6 +6306,7 @@ ${dataContext}
       }
 
       document.getElementById('overlay-vehiculo').classList.add('open');
+      toggleVehiculoCampos();
       setTimeout(() => document.getElementById('v-indicativo').focus(), 100);
     };
 
@@ -6305,7 +6315,7 @@ ${dataContext}
       if (!snap.exists()) return;
       const v = snap.data();
       editingVehiculoId = id;
-      document.getElementById('modal-vehiculo-title').textContent = 'Editar vehículo';
+      document.getElementById('modal-vehiculo-title').textContent = 'Editar Vehículo/Recurso';
       document.getElementById('v-indicativo').value = v.indicativo || '';
       document.getElementById('v-alias').value = v.alias || '';
       document.getElementById('v-matricula').value = v.matricula || '';
@@ -6340,6 +6350,7 @@ ${dataContext}
       }
 
       document.getElementById('overlay-vehiculo').classList.add('open');
+      toggleVehiculoCampos();
       setTimeout(() => document.getElementById('v-indicativo').focus(), 100);
     };
 
@@ -6353,7 +6364,9 @@ ${dataContext}
       let matricula = document.getElementById('v-matricula').value.trim();
       let alias = document.getElementById('v-alias').value.trim();
       const tipo = document.getElementById('v-tipo').value;
-      if (!indicativo || !matricula) { alert('Indicativo y matrícula son obligatorios.'); return; }
+      const esRecursoEspecial = ['Puesto Sanitario', 'Patrulla'].includes(tipo);
+
+      if (!indicativo || (!matricula && !esRecursoEspecial)) { alert('Indicativo y matrícula (si aplica) son obligatorios.'); return; }
 
       // Validaciones de formato (los super_admin pueden saltarse esta regla)
       if (currentUserDoc.role !== 'super_admin') {
@@ -6364,7 +6377,7 @@ ${dataContext}
           alert('Formato de Indicativo incorrecto.\nDebe ser: A-NN.NN o AA-NN.NN\n(Donde A es letra y N es número).\n\nEjemplo válido: A-10.22 o AB-10.22');
           return;
         }
-        if (!matriculaRegex.test(matricula)) {
+        if (!esRecursoEspecial && !matriculaRegex.test(matricula)) {
           alert('Formato de Matrícula incorrecto.\nDebe ser: 4 números seguidos de 3 letras (sin espacios).\n\nEjemplo válido: 1234ABC');
           return;
         }
@@ -6372,7 +6385,7 @@ ${dataContext}
 
       // Estandarizar a mayúsculas
       indicativo = indicativo.toUpperCase();
-      matricula = matricula.toUpperCase();
+      if (matricula) matricula = matricula.toUpperCase();
 
       const btn = document.getElementById('btn-guardar-vehiculo');
       btn.disabled = true; btn.textContent = 'Guardando…';
@@ -15540,9 +15553,10 @@ ${dataContext}
               <select class="f-input f-select" id="r-cat" style="flex:1; padding:4px; font-size:11px;"
                 onchange="cargarOpcionesRecursos()">
                 <option value="">Categoría...</option>
-                <option value="vehiculos">Vehículos</option>
-                <option value="erbes">ERBEs</option>
+                <option value="vehiculos">Vehículos/Recursos</option>
+                <option value="erbes">ERBEs (Equipos de Búsqueda)</option>
                 <option value="eries">ERIEs</option>
+                <option value="hospitales">Hospitales/Centros</option>
               </select>
               <select class="f-input f-select" id="r-item" style="flex:2; padding:4px; font-size:11px;">
                 <option value="">Recurso...</option>
@@ -15603,7 +15617,9 @@ ${dataContext}
             🛰️ Oysta: <span id="oysta-status-text" style="font-weight: 700; margin-left: 4px;">Sincronizando...</span>
           </div>
           <button id="btn-toggle-traffic" class="map-btn-float" onclick="toggleTraffic()">🚦 Tráfico</button>
-          <button id="btn-toggle-vehicles" class="map-btn-float" onclick="toggleVehiclesPanel()">🚐 Vehículos</button>
+          <button id="btn-toggle-users" class="map-btn-float" onclick="toggleUsersPanel()">🔵 Usuarios</button>
+          <button id="btn-toggle-vehicles" class="map-btn-float" onclick="toggleVehiclesPanel()">🚐 Vehículos/Recursos</button>
+          <button id="btn-toggle-erbes" class="map-btn-float" onclick="toggleErbesPanel()">⛑️ ERBEs</button>
           <button id="btn-toggle-route" class="map-btn-float" onclick="toggleDirections()">🛣️ Rutas</button>
           <button id="btn-toggle-oysta-moving" class="map-btn-float" onclick="toggleMovingOysta()" style="display:none;"
             title="Ver vehículos Oysta en movimiento">🚗 Movimiento</button>
@@ -15776,13 +15792,9 @@ ${dataContext}
 
           <div id="map-vehicles-panel" class="map-vehicles-panel">
             <div class="panel-header">
-              <span class="panel-title">Listado de Vehículos</span>
-              <div style="display:flex; align-items:center; gap:8px;">
-                <label style="font-size: 10px; display: flex; align-items:center; gap:4px; cursor:pointer;"
-                  title="Marcar/Desmarcar todos">
-                  <input type="checkbox" onchange="toggleAllOystaVehicles(this.checked)"> Todos
-                </label>
-                <button class="btn-panel-close" onclick="toggleVehiclesPanel()">✕</button>
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                <span class="panel-title">Listado de Veh./Recursos</span>
+                <button class="btn-close-dp" onclick="toggleVehiclesPanel()">✕</button>
               </div>
             </div>
             <div id="oysta-vehicle-list"
@@ -16017,7 +16029,7 @@ ${dataContext}
           <button id="btn-prev-toggle-traffic" class="map-btn-float" onclick="togglePreventivosTraffic()">🚦
             Tráfico</button>
           <button id="btn-prev-toggle-vehicles" class="map-btn-float" onclick="togglePreventivosVehiclesPanel()">🚐
-            Vehículos</button>
+            Vehículos/Recursos</button>
           <button id="btn-toggle-oysta-moving-prev" class="map-btn-float" onclick="toggleMovingOysta()"
             style="display:none;" title="Ver vehículos Oysta en movimiento">🚗 Movimiento</button>
           <button id="btn-toggle-semanasanta-prev" class="map-btn-float" onclick="toggleSemanaSantaPanel()" title="Semana Santa Málaga">✝️ S. Santa</button>
@@ -16034,7 +16046,7 @@ ${dataContext}
           <!-- Listado de Vehículos Preventivos -->
           <div id="prev-map-vehicles-panel" class="map-vehicles-panel" style="display:none;">
             <div class="panel-header">
-              <span class="panel-title">Vehículos (Oysta)</span>
+              <span class="panel-title">Veh./Recursos (Oysta)</span>
               <div style="display:flex; align-items:center; gap:8px;">
                 <label
                   style="font-size: 10px; display: flex; align-items:center; gap:4px; cursor:pointer; color: white;"
@@ -16131,7 +16143,7 @@ ${dataContext}
         </div>
         <div class="tablas-pills" id="tablas-subnav">
           <button class="tablas-pill active" id="subnav-vehiculos"
-            onclick="showTablaMaestra('vehiculos')">Vehículos</button>
+            onclick="showTablaMaestra('vehiculos')">Vehículos/Recursos</button>
           <button class="tablas-pill" id="subnav-erbes" onclick="showTablaMaestra('erbes')">ERBEs</button>
           <button class="tablas-pill" id="subnav-eries" onclick="showTablaMaestra('eries')">ERIEs</button>
           <button class="tablas-pill" id="subnav-jefes" onclick="showTablaMaestra('jefes')">Jefes de
@@ -16157,16 +16169,16 @@ ${dataContext}
           <button class="btn-nueva" onclick="restablecerNombresVehiculos()"
             style="background:var(--card-bg); color:var(--text-1); border:1px solid var(--border-color);">Restablecer
             nombres</button>
-          <button class="btn-nueva" onclick="abrirModalVehiculo()">+ Nuevo vehículo</button>
+          <button class="btn-nueva" onclick="abrirModalVehiculo()">+ Nuevo Vehículo/Recurso</button>
         </div>
         <div class="users-table-wrap">
           <table>
             <thead>
               <tr>
-                <th>Vehículo / Indicativo</th>
+                <th>Recurso / Indicativo</th>
                 <th>Alias</th>
                 <th>Matrícula</th>
-                <th>Tipo de vehículo</th>
+                <th>Tipo de recurso</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -16870,7 +16882,7 @@ ${dataContext}
   <div class="overlay" id="overlay-vehiculo">
     <div class="modal" style="width:420px;">
       <div class="modal-head">
-        <div class="modal-title" id="modal-vehiculo-title">Nuevo vehículo</div>
+        <div class="modal-title" id="modal-vehiculo-title">Nuevo Vehículo/Recurso</div>
         <button class="btn-close-dp" onclick="cerrarModalVehiculo()">✕</button>
       </div>
       <div class="modal-body">
@@ -16887,14 +16899,16 @@ ${dataContext}
           <input class="f-input" id="v-matricula" placeholder="Ej: 1234 ABC">
         </div>
         <div class="field">
-          <div class="field-lbl">Tipo de vehículo *</div>
-          <select class="f-input f-select" id="v-tipo" style="width:100%">
+          <div class="field-lbl">Tipo de recurso *</div>
+          <select class="f-input f-select" id="v-tipo" style="width:100%" onchange="toggleVehiculoCampos()">
             <option value="Camión">Camión</option>
             <option value="Vehículo transporte personal">Vehículo transporte personal</option>
             <option value="Vehículo de transporte mixto">Vehículo de transporte mixto</option>
             <option value="Turismo">Turismo</option>
             <option value="Ambulancia">Ambulancia</option>
             <option value="Vehículo Todo terreno">Vehículo Todo terreno</option>
+            <option value="Puesto Sanitario">Puesto Sanitario</option>
+            <option value="Patrulla">Patrulla</option>
           </select>
         </div>
         <div class="field" id="v-prov-row" style="margin-bottom: 12px;">
@@ -17483,7 +17497,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.3.8
+    EmerCRE V.15.4.0
   </div>
 </body>
 
