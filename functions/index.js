@@ -859,8 +859,6 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                         });
                         
                         vs.lastSaleTs = oystaTime;
-                        vs.lastLogTs = oystaTime;
-                        vs.lastLogPos = pos;
                         vs.lastSaleAddr = addrStr;
                         vs.hasDeparted = true;
                         vs.hasArrived = false;
@@ -871,31 +869,6 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                             fecha: admin.firestore.FieldValue.serverTimestamp(),
                             usuario: "Sist. Oysta (BG)", tipo: "Oysta", detalle: msg
                         });
-                    }
-                }
-                else if (isMoving && vs.moving && vs.hasDeparted) {
-                    const timeSinceLastLog = oystaTime - (vs.lastLogTs || vs.lastSaleTs || 0);
-                    const distSinceLastLog = vs.lastLogPos ? calculateHaversineDist(pos, vs.lastLogPos) : (vs.lastSaleAddr ? 999 : 0);
-                    
-                    if (timeSinceLastLog > 10 * 60 * 1000 || distSinceLastLog > 1.0) {
-                        const addrStr = `[${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}] (Ver mapa: https://www.google.com/maps?q=${pos.lat},${pos.lng})`;
-                        const msg = `${indicativo} reporta posición en ruta: ${addrStr}`;
-                        
-                        await iRef.update({
-                            comentarios: admin.firestore.FieldValue.arrayUnion({
-                                texto: msg,
-                                coords: pos,
-                                autor: 'Sist. Oysta (BG)',
-                                autorId: 'system',
-                                timestamp: oystaTime,
-                                fecha: formatCommentFecha(new Date(oystaTime))
-                            }),
-                            actualizadoEn: admin.firestore.FieldValue.serverTimestamp()
-                        });
-                        
-                        vs.lastLogTs = oystaTime;
-                        vs.lastLogPos = pos;
-                        vehicleStateChanged = true;
                     }
                 }
                 else if (!isMoving && vs.moving) {
