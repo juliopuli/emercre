@@ -456,12 +456,12 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
         
         try {
             // -- CUENTA 1 (emercre + emercre-488009) --
-            const bqClient1 = new BigQuery({ credentials: key, projectId: "emercre" });
+            const bqClient1 = new BigQuery({ credentials: key, projectId: "emercre-488009" });
             const [tables1] = await bqClient1.dataset('billing_export').getTables();
             const billingTable1 = tables1.find(t => t.id.includes('gcp_billing_export_v1_'));
             
             if (billingTable1) {
-                const tableId1 = `emercre.billing_export.${billingTable1.id}`;
+                const tableId1 = `emercre-488009.billing_export.${billingTable1.id}`;
                 const query1 = `
                     SELECT project.id as projectId, SUM(cost) as total_cost
                     FROM \`${tableId1}\`
