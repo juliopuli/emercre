@@ -8119,7 +8119,11 @@ ${dataContext}
         lastIntervencionesSnap.docs.forEach(doc => {
           const i = doc.data();
           if (i.abierta !== false && !i.oculta) {
-            (i.recursosAsignados || []).forEach(r => occupiedResources.add(String(r)));
+            (i.recursosAsignados || []).forEach(r => {
+              const v = window.globalVehiculos?.[r] || (typeof localVehiclesById !== 'undefined' ? localVehiclesById[r] : null);
+              if (v?.tipo === 'Puesto Sanitario') return;
+              occupiedResources.add(String(r));
+            });
           }
         });
       }
@@ -9042,7 +9046,11 @@ ${dataContext}
           Object.keys(intervencionesCache).forEach(k => {
             const other = intervencionesCache[k];
             if (k !== editIntervencionId && other.abierta !== false && !other.oculta) {
-              (other.recursosAsignados || []).forEach(r => occupiedResources.add(String(r)));
+              (other.recursosAsignados || []).forEach(r => {
+                const v = window.globalVehiculos?.[r] || (typeof localVehiclesById !== 'undefined' ? localVehiclesById[r] : null);
+                if (v?.tipo === 'Puesto Sanitario') return;
+                occupiedResources.add(String(r));
+              });
             }
           });
           // 2. De las intervenciones globales (por si están en otro preventivo/día)
@@ -9051,7 +9059,11 @@ ${dataContext}
               if (doc.id === editIntervencionId) return;
               const other = doc.data();
               if (other.abierta !== false && !other.oculta) {
-                (other.recursosAsignados || []).forEach(r => occupiedResources.add(String(r)));
+                (other.recursosAsignados || []).forEach(r => {
+                  const v = window.globalVehiculos?.[r] || (typeof localVehiclesById !== 'undefined' ? localVehiclesById[r] : null);
+                  if (v?.tipo === 'Puesto Sanitario') return;
+                  occupiedResources.add(String(r));
+                });
               }
             });
           }
@@ -10135,7 +10147,13 @@ ${dataContext}
           const occupiedResources = new Set();
           Object.keys(intervencionesCache).forEach(k => {
             const other = intervencionesCache[k];
-            if (k !== id && other.abierta !== false && !other.oculta) { (other.recursosAsignados || []).forEach(r => occupiedResources.add(String(r))); }
+            if (k !== id && other.abierta !== false && !other.oculta) { 
+              (other.recursosAsignados || []).forEach(r => {
+                const v = window.globalVehiculos?.[r] || (typeof localVehiclesById !== 'undefined' ? localVehiclesById[r] : null);
+                if (v?.tipo === 'Puesto Sanitario') return;
+                occupiedResources.add(String(r));
+              });
+            }
           });
           const dayResources = subpreventivosCache[currentPreventivoDiaId]?.recursos || [];
           const availableResources = dayResources.filter(r => !occupiedResources.has(String(r)) && !(i.recursosAsignados || []).includes(String(r)));
@@ -17497,7 +17515,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.4.0
+    EmerCRE V.15.4.1
   </div>
 </body>
 
