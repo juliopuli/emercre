@@ -113,7 +113,7 @@ exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB'
 
         socket.on('open', () => {
             const subscription = {
-                APIKey: "3c918bc8196c217b9a40cbc618a39f8cd618b787",
+                APIKey: process.env.AIS_API_KEY,
                 BoundingBoxes: [[[-90, -180], [90, 180]]],
             };
             socket.send(JSON.stringify(subscription));
@@ -682,7 +682,7 @@ let vehiculosCacheTime = {};
 // 5. Monitor Oysta Vehicles (V.15.0.0)
 exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRun(async (context) => {
     const db = admin.firestore();
-    const bridgeUrl = process.env.OYSTA_BRIDGE_URL || "https://script.google.com/macros/s/AKfycbw3-xw3BPvvHIagopXlcvd4fzHgSs_BUlv6-CbiP4ZhtivoIiltxx1QkcS6d7AF45f2/exec";
+    const bridgeUrl = process.env.OYSTA_BRIDGE_URL;
     if (!bridgeUrl) return null;
 
     try {
