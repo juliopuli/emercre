@@ -458,7 +458,7 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
             // -- CUENTA 1 (emercre + emercre-488009) --
             const bqClient1 = new BigQuery({ credentials: key, projectId: "emercre" });
             const [tables1] = await bqClient1.dataset('billing_export').getTables();
-            const billingTable1 = tables1.find(t => t.id.startsWith('gcp_billing_export_v1_'));
+            const billingTable1 = tables1.find(t => t.id.includes('gcp_billing_export_v1_'));
             
             if (billingTable1) {
                 const tableId1 = `emercre.billing_export.${billingTable1.id}`;
