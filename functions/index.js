@@ -16,16 +16,6 @@ exports.getOystaVehicles = functions.https.onCall(async (data, context) => {
     const userSnap = await admin.firestore().collection("users").doc(context.auth.uid).get();
     const userData = userSnap.exists ? userSnap.data() : {};
 
-    // V.11.3.1: Permitir a todos los usuarios autenticados descargar los datos.
-    // La visibilidad selectiva se gestionará en el front-end para permitir ver 
-    // vehículos asignados a intervenciones sin ver necesariamente toda la flota.
-    // if (userData.role !== 'super_admin' && userData.canSeeVehicles !== true) {
-    //     throw new functions.https.HttpsError(
-    //         "permission-denied",
-    //         "No tienes permiso para consultar la posición de los vehículos."
-    //     );
-    // }
-
     const bridgeUrl = process.env.OYSTA_BRIDGE_URL;
     if (!bridgeUrl) {
         throw new functions.https.HttpsError("internal", "Oysta bridge URL no configurada en el servidor.");
@@ -34,13 +24,11 @@ exports.getOystaVehicles = functions.https.onCall(async (data, context) => {
     const userEmail = context.auth.token.email || context.auth.uid;
 
     try {
-        // Pasamos el email del usuario que solicita para trazabilidad si el puente hace login
         const urlWithUser = `${bridgeUrl}${bridgeUrl.includes('?') ? '&' : '?'}u=${encodeURIComponent(userEmail)}`;
         const resp = await fetch(urlWithUser);
         if (!resp.ok) throw new Error("Oysta GAS responded with status " + resp.status);
         const result = await resp.json();
 
-        // Si el puente indica que ha realizado un login real (inserción de credenciales)
         if (result.loginPerformed) {
             await admin.firestore().collection("oysta_logs").add({
                 fecha: admin.firestore.FieldValue.serverTimestamp(),
@@ -112,7 +100,7 @@ exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB'
         const socket = new WebSocket("wss://stream.aisstream.io/v0/stream");
         const ships = {};
         const startTime = Date.now();
-        const duration = 14000; // Aumentado a 14 segundos para maximizar captura sin exceder timeout GCF
+        const duration = 14000;
         let timeout = null;
 
         const finish = () => {
@@ -126,7 +114,7 @@ exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB'
         socket.on('open', () => {
             const subscription = {
                 APIKey: "3c918bc8196c217b9a40cbc618a39f8cd618b787",
-                BoundingBoxes: [[[-90, -180], [90, 180]]], // Cobertura Global (Mundo entero)
+                BoundingBoxes: [[[-90, -180], [90, 180]]],
             };
             socket.send(JSON.stringify(subscription));
             timeout = setTimeout(finish, duration);
@@ -143,20 +131,17 @@ exports.getAISVehicles = functions.runWith({ timeoutSeconds: 30, memory: '256MB'
                 const lng = msg.MetaData.longitude;
                 let sog = 0;
 
-                // Capturar velocidad (SOG) según el tipo de mensaje
                 if (msg.Message && msg.Message.PositionReport) {
                     sog = msg.Message.PositionReport.Sog;
                 } else if (msg.Message && msg.Message.StandardClassBPositionReport) {
                     sog = msg.Message.StandardClassBPositionReport.Sog;
                 }
 
-                // Capturar tipo si viene en el mensaje estático
                 let shipType = 0;
                 if (msg.MessageType === "ShipStaticData" && msg.Message && msg.Message.ShipStaticData) {
                     shipType = msg.Message.ShipStaticData.ShipType;
                 }
 
-                // Check robusto de coordenadas (pueden ser 0)
                 if (typeof lat === 'number' && typeof lng === 'number') {
                     if (!ships[mmsi]) {
                         ships[mmsi] = {
@@ -243,7 +228,6 @@ exports.generateGeminiContent = functions.https.onCall(async (data, context) => 
         throw new functions.https.HttpsError("internal", "API key de Gemini no configurada en el servidor.");
     }
 
-    // Send only the contents — generationConfig caused 400 errors with Gemini v1
     const formattedPayload = {
         contents: payload.contents
     };
@@ -262,7 +246,6 @@ exports.generateGeminiContent = functions.https.onCall(async (data, context) => 
 
         const result = await response.json();
 
-        // V.8.6.0: Log usage
         try {
             const now = new Date();
             const dayId = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
@@ -296,7 +279,6 @@ exports.sendPushNotification = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError("invalid-argument", "No se proporcionaron tokens.");
     }
 
-    // FCM data payload values MUST all be strings
     const stringData = {};
     Object.keys(dataPayload).forEach(k => {
         stringData[k] = String(dataPayload[k]);
@@ -304,24 +286,18 @@ exports.sendPushNotification = functions.https.onCall(async (data, context) => {
 
     const LOGO_URL = "https://juliopuli.github.io/emercre/assets/logo_emercre.png";
 
-    // Build each message individually to use send() instead of sendMulticast()
-    // sendMulticast() ignores platform-specific configs in older admin SDKs
     const results = await Promise.allSettled(
         tokens.map(token =>
             admin.messaging().send({
                 token: token,
-                // Sin campo 'notification' — mensaje solo de datos para evitar doble notificación.
-                // El SW (onBackgroundMessage) es el único que llama showNotification().
                 data: {
                     ...stringData,
                     title: title,
                     body: body
                 },
-                // Android: high priority para entrega inmediata
                 android: {
                     priority: "high"
                 },
-                // WebPush: solo urgencia + link (sin notification para evitar duplicados)
                 webpush: {
                     headers: { Urgency: "high" },
                     fcm_options: {
@@ -330,7 +306,6 @@ exports.sendPushNotification = functions.https.onCall(async (data, context) => {
                             : "https://juliopuli.github.io/emercre/"
                     }
                 },
-                // APNS: para iOS Safari PWA
                 apns: {
                     headers: { "apns-priority": "10" },
                     payload: {
@@ -374,19 +349,16 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     }
 
     const key = require("./usage-key.json");
-    // Triple Proyecto: Account 1 (emercre + emercre-488009) y Account 2 (emercre-mapsec)
     const targetProjectIds = ["emercre", "emercre-488009", "emercre-mapsec"];
 
     const monitoringClient = new monitoring.MetricServiceClient({ credentials: key });
-    const bqClient = new BigQuery({ credentials: key, projectId: "emercre" });
 
     const now = Math.floor(Date.now() / 1000);
     const startOfMonth = Math.floor(new Date(new Date().getFullYear(), new Date().getMonth(), 1).getTime() / 1000);
     const startOfDay = Math.floor(new Date().setHours(0, 0, 0, 0) / 1000);
 
-    // Correctly queries Cloud Monitoring with resource.type = "consumed_api"
     const getMetric = async (serviceLabel, startTime) => {
-        let results = {}; // pid -> total
+        let results = {};
         let errors = [];
 
         for (const pid of targetProjectIds) {
@@ -418,7 +390,6 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
         return { results, errors };
     };
 
-    // Firestore metrics use a different resource type
     const getFirestoreMetric = async (metricType, startTime) => {
         let results = {};
         let errors = [];
@@ -453,13 +424,14 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
         let exactCostAcc1 = null;
         let exactCostAcc2 = null;
         let errorMsg = null;
-        
+
         try {
             // -- CUENTA 1 (emercre + emercre-488009) --
+            // La tabla de BQ vive en emercre-488009 porque ahí apunta el export de facturación
             const bqClient1 = new BigQuery({ credentials: key, projectId: "emercre-488009" });
             const [tables1] = await bqClient1.dataset('billing_export').getTables();
             const billingTable1 = tables1.find(t => t.id.includes('gcp_billing_export_v1_'));
-            
+
             if (billingTable1) {
                 const tableId1 = `emercre-488009.billing_export.${billingTable1.id}`;
                 const query1 = `
@@ -469,8 +441,12 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
                     GROUP BY project.id
                 `;
                 const [rows1] = await bqClient1.query({ query: query1 });
-                exactCostAcc1 = rows1.filter(r => ['emercre', 'emercre-488009'].includes(r.projectId))
-                                     .reduce((acc, row) => acc + (row.total_cost || 0), 0);
+                const bqTotal = rows1
+                    .filter(r => ['emercre', 'emercre-488009'].includes(r.projectId))
+                    .reduce((acc, row) => acc + (row.total_cost || 0), 0);
+                // Solo asignamos si hay datos reales (> 0), si no dejamos null
+                // para que el frontend no muestre $0.00 cuando BQ aún está vacío
+                exactCostAcc1 = bqTotal > 0 ? bqTotal : null;
             } else {
                 errorMsg = "bq_table_not_found (Acc1)";
             }
@@ -478,8 +454,8 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
             // -- CUENTA 2 (emercre-mapsec) --
             const bqClient2 = new BigQuery({ credentials: key, projectId: "emercre-mapsec" });
             const [tables2] = await bqClient2.dataset('billing_export_acc2').getTables();
-            const billingTable2 = tables2.find(t => t.id.startsWith('gcp_billing_export_v1_'));
-            
+            const billingTable2 = tables2.find(t => t.id.includes('gcp_billing_export_v1_'));
+
             if (billingTable2) {
                 const tableId2 = `emercre-mapsec.billing_export_acc2.${billingTable2.id}`;
                 const query2 = `
@@ -494,12 +470,12 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
             } else {
                 errorMsg = errorMsg ? "bq_table_not_found (Ambas)" : "bq_table_not_found (Acc2)";
             }
-            
+
         } catch (e) {
             errorMsg = e.message;
             console.warn("No se pudo obtener el coste exacto de BigQuery:", e.message);
         }
-        
+
         return { acc1: exactCostAcc1, acc2: exactCostAcc2, bqError: errorMsg };
     };
 
@@ -512,7 +488,7 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     ] = await Promise.all([
         getMetric("maps-backend.googleapis.com", startOfMonth),
         getMetric("places-backend.googleapis.com", startOfMonth),
-        getMetric("routes.googleapis.com", startOfMonth),  // V.15.2.0: Migrado de directions-backend a Routes API
+        getMetric("routes.googleapis.com", startOfMonth),
         getMetric("geocoding-backend.googleapis.com", startOfMonth),
         getMetric("generativelanguage.googleapis.com", startOfDay),
         getMetric("generativelanguage.googleapis.com", startOfMonth),
@@ -528,7 +504,7 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
     ];
 
     const getP = (res, pid, defaultVal = 0) => Number(res.results[pid] || defaultVal);
-    const sumAcc1 = (res, field) => getP(res, "emercre") + getP(res, "emercre-488009");
+    const sumAcc1 = (res) => getP(res, "emercre") + getP(res, "emercre-488009");
 
     return {
         acc1: {
@@ -566,20 +542,18 @@ exports.getRealApiUsage = functions.https.onCall(async (data, context) => {
             }
         },
         syncErrors: allErrors,
-        // V.15.2.0: Nuevo modelo de precios por SKU (Marzo 2025)
         freeTiers: {
-            maps_load: 10000,   // Dynamic Maps — Essentials
-            geocode:   10000,   // Geocoding — Essentials
-            places:    10000,   // Places — Essentials
-            route:     10000   // Routes API — Essentials (V.15.2.0: migrado de Directions Legacy)
+            maps_load: 10000,
+            geocode:   10000,
+            places:    10000,
+            route:     10000
         },
-        cpmRates: {             // $/1000 peticiones (tras superar free tier)
+        cpmRates: {
             maps_load: 7.00,
             geocode:   5.00,
             places:    5.00,
             route:     5.00
         },
-        // V.15.2.1: Integración con BigQuery Billing Export
         exactBillingCost: {
             acc1: billingRes.acc1,
             acc2: billingRes.acc2,
@@ -595,7 +569,6 @@ exports.createUser = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError("unauthenticated", "Debe estar autenticado.");
     }
 
-    // Verify caller's role
     const callerSnap = await admin.firestore().collection("users").doc(context.auth.uid).get();
     const callerRole = callerSnap.exists ? callerSnap.data().role : null;
 
@@ -603,12 +576,10 @@ exports.createUser = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError("permission-denied", "Sin permisos para crear usuarios.");
     }
 
-    // Managers can only create 'admin' and 'usuario' roles
     if (callerRole === 'manager' && !['admin', 'usuario'].includes(data.role)) {
         throw new functions.https.HttpsError("permission-denied", "Un manager solo puede crear roles admin y usuario.");
     }
 
-    // Validate required fields
     if (!data.email || !data.password || !data.nombre) {
         throw new functions.https.HttpsError("invalid-argument", "Email, contraseña y nombre son obligatorios.");
     }
@@ -618,14 +589,12 @@ exports.createUser = functions.https.onCall(async (data, context) => {
     }
 
     try {
-        // Create Firebase Auth account
         const userRecord = await admin.auth().createUser({
             email: data.email,
             password: data.password,
             displayName: data.nombre
         });
 
-        // Create Firestore user document
         await admin.firestore().collection("users").doc(userRecord.uid).set({
             nombre: data.nombre,
             email: data.email,
@@ -654,7 +623,6 @@ exports.createUser = functions.https.onCall(async (data, context) => {
 
 // 4. Purge Oysta Logs (V.9.6.4 - Robustecida con más memoria y timeout)
 exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' }).https.onCall(async (data, context) => {
-    // 1. Verify Authentication
     if (!context.auth) {
         throw new functions.https.HttpsError(
             "unauthenticated",
@@ -662,7 +630,6 @@ exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
         );
     }
 
-    // 2. Verify Authorization (Role must be super_admin)
     const userSnap = await admin.firestore().collection("users").doc(context.auth.uid).get();
     const userData = userSnap.exists ? userSnap.data() : {};
 
@@ -681,7 +648,6 @@ exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
         let hasMore = true;
 
         while (hasMore) {
-            // Leemos solo los IDs para ahorrar memoria
             const snapshot = await logsRef.limit(500).get();
 
             if (snapshot.empty) {
@@ -697,7 +663,6 @@ exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
             await batch.commit();
             deletedCount += snapshot.size;
 
-            // Pausa mínima para no saturar Firestore
             await new Promise(resolve => setTimeout(resolve, 100));
         }
 
@@ -715,39 +680,31 @@ let vehiculosCache = {};
 let vehiculosCacheTime = {};
 
 // 5. Monitor Oysta Vehicles (V.15.0.0)
-// Detecta llegadas y salidas en segundo plano cada 2 minutos.
-// Solo procesa intervenciones PREVENTIVAS. No seguimiento de emergencias en BG.
 exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRun(async (context) => {
     const db = admin.firestore();
     const bridgeUrl = process.env.OYSTA_BRIDGE_URL || "https://script.google.com/macros/s/AKfycbw3-xw3BPvvHIagopXlcvd4fzHgSs_BUlv6-CbiP4ZhtivoIiltxx1QkcS6d7AF45f2/exec";
     if (!bridgeUrl) return null;
 
     try {
-        // 1. Lectura inteligente y ultra-ligera: Solo consultamos preventivos activos.
-        // BUG FIX (V.15.0.16): Usar .select() para reducir el tamaño de descarga de cada documento 
-        // al mínimo absoluto (solo campos necesarios).
         const rawIntsSnap = await db.collectionGroup("intervenciones")
             .where("abierta", "==", true)
             .select("recursosAsignados", "coords", "direccion", "comentarios")
             .get();
 
-        // 1.5. Filtrar intervenciones cuyos preventivos padres estén realmente abiertos (V.14.1.3)
         const activeIntDocs = [];
         if (!rawIntsSnap.empty) {
             const prevIds = new Set();
             rawIntsSnap.docs.forEach(doc => {
                 const parts = doc.ref.path.split('/');
-                if (parts.length >= 2) prevIds.add(parts[1]); // preventivos/{id}/...
+                if (parts.length >= 2) prevIds.add(parts[1]);
             });
 
             if (prevIds.size > 0) {
-                // Consultamos el estado de los preventivos padres (solo el campo abierta)
                 const prevSnaps = await Promise.all(Array.from(prevIds).map(pid => 
                     db.collection("preventivos").doc(pid).get()
                 ));
                 const openPrevs = new Set();
                 prevSnaps.forEach(s => {
-                    // Un preventivo se considera abierto si existe y 'abierta' no es explícitamente false
                     if (s.exists && s.data().abierta !== false) openPrevs.add(s.id);
                 });
 
@@ -758,15 +715,11 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
             }
         }
 
-        // BUG FIX (V.15.0.0): Salimos si no hay preventivos activos.
-        // La existencia de emergencias con coches NO debe activar el login en Oysta.
         if (activeIntDocs.length === 0) {
             console.log("[Monitor] Sin intervenciones preventivas activas. Finalizando para ahorro de cuota Firebase.");
             return null;
         }
 
-        // 2. Obtener mapeo de vehículos locales vinculados a Oysta.
-        // BUG FIX (V.15.0.0): Solo recursos de PREVENTIVOS (no de emergencias).
         const assignedIds = new Set();
         activeIntDocs.forEach(doc => {
             (doc.data().recursosAsignados || []).forEach(rid => assignedIds.add(rid));
@@ -781,7 +734,6 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         const missingIds = Array.from(assignedIds).filter(rid => !vehiculosCache[rid] || (Date.now() - vehiculosCacheTime[rid] > 3600000));
         
         if (missingIds.length > 0) {
-            // V.15.0.16: Usamos get() directamente pero como los vehículos no cambian de peso, está bien.
             const vSnaps = await Promise.all(missingIds.map(rid => db.collection("vehiculos").doc(rid).get()));
             vSnaps.forEach(doc => {
                 if (doc.exists) {
@@ -804,12 +756,10 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
             return null;
         }
 
-        // 3. Solo si hay trabajo Y recursos con Oysta, consultamos Oysta para ver posiciones
         const resp = await fetch(`${bridgeUrl}?u=backend-monitor`);
         if (!resp.ok) throw new Error("Oysta GAS error");
         const oystaData = await resp.json();
 
-        // V.13.27.0: Log de login en segundo plano si el puente lo indica
         if (oystaData.loginPerformed) {
             await db.collection("oysta_logs").add({
                 fecha: admin.firestore.FieldValue.serverTimestamp(),
@@ -827,8 +777,6 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         const now = Date.now();
         let diagnosticLogged = false;
 
-        // 4. Obtener todos los estados agregados en batch.
-        // BUG FIX (V.15.0.0): usa activeIntDocs (correcto) en lugar de activeIntsSnap (no definido).
         const intStateRefs = activeIntDocs.map(doc => db.collection("oysta_vehicle_states").doc(`prev_${doc.id}`));
         const allStatesSnaps = intStateRefs.length > 0 ? await db.getAll(...intStateRefs) : [];
         const statesMap = {};
@@ -836,7 +784,6 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
             statesMap[snap.id] = snap.exists ? snap.data() : {};
         });
 
-        // --- PROCESAR PREVENTIVOS ---
         for (const intDoc of activeIntDocs) {
             const iData = intDoc.data();
             const iRef = intDoc.ref;
@@ -854,12 +801,10 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
 
                 const pos = { lat: parseFloat(v.lat), lng: parseFloat(v.lng) };
                 const speed = parseFloat(v.speed);
-                // V.15.0.0: Detección de movimiento
                 let isMoving = speed > 3;
                 if (v.status && v.status.toUpperCase().includes("MOVING")) isMoving = true;
                 if (v.moving === true || v.moving === "true") isMoving = true;
 
-                // Detección de estado Parado explícito
                 let isStoppedExplicit = false;
                 if (v.status) {
                     const st = v.status.toUpperCase();
@@ -868,20 +813,13 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
 
                 const distToDest = iCoords ? calculateHaversineDist(pos, iCoords) : 999;
                 const hasRealDest = (iData.direccion && iData.direccion.trim() !== "" && iData.direccion.toLowerCase() !== "destino");
-                const isGoal = hasRealDest && (distToDest < 0.05); // Radio 50m
+                const isGoal = hasRealDest && (distToDest < 0.05);
 
-                // Lógica de mantenimiento de viaje:
-                // Si ha llegado a la meta (menos de 50m), forzamos parada.
                 if (isGoal) {
                     isMoving = false;
-                } 
-                // Si no se mueve rápido ni está explícitamente parado, 
-                // asumimos Ralentí/Semáforo y mantenemos el estado de ruta anterior
-                else if (!isMoving && !isStoppedExplicit) {
+                } else if (!isMoving && !isStoppedExplicit) {
                     isMoving = vs.moving;
                 }
-
-                // V.15.0.16: ELIMINADO log de diagnóstico basura que insertaba un documento por ciclo.
 
                 const indicativo = localVehiclesByOystaId[oystaId].alias || localVehiclesByOystaId[oystaId].indicativo || v.name;
 
@@ -891,17 +829,12 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 const vs = intStates[rid] || { moving: isMoving, hasDeparted: false, hasArrived: false, lastStopAddr: "" };
                 let vehicleStateChanged = false;
 
-                // Reset de arribo agresivo (V.15.0.0: resetea siempre > 250m para evitar botes)
                 if (vs.hasArrived && distToDest > 0.25) {
                     vs.hasArrived = false;
                     vehicleStateChanged = true;
                 }
 
-                // --- NUEVA LÓGICA V.15.0.0 (Reglas de Casos A, B y C) ---
-                
-                // 1. DETECCIÓN DE SALIDA (Inicia movimiento o reinicia tras parada)
                 if (isMoving && (!vs.moving || !vs.hasDeparted)) {
-                    // Evitar duplicados si el monitor re-procesa el mismo evento exacto
                     const alreadySent = (iData.comentarios || []).some(c => 
                         c.timestamp === oystaTime && c.texto.includes("sale desde")
                     );
@@ -925,7 +858,6 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                             actualizadoEn: admin.firestore.FieldValue.serverTimestamp()
                         });
                         
-                        // Guardamos datos para edición retroactiva posterior (Caso B/C)
                         vs.lastSaleTs = oystaTime;
                         vs.lastSaleAddr = addrStr;
                         vs.hasDeparted = true;
@@ -939,21 +871,16 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                         });
                     }
                 }
-                
-                // 2. DETECCIÓN DE LLEGADA / PARADA (Se detiene tras estar en movimiento)
                 else if (!isMoving && vs.moving) {
                     let msg = "";
                     
                     if (isGoal) {
-                        // CASO A: Llegada al destino final de la intervención (O si < 50m)
                         msg = `${indicativo} llega a lugar del aviso (${iData.direccion || 'sin dirección'})`;
                         vs.hasArrived = true;
                     } else {
-                        // CASO B/C: Parada intermedia (Estado PARADO detectado explícitamente)
                         const addrStr = `[${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}] (Ver mapa: https://www.google.com/maps?q=${pos.lat},${pos.lng})`;
                         msg = `${indicativo} llega a ${addrStr}`;
                         
-                        // Edición retroactiva del mensaje de salida previo si el destino era desconocido
                         if (vs.lastSaleTs && vs.lastSaleAddr) {
                             const currentComms = [...(iData.comentarios || [])];
                             const idx = currentComms.findIndex(c => c.timestamp === vs.lastSaleTs && c.autorId === 'system');
@@ -988,7 +915,6 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                         usuario: "Oysta (BG)", tipo: "Oysta", detalle: msg
                     });
                 }
-                // V.15.0.16: ELIMINADO log de cambio de estado silencioso para ahorrar costes.
                 else if (isMoving !== vs.moving) {
                     vs.moving = isMoving;
                     vehicleStateChanged = true;
@@ -1005,9 +931,6 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
             }
         }
 
-        /* V.15.0.16: ELIMINADO log de latido "Monitor activo: Supervisando X recursos..." 
-           que generaba 720 documentos inútiles al día en Firestore. */
-        
         return null;
 
     } catch (err) {
@@ -1018,14 +941,14 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
 
 async function checkExistingAction(db, opId, indicativo, partialText) {
     const snap = await db.collection("operaciones").doc(opId).collection("acciones")
-        .where("texto", ">=", `⚡️ ${indicativo}`) // Intento de optimización
+        .where("texto", ">=", `⚡️ ${indicativo}`)
         .get();
     return snap.docs.some(d => d.data().texto?.includes(indicativo) && d.data().texto?.includes(partialText));
 }
 
 function calculateHaversineDist(pos1, pos2) {
     if (!pos1 || !pos2) return 999;
-    const R = 6371; // km
+    const R = 6371;
     const dLat = (pos2.lat - pos1.lat) * Math.PI / 180;
     const dLon = (pos2.lng - pos1.lng) * Math.PI / 180;
     const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
@@ -1043,8 +966,3 @@ function formatCommentFecha(d) {
     const min = String(d.getMinutes()).padStart(2, '0');
     return `${day}/${month}/${year} ${hour}:${min}`;
 }
-
-// V.15.0.15: Función getReverseGeocoding eliminada en su totalidad del backend para supresión 
-// completa de consumo de Google Maps. Ahora el backend emite unívocamente coordenadas
-// crudas y el Frontend (UI) recae en la labor del enriquecimiento con "lazy/negative cache".
-
