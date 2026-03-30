@@ -3659,7 +3659,9 @@
           'Vehículo de transporte mixto': 'assets/icons/icon_transp_mixto.png',
           'Ambulancia': 'assets/icons/icon_ambulancia.png',
           'Vehículo Todo terreno': 'assets/icons/icon_todoterreno.png',
-          'Turismo': 'assets/icons/icon_turismo.png'
+          'Turismo': 'assets/icons/icon_turismo.png',
+          'Puesto Sanitario': 'assets/icons/icon_puesto_sanitario.png',
+          'Patrulla': 'assets/icons/icon_patrulla.png'
         };
         const iconPath = iconMap[localVeh.tipo] || 'assets/icons/icon_transp_personal.png';
         content.innerHTML = `
@@ -4457,6 +4459,8 @@
         else if (desc.includes('Vehículo de transporte mixto')) iconUrl = 'assets/icons/icon_transp_mixto.png';
         else if (desc.includes('Turismo')) iconUrl = 'assets/icons/icon_turismo.png';
         else if (desc.includes('Vehículo transporte personal') || desc.includes('Furgoneta')) iconUrl = 'assets/icons/icon_transp_personal.png';
+        else if (desc.includes('Puesto Sanitario')) iconUrl = 'assets/icons/icon_puesto_sanitario.png';
+        else if (desc.includes('Patrulla')) iconUrl = 'assets/icons/icon_patrulla.png';
         else if (desc.includes('🏥 ERBE')) iconUrl = 'assets/icons/erbe.svg';
 
         const row = document.createElement('div');
@@ -7739,6 +7743,8 @@ ${dataContext}
           else if (v.tipo?.includes('Turismo')) iconUrl = 'assets/icons/icon_turismo.png';
           else if (v.tipo?.includes('mixto')) iconUrl = 'assets/icons/icon_transp_mixto.png';
           else if (v.tipo?.includes('transporte')) iconUrl = 'assets/icons/icon_transp_personal.png';
+          else if (v.tipo === 'Puesto Sanitario') iconUrl = 'assets/icons/icon_puesto_sanitario.png';
+          else if (v.tipo === 'Patrulla') iconUrl = 'assets/icons/icon_patrulla.png';
 
           const isChecked = preselected.includes(v.id);
           return `
@@ -8045,6 +8051,8 @@ ${dataContext}
           if (v.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
           else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
           else if (v.tipo?.includes('Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
+          else if (v.tipo === 'Puesto Sanitario') iconUrl = 'assets/icons/icon_puesto_sanitario.png';
+          else if (v.tipo === 'Patrulla') iconUrl = 'assets/icons/icon_patrulla.png';
           const isSelected = editId && (subpreventivosCache[editId].recursos || []).includes(v.id);
           return `<label style="display:flex; align-items:center; gap:8px; padding:4px 0; cursor:pointer;"><input type="checkbox" name="prev-recurso-v" value="${v.id}" ${isSelected ? 'checked' : ''}><img src="${iconUrl}" style="width:16px; height:16px;"><span style="font-size:13px; font-weight:600;">${v.alias || v.indicativo || 'SIN IND'}</span></label>`;
         }).join('');
@@ -8153,6 +8161,8 @@ ${dataContext}
             else if (t.includes('CAMI')) iconUrl = 'assets/icons/icon_camion.png';
             else if (t.includes('TURISMO')) iconUrl = 'assets/icons/icon_turismo.png';
             else if (t.includes('MIXTO')) iconUrl = 'assets/icons/icon_transp_mixto.png';
+            else if (t.includes('PUESTO')) iconUrl = 'assets/icons/icon_puesto_sanitario.png';
+            else if (t.includes('PATRULLA')) iconUrl = 'assets/icons/icon_patrulla.png';
           }
           return `
             <div class="op-resource-card ${statusClass}" title="${item.isOccupied ? 'OPERATIVO / EN INTERVENCIÓN' : 'DISPONIBLE'}">
@@ -9095,6 +9105,8 @@ ${dataContext}
                 else if (v?.tipo?.includes('Terreno')) iconUrl = 'assets/icons/icon_todoterreno.png';
                 else if (v?.tipo?.includes('Turismo')) iconUrl = 'assets/icons/icon_turismo.png';
                 else if (v?.tipo?.includes('mixto')) iconUrl = 'assets/icons/icon_transp_mixto.png';
+                else if (v?.tipo === 'Puesto Sanitario') iconUrl = 'assets/icons/icon_puesto_sanitario.png';
+                else if (v?.tipo === 'Patrulla') iconUrl = 'assets/icons/icon_patrulla.png';
 
                 // V.12.4.1: Obtener ranking si existe
                 const oystaId = v?.oystaId;
@@ -17515,7 +17527,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.4.1
+    EmerCRE V.15.4.2
   </div>
 </body>
 
