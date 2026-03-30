@@ -2915,7 +2915,7 @@
       const hasCache = populateOystaVehicleListFromCache();
       populateOystaVehicleListPrevFromCache(); // V.12.4.1
       // V.12.4.1: Adaptive Oysta Sync (Throttled & Visibility-aware)
-      let oystaInterval = 30000; // V.13.8.2: 30s as requested
+      let oystaInterval = 39000; // V.15.6.0: 39s as requested
       cargarVehiculosOysta(!hasCache);
 
       const restartOystaInterval = (ms) => {
@@ -3301,13 +3301,19 @@
         return;
       }
 
-      if (!anyVisibleGlobal && !force) {
-        console.log("[Oysta] No vehicles visible and force=false, skipping fetch.");
-        // Si no hay ninguno, aseguramos limpiar el indicador y salir
-        const statusText = document.getElementById('oysta-status-text');
-        if (statusText) statusText.textContent = "Sincronización pausada... (selecciona un vehículo)";
-        const statusTextPrev = document.getElementById('oysta-status-text-prev');
-        if (statusTextPrev) statusTextPrev.textContent = "Pausado (selecciona un vehículo)";
+      // V.15.6.0: Unified Synchronization Guard (OR logic)
+      const hasActiveTracking = (window._assignedVehiclesInOpenPreventivos && window._assignedVehiclesInOpenPreventivos.size > 0) || 
+                               (typeof window._assignedVehiclesInEmergencies !== 'undefined' && window._assignedVehiclesInEmergencies.size > 0);
+      const isMovingBtnActive = typeof showMovingOysta !== 'undefined' && showMovingOysta === true;
+
+      const shouldSync = anyVisibleGlobal || hasActiveTracking || isMovingBtnActive || force;
+
+      if (!shouldSync) {
+        console.log("[Oysta] No active tracking needed (no visible, no movement btn, no assigned), skipping fetch.");
+        const st = document.getElementById('oysta-status-text');
+        if (st) st.textContent = "Sincronización pausada (Inactivo)";
+        const stp = document.getElementById('oysta-status-text-prev');
+        if (stp) stp.textContent = "Pausado (Inactivo)";
         return;
       }
 
@@ -3316,19 +3322,6 @@
       const _isInPreventivos = document.getElementById('section-preventivos')?.style.display === 'flex';
       if (!currentUserDoc?.canSeeVehicles && !_isInPreventivos) {
         console.log('[Oysta] Sin permiso canSeeVehicles y fuera de Preventivos, abortando.');
-        return;
-      }
-      // V.14.1.2: Guard de eficiencia - Solo cargar si hay actividad activa (recursos asignados en preventivos/emergencias)
-      const hasActiveTracking = (window._assignedVehiclesInOpenPreventivos && window._assignedVehiclesInOpenPreventivos.size > 0) || 
-                               (typeof window._assignedVehiclesInEmergencies !== 'undefined' && window._assignedVehiclesInEmergencies.size > 0);
-      
-      if (!hasActiveTracking && !force) {
-        console.log("[Oysta] No active tracking needed (0 assigned resources), skipping fetch.");
-        // Limpiamos indicadores si estaban activos
-        const st = document.getElementById('oysta-status-text');
-        if (st) st.textContent = "Sincronización pausada (Sin actividad)";
-        const stp = document.getElementById('oysta-status-text-prev');
-        if (stp) stp.textContent = "Pausado (Sin actividad)";
         return;
       }
 
@@ -17527,7 +17520,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.5.0
+    EmerCRE V.15.6.0
   </div>
 </body>
 
