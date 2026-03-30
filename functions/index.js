@@ -800,33 +800,22 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 if (!v) continue;
 
                 const pos = { lat: parseFloat(v.lat), lng: parseFloat(v.lng) };
-                const speed = parseFloat(v.speed);
-                let isMoving = speed > 3;
-                if (v.status && v.status.toUpperCase().includes("MOVING")) isMoving = true;
-                if (v.moving === true || v.moving === "true") isMoving = true;
-
-                let isStoppedExplicit = false;
-                if (v.status) {
-                    const st = v.status.toUpperCase();
-                    if (st.includes("STOP") || st.includes("PARAD")) isStoppedExplicit = true;
-                }
+                // V.15.6.3: Absolute rule-based state machine
+                const speed = parseFloat(v.speed) || 0;
+                const st = v.status ? v.status.toUpperCase() : "";
+                const isStoppedExplicit = st.includes("STOP") || st.includes("PARAD");
+                const isMovingExplicit = st.includes("MOVING") || speed > 3;
 
                 const distToDest = iCoords ? calculateHaversineDist(pos, iCoords) : 999;
                 const hasRealDest = (iData.direccion && iData.direccion.trim() !== "" && iData.direccion.toLowerCase() !== "destino");
                 const isGoal = hasRealDest && (distToDest < 0.05);
-
-                if (isGoal) {
-                    isMoving = false;
-                } else if (!isMoving && !isStoppedExplicit) {
-                    isMoving = vs.moving;
-                }
 
                 const indicativo = localVehiclesByOystaId[oystaId].alias || localVehiclesByOystaId[oystaId].indicativo || v.name;
 
                 const oystaTsStr = v.last_pos ? v.last_pos.replace(' ', 'T') : null;
                 const oystaTime = oystaTsStr ? new Date(oystaTsStr).getTime() : now;
 
-                const vs = intStates[rid] || { moving: isMoving, hasDeparted: false, hasArrived: false, lastStopAddr: "" };
+                const vs = intStates[rid] || { moving: false, hasDeparted: false, hasArrived: false, lastStopAddr: "" };
                 let vehicleStateChanged = false;
 
                 if (vs.hasArrived && distToDest > 0.25) {
@@ -834,7 +823,8 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                     vehicleStateChanged = true;
                 }
 
-                if (isMoving && (!vs.moving || !vs.hasDeparted)) {
+                // 1. REGLA DE SALIDA
+                if (isMovingExplicit && (!vs.hasDeparted)) {
                     const alreadySent = (iData.comentarios || []).some(c => 
                         c.timestamp === oystaTime && c.texto.includes("sale desde")
                     );
@@ -871,7 +861,8 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                         });
                     }
                 }
-                else if (!isMoving && vs.moving) {
+                // 2. REGLA DE LLEGADA / PARADA
+                else if ((isStoppedExplicit || isGoal) && vs.hasDeparted) {
                     let msg = "";
                     
                     if (isGoal) {
@@ -908,16 +899,13 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                     });
                     
                     vs.moving = false;
+                    vs.hasDeparted = false; // Reset to allow future departures
                     vehicleStateChanged = true;
 
                     await db.collection("oysta_logs").add({
                         fecha: admin.firestore.FieldValue.serverTimestamp(),
-                        usuario: "Oysta (BG)", tipo: "Oysta", detalle: msg
+                        usuario: "Sist. Oysta (BG)", tipo: "Oysta", detalle: msg
                     });
-                }
-                else if (isMoving !== vs.moving) {
-                    vs.moving = isMoving;
-                    vehicleStateChanged = true;
                 }
 
                 if (vehicleStateChanged) {
