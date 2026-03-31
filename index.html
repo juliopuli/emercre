@@ -1987,12 +1987,12 @@
       });
     }
 
-    // V.15.8.4: Detecta el primer punto de la ruta decodificada que está dentro de
+    // V.15.8.5: Detecta el primer punto de la ruta decodificada que está dentro de
     // BLOCK_R metros de cualquier tracker activo. Devuelve info sobre el bloqueo o null.
-    const _BLOCK_R = 35; // metros — radio de "calle cortada"
+    const _BLOCK_R = 45; // metros — radio de "calle cortada" ampliado para cubrir ancho de calle
     function _findRouteBlockage(decodedPath) {
       const list = window._semanaSantaActiveList || [];
-      let best = null; // { pathIdx, trackerLat, trackerLng, routeBearing }
+      let best = null; // { pathIdx, trackerLat, trackerLng, routeBearing, cofradia: string }
 
       for (const t of list) {
         if (!t.trackers) continue;
@@ -2015,7 +2015,8 @@
                 const nLng = typeof nxt.lng === 'function' ? nxt.lng() : nxt.lng;
                 best = {
                   pathIdx: i, trackerLat: tLat, trackerLng: tLng,
-                  routeBearing: _bearingRad(pLat, pLng, nLat, nLng)
+                  routeBearing: _bearingRad(pLat, pLng, nLat, nLng),
+                  cofradia: t.nombre || t.id
                 };
               }
               break;
@@ -2180,10 +2181,9 @@
                   const tryRoutes = await _fetchRoutes(tryBody);
                   if (tryRoutes && tryRoutes.length > 0) {
                     const tryPath = google.maps.geometry.encoding.decodePath(tryRoutes[0].polyline.encodedPolyline);
-                    // Verificamos si este intento está AL MENOS libre del bloqueo actual (o está totalmente limpio)
-                    // Si el iterador principal detecta otro trono más adelante, el loop de wpCount seguirá
+                    // Verificamos si este intento está libre de ESTA cofradía específica (aunque pueda cruzar otra distinta)
                     const newBlockage = _findRouteBlockage(tryPath);
-                    if (!newBlockage || newBlockage.trackerLat !== blockage.trackerLat) {
+                    if (!newBlockage || newBlockage.cofradia !== blockage.cofradia) {
                        // Nos quitamos este trono de en medio
                        currentRoute = tryRoutes[0];
                        currentBody = tryBody;
@@ -17912,7 +17912,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.8.0
+    EmerCRE V.15.8.5
   </div>
 </body>
 
