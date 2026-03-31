@@ -2220,30 +2220,28 @@
                 break; // limpia!
               }
 
-              // Estrategia V.15.8.8: "Extrarradio / Nodos de Escape Orbitales"
-              // En lugar de pequeños desplazamientos perpendiculares que mantienen la ruta en calles similares,
-              // forzamos el paso por grandes nodos perimetrales (1.5km - 2.5km) para obligar a usar vías principales.
-              const probLat = blockage.trackerLat;
-              const probLng = blockage.trackerLng;
-              
-              // Ángulos cardinales
-              const angles = [0, Math.PI / 2, Math.PI, -Math.PI / 2]; // N, E, S, W
-              const distances = [1500, 2500]; // 1.5km y 2.5km (radio de la ciudad)
+              // Estrategia V.15.8.9: "Extrarradio / Nodos Perimetrales Málaga"
+              // Usamos coordenadas reales de las grandes avenidas de Málaga para evitar que la API 
+              // intente atajos marítimos (ej. ferry a Ceuta) al usar distancias fijas hacia el Sur.
+              const MALAGA_RING_NODES = [
+                { lat: 36.715694, lng: -4.417933 }, // Sur: Muelle Heredia 
+                { lat: 36.713831, lng: -4.426214 }, // Suroeste: Plaza de Toros Vieja / Rio
+                { lat: 36.717143, lng: -4.432240 }, // Oeste: Av. Andalucía (Corte Inglés)
+                { lat: 36.721666, lng: -4.427774 }, // Noroeste: Armengual de la Mota
+                { lat: 36.725178, lng: -4.423719 }, // Norte-Oeste 2: Gálvez Ginachero
+                { lat: 36.732926, lng: -4.422501 }, // Norte: Capuchinos / Eduardo Domínguez Ávila
+                { lat: 36.731451, lng: -4.412174 }, // Este: Cristo Epidemia / Victoria
+                { lat: 36.721415, lng: -4.410141 }, // Sureste: Paseo Reding / Túnel Alcazaba
+              ];
 
-              let candidates = [];
-              for (const dist of distances) {
-                 for (const ang of angles) {
-                    candidates.push(_offsetLatLng(probLat, probLng, dist, ang));
-                 }
-              }
+              let candidates = [...MALAGA_RING_NODES];
 
-              // Ordenar nodos evaluando cuál nos acerca mejor al destino mientras rodeamos el problema
-              // Heurística rápida: el nodo debe estar conceptualmente acercándonos al destino sin retroceder demasiado
-              const midLat = (origin.lat + dest.lat) / 2;
-              const midLng = (origin.lng + dest.lng) / 2;
+              // Ordenar nodos evaluando cuál nos acerca mejor al destino
+              // Si Ollerías es el destino (norte), probará primero vías bloqueadas del Norte.
+              // Si el destino es sur, probará Muelle Heredia primero.
               candidates.sort((a, b) => {
-                 const dA = _distMetros(midLat, midLng, a.lat, a.lng);
-                 const dB = _distMetros(midLat, midLng, b.lat, b.lng);
+                 const dA = _distMetros(dest.lat, dest.lng, a.lat, a.lng);
+                 const dB = _distMetros(dest.lat, dest.lng, b.lat, b.lng);
                  return dA - dB;
               });
 
@@ -17988,7 +17986,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.8.8
+    EmerCRE V.15.8.9
   </div>
 </body>
 
