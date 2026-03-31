@@ -2026,8 +2026,8 @@
       return best;
     }
 
-    // Helper interno: llama a Routes API y devuelve route o null
-    async function _fetchRoute(bodyObj) {
+    // Helper interno: llama a Routes API y devuelve TODAS las rutas o null
+    async function _fetchRoutes(bodyObj) {
       const res = await fetch(
         `https://routes.googleapis.com/directions/v2:computeRoutes?key=${activeMapsApiKey}`,
         {
@@ -2041,8 +2041,8 @@
       );
       window.incrementApiUsage('maps_route');
       const data = await res.json();
-      if (data.routes && data.routes.length > 0) return data.routes[0];
-      console.warn('[V.15.8.4] Routes API vacío:', data?.error?.message || JSON.stringify(data).substring(0, 150));
+      if (data.routes && data.routes.length > 0) return data.routes;
+      console.warn('[V.15.8.5] Routes API vacío:', data?.error?.message || JSON.stringify(data).substring(0, 150));
       return null;
     }
 
@@ -2064,7 +2064,7 @@
       mapPreventivos.fitBounds(bounds, 60);
     }
 
-    // V.15.8.4: Función principal — ruta con calles de tronos tratadas como cortadas
+    // V.15.8.5: Función principal — ruta con calles de tronos tratadas como cortadas, probando alternativas
     window.calcularRutaParaRecurso = async (vehicleId, intervencionId) => {
       const btn = document.getElementById(`btn-calc-ruta-${vehicleId}`);
       const resultEl = document.getElementById(`route-result-${vehicleId}`);
@@ -2109,58 +2109,104 @@
       };
 
       try {
-        // 4. Calcular ruta base (sin restricciones)
-        let route = await _fetchRoute(baseBody);
+        let route = null;
         let usedAvoidance = false;
 
-        // 5. Si hay tronos, iterar detectando bloqueos en el trayecto real
-        if (hasTronos && route && google.maps.geometry) {
-          let currentBody = { ...baseBody };
-          const viaWps = []; // acumulados entre iteraciones
+        // Si tenemos tronos, pedir alternativas nativas primero
+        const firstTryBody = hasTronos ? { ...baseBody, computeAlternativeRoutes: true } : baseBody;
+        const initialRoutes = await _fetchRoutes(firstTryBody);
 
-          for (let attempt = 0; attempt < 4; attempt++) {
-            const path = google.maps.geometry.encoding.decodePath(route.polyline.encodedPolyline);
-            const blockage = _findRouteBlockage(path);
-            if (!blockage) break; // Ruta limpia, terminar
+        if (!initialRoutes) {
+          if (btn) { btn.disabled = false; btn.textContent = '🗺️ Ruta'; }
+          mostrarToast('❌ No se pudo calcular la ruta');
+          return;
+        }
 
-            // Perpendicular al sentido de la ruta en el punto bloqueado
-            const perpBear = blockage.routeBearing + Math.PI / 2;
-            const ptL = _offsetLatLng(blockage.trackerLat, blockage.trackerLng, 90, perpBear);
-            const ptR = _offsetLatLng(blockage.trackerLat, blockage.trackerLng, 90, perpBear + Math.PI);
+        route = initialRoutes[0]; // fallback default
 
-            // Elegir el lado que NO lleva al interior del corredor
-            // (el más cercano al midpoint origen→destino)
-            const midLat = (origin.lat + dest.lat) / 2;
-            const midLng = (origin.lng + dest.lng) / 2;
-            const bypassPt = _distMetros(midLat, midLng, ptL.lat, ptL.lng) <= _distMetros(midLat, midLng, ptR.lat, ptR.lng)
-              ? ptL : ptR;
+        // 4. Intentar encontrar una ruta alternativa nativa que esté libre de bloqueos
+        if (hasTronos && google.maps.geometry) {
+          let cleanRouteFound = false;
+          for (const r of initialRoutes) {
+            const path = google.maps.geometry.encoding.decodePath(r.polyline.encodedPolyline);
+            if (!_findRouteBlockage(path)) {
+              route = r;
+              cleanRouteFound = true;
+              usedAvoidance = true; // hemos cogido una alternativa explícitamente sana
+              console.log('[V.15.8.5] Alternativa nativa limpia seleccionada.');
+              break;
+            }
+          }
 
-            console.log(`[V.15.8.4] Intento ${attempt+1}: bypass en (${bypassPt.lat.toFixed(5)}, ${bypassPt.lng.toFixed(5)})`);
+          // 5. Si todas las alternativas nativas pasan por tronos, forzamos rodeos manuales progresivos
+          if (!cleanRouteFound) {
+            console.log('[V.15.8.5] Alternativas nativas bloqueadas. Iniciando rodeos manuales.');
+            let currentBody = { ...baseBody };
+            const viaWps = [];
+            
+            // Re-evaluar la mejor ruta base (la más rápida)
+            let currentRoute = initialRoutes[0];
 
-            viaWps.push({ via: true, location: { latLng: { latitude: bypassPt.lat, longitude: bypassPt.lng } } });
-
-            const tryBody = { ...baseBody, intermediates: [...viaWps] };
-            const tryRoute = await _fetchRoute(tryBody);
-
-            if (tryRoute) {
-              route = tryRoute;
-              currentBody = tryBody;
-              usedAvoidance = true;
-            } else {
-              // Intentar lado contrario
-              const bypassAlt = bypassPt === ptL ? ptR : ptL;
-              viaWps[viaWps.length - 1] = { via: true, location: { latLng: { latitude: bypassAlt.lat, longitude: bypassAlt.lng } } };
-              const tryBody2 = { ...baseBody, intermediates: [...viaWps] };
-              const tryRoute2 = await _fetchRoute(tryBody2);
-              if (tryRoute2) {
-                route = tryRoute2;
-                currentBody = tryBody2;
+            // Máximo 4 waypoints para no volvernos locos
+            for (let wpCount = 0; wpCount < 4; wpCount++) {
+              const path = google.maps.geometry.encoding.decodePath(currentRoute.polyline.encodedPolyline);
+              const blockage = _findRouteBlockage(path);
+              if (!blockage) {
+                route = currentRoute;
                 usedAvoidance = true;
-              } else {
-                viaWps.pop(); // descartar este waypoint y salir
-                break;
+                break; // limpia!
+              }
+
+              // Intentar "empujar" la ruta fuera del trono con radios crecientes (el usuario pidió "bordear cada vez más")
+              const offsets = [80, 200, 400];
+              const perpBear = blockage.routeBearing + Math.PI / 2;
+              let wpResolved = false;
+
+              for (const dist of offsets) {
+                const ptL = _offsetLatLng(blockage.trackerLat, blockage.trackerLng, dist, perpBear);
+                const ptR = _offsetLatLng(blockage.trackerLat, blockage.trackerLng, dist, perpBear + Math.PI);
+
+                // Empezar por el lado que nos acerca al destino (heurística)
+                const midLat = (origin.lat + dest.lat) / 2;
+                const midLng = (origin.lng + dest.lng) / 2;
+                const bestFirst = _distMetros(midLat, midLng, ptL.lat, ptL.lng) <= _distMetros(midLat, midLng, ptR.lat, ptR.lng);
+                const candidates = bestFirst ? [ptL, ptR] : [ptR, ptL];
+
+                for (const bypassPt of candidates) {
+                  console.log(`[V.15.8.5] Iteración wp=${wpCount}, offset=${dist}m bypass=(${bypassPt.lat.toFixed(5)}, ${bypassPt.lng.toFixed(5)})`);
+                  const tryWps = [...viaWps, { via: true, location: { latLng: { latitude: bypassPt.lat, longitude: bypassPt.lng } } }];
+                  const tryBody = { ...baseBody, intermediates: tryWps };
+                  
+                  const tryRoutes = await _fetchRoutes(tryBody);
+                  if (tryRoutes && tryRoutes.length > 0) {
+                    const tryPath = google.maps.geometry.encoding.decodePath(tryRoutes[0].polyline.encodedPolyline);
+                    // Verificamos si este intento está AL MENOS libre del bloqueo actual (o está totalmente limpio)
+                    // Si el iterador principal detecta otro trono más adelante, el loop de wpCount seguirá
+                    const newBlockage = _findRouteBlockage(tryPath);
+                    if (!newBlockage || newBlockage.trackerLat !== blockage.trackerLat) {
+                       // Nos quitamos este trono de en medio
+                       currentRoute = tryRoutes[0];
+                       currentBody = tryBody;
+                       viaWps.push(tryWps[tryWps.length - 1]);
+                       wpResolved = true;
+                       break;
+                    }
+                  }
+                }
+                if (wpResolved) break; // ya lo resolvimos para este wpCount, pasar al wpCount+1 si quedan bloqueos
+              }
+
+              if (!wpResolved) {
+                console.warn('[V.15.8.5] No se pudo encontrar un rodeo viable para este bloqueo en radios de 80/200/400m.');
+                break; // si no pudimos, abandonamos y nos quedamos con currentRoute
               }
             }
+            
+            // Si salimos del loop, guardamos la mejor que conseguimos
+            route = currentRoute; 
+            // recalculamos usedAvoidance por si logramos limpiarla toda o nos rendimos
+            const finalPath = google.maps.geometry.encoding.decodePath(route.polyline.encodedPolyline);
+            if (!_findRouteBlockage(finalPath)) usedAvoidance = true;
           }
         }
 
