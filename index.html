@@ -2220,60 +2220,56 @@
                 break; // limpia!
               }
 
-              // Estrategia V.15.8.10: "Extrarradio / Nodos Perimetrales Málaga"
-              // Usamos coordenadas precisas para evitar que los waypoints caigan dentro del recinto
-              // portuario (lo cual obliga a la API a coger un ferry a Melilla/Ceuta para salir del bloqueo).
+              // Estrategia V.15.8.11: Evaluación paralela de todos los nodos del anillo
+              // Lanzamos TODAS las peticiones simultáneamente y elegimos la más rápida (menor duración)
               const MALAGA_RING_NODES = [
-                { lat: 36.718305, lng: -4.413783 }, // Sur: Paseo de los Curas (vía rápida muy segura)
-                { lat: 36.716500, lng: -4.423000 }, // Sur-Oeste: Muelle Heredia oeste (lejos del puerto)
-                { lat: 36.713831, lng: -4.426214 }, // Suroeste: Plaza de Toros Vieja / Rio
-                { lat: 36.717143, lng: -4.432240 }, // Oeste: Av. Andalucía (Corte Inglés)
-                { lat: 36.721477, lng: -4.426021 }, // Noroeste: Armengual de la Mota cruzando Hilera
-                { lat: 36.725916, lng: -4.425109 }, // Norte-Oeste 2: Gálvez Ginachero / Hospital Civil
-                { lat: 36.733075, lng: -4.422363 }, // Norte: Capuchinos / Eduardo Domínguez Ávila
-                { lat: 36.731306, lng: -4.412198 }, // Este: Cristo Epidemia / Victoria
+                { lat: 36.718305, lng: -4.413783 }, // Sur: Paseo de los Curas
+                { lat: 36.716500, lng: -4.423000 }, // Sur-Oeste: Muelle Heredia oeste
+                { lat: 36.713831, lng: -4.426214 }, // Suroeste: Plaza de Toros Vieja
+                { lat: 36.717143, lng: -4.432240 }, // Oeste: Av. Andalucía
+                { lat: 36.721477, lng: -4.426021 }, // Noroeste: Armengual de la Mota
+                { lat: 36.725916, lng: -4.425109 }, // Norte-Oeste: Gálvez Ginachero
+                { lat: 36.733075, lng: -4.422363 }, // Norte: Capuchinos
+                { lat: 36.731306, lng: -4.412198 }, // Este: Cristo Epidemia
                 { lat: 36.722606, lng: -4.414030 }, // Sureste: Túnel Alcazaba
               ];
 
-              let candidates = [...MALAGA_RING_NODES];
+              // Lanzar todas las peticiones en paralelo
+              const parallelResults = await Promise.all(
+                MALAGA_RING_NODES.map(node => {
+                  const tryWps = [...viaWps, { via: true, location: { latLng: { latitude: node.lat, longitude: node.lng } } }];
+                  const tryBody = { ...baseBody, intermediates: tryWps };
+                  return _fetchRoutes(tryBody).then(routes => {
+                    if (!routes || routes.length === 0) return null;
+                    const r = routes[0];
+                    const p = google.maps.geometry.encoding.decodePath(r.polyline.encodedPolyline);
+                    const nb = _findRouteBlockage(p);
+                    // Solo aceptar si resuelve el trono que causó el bloqueo
+                    if (nb && nb.cofradia === blockage.cofradia) return null;
+                    // Parsear duración (formato "123s")
+                    const durSec = r.duration ? parseInt(r.duration.replace('s',''), 10) : Infinity;
+                    return { route: r, node, wps: tryWps, durSec };
+                  }).catch(() => null);
+                })
+              );
 
-              // Ordenar nodos evaluando cuál nos acerca mejor al destino
-              // Si Ollerías es el destino (norte), probará primero vías bloqueadas del Norte.
-              // Si el destino es sur, probará Muelle Heredia primero.
-              candidates.sort((a, b) => {
-                 const dA = _distMetros(dest.lat, dest.lng, a.lat, a.lng);
-                 const dB = _distMetros(dest.lat, dest.lng, b.lat, b.lng);
-                 return dA - dB;
-              });
+              // Filtrar nulos y elegir la ruta más rápida (menor tiempo)
+              const cleanOptions = parallelResults.filter(Boolean);
+              cleanOptions.sort((a, b) => a.durSec - b.durSec);
+              console.log(`[V.15.8.11] ${cleanOptions.length} opciones limpias de ${MALAGA_RING_NODES.length} nodos. Mejor: ${cleanOptions[0]?.durSec}s`);
 
               let wpResolved = false;
-
-              for (let i = 0; i < candidates.length; i++) {
-                const bypassPt = candidates[i];
-                console.log(`[V.15.8.8] Iteración wp=${wpCount}, ext. escape node=${i+1}/${candidates.length} bypass=(${bypassPt.lat.toFixed(5)}, ${bypassPt.lng.toFixed(5)})`);
-                
-                // Ponemos este gran nodo orbital
-                const tryWps = [...viaWps, { via: true, location: { latLng: { latitude: bypassPt.lat, longitude: bypassPt.lng } } }];
-                const tryBody = { ...baseBody, intermediates: tryWps };
-                
-                const tryRoutes = await _fetchRoutes(tryBody);
-                if (tryRoutes && tryRoutes.length > 0) {
-                  const tryPath = google.maps.geometry.encoding.decodePath(tryRoutes[0].polyline.encodedPolyline);
-                  // Verificamos si este intento logró salir de la cofradía que causó el tapón orginal
-                  const newBlockage = _findRouteBlockage(tryPath);
-                  if (!newBlockage || newBlockage.cofradia !== blockage.cofradia) {
-                     currentRoute = tryRoutes[0];
-                     currentBody = tryBody;
-                     viaWps.push(tryWps[tryWps.length - 1]);
-                     wpResolved = true;
-                     break;
-                  }
-                }
+              if (cleanOptions.length > 0) {
+                const best = cleanOptions[0];
+                currentRoute = best.route;
+                currentBody = { ...baseBody, intermediates: best.wps };
+                viaWps.push(best.wps[best.wps.length - 1]);
+                wpResolved = true;
               }
 
               if (!wpResolved) {
-                console.warn('[V.15.8.8] No se pudo evadir el área densa del centro usando nodos orbitales perimetrales.');
-                break; // abandonamos y nos quedamos con la menos mala
+                console.warn('[V.15.8.11] Ningún nodo del anillo logró salvar el bloqueo.');
+                break;
               }
             }
             
@@ -17987,7 +17983,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.8.10
+    EmerCRE V.15.8.11
   </div>
 </body>
 
