@@ -2158,8 +2158,9 @@
                 break; // limpia!
               }
 
-              // Intentar "empujar" la ruta fuera del trono con radios crecientes (el usuario pidió "bordear cada vez más")
-              const offsets = [80, 200, 400];
+              // Intentar "empujar" la ruta fuera del trono con radios crecientes
+              // (El usuario reporta que en zonas densas 400m no es suficiente para salir de avenidas largas)
+              const offsets = [150, 400, 800, 1500];
               const perpBear = blockage.routeBearing + Math.PI / 2;
               let wpResolved = false;
 
@@ -2181,7 +2182,7 @@
                   const tryRoutes = await _fetchRoutes(tryBody);
                   if (tryRoutes && tryRoutes.length > 0) {
                     const tryPath = google.maps.geometry.encoding.decodePath(tryRoutes[0].polyline.encodedPolyline);
-                    // Verificamos si este intento está libre de ESTA cofradía específica (aunque pueda cruzar otra distinta)
+                    // Verificamos si este intento está libre de ESTA cofradía específica
                     const newBlockage = _findRouteBlockage(tryPath);
                     if (!newBlockage || newBlockage.cofradia !== blockage.cofradia) {
                        // Nos quitamos este trono de en medio
@@ -2193,12 +2194,13 @@
                     }
                   }
                 }
-                if (wpResolved) break; // ya lo resolvimos para este wpCount, pasar al wpCount+1 si quedan bloqueos
+                if (wpResolved) break;
               }
 
               if (!wpResolved) {
-                console.warn('[V.15.8.5] No se pudo encontrar un rodeo viable para este bloqueo en radios de 80/200/400m.');
-                break; // si no pudimos, abandonamos y nos quedamos con currentRoute
+                console.warn('[V.15.8.5] No se pudo encontrar un rodeo viable para este bloqueo en radios de hasta 1500m.');
+                // Forzaremos romper el bloque entero
+                break;
               }
             }
             
@@ -17912,7 +17914,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.8.5
+    EmerCRE V.15.8.6
   </div>
 </body>
 
