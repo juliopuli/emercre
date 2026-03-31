@@ -184,6 +184,9 @@
     let directionsRenderer = null;
     let routePolyline = null; // V.15.2.0: Polyline manual para Routes API
     let activeMapsApiKey = null; // V.15.2.0: Clave para Routes API REST
+    let prevRoutePolyline = null;   // V.15.8.0: Polyline de ruta en mapa Preventivos
+    let evitarTronosEnabled = true; // V.15.8.0: Switch global "evitar tronos" (activo por defecto)
+    let activeIntRouteId = null;    // V.15.8.0: ID de la intervención con ruta activa
     let aisMarkers = {};
     let aisLayerEnabled = false;
     let aisRefreshInterval = null;
@@ -1838,7 +1841,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.7.0 Loaded');
+    console.log('EmerCRE V.15.8.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1936,6 +1939,235 @@
       const info = document.getElementById('route-info');
       if (info) { info.innerHTML = ''; info.style.display = 'none'; }
     };
+
+    // ── V.15.8.0: CÁLCULO DE RUTA CON EVITACIÓN DE TRONOS (PREVENTIVOS) ─────────────
+
+    // Helpers de geometría
+    // Desplaza un punto lat/lng en metros a lo largo de una dirección (ángulo en radianes)
+    function _offsetLatLng(lat, lng, distMetros, angRad) {
+      const R = 6371000;
+      const dLat = (distMetros * Math.cos(angRad)) / R;
+      const dLng = (distMetros * Math.sin(angRad)) / (R * Math.cos(lat * Math.PI / 180));
+      return { lat: lat + dLat * (180 / Math.PI), lng: lng + dLng * (180 / Math.PI) };
+    }
+
+    // Ángulo en radianes del segmento cabeza→cola
+    function _bearingRad(latA, lngA, latB, lngB) {
+      const dLat = (latB - latA) * Math.PI / 180;
+      const dLng = (latB - lngA) * Math.PI / 180;
+      return Math.atan2(dLng, dLat);
+    }
+
+    // Distancia en metros entre dos lat/lng (haversine simplificado)
+    function _distMetros(latA, lngA, latB, lngB) {
+      const R = 6371000;
+      const dLat = (latB - latA) * Math.PI / 180;
+      const dLng = (latB - lngA) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(latA * Math.PI / 180) * Math.cos(latB * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    // Obtiene la posición actual de un vehículo local desde el caché de Oysta
+    function _getVehicleCurrentPos(vehicleId) {
+      const lv = window.globalVehiculos?.[vehicleId] || (typeof localVehiclesById !== 'undefined' ? localVehiclesById[vehicleId] : null);
+      if (!lv || !lv.oystaId) return null;
+      const ov = oystaVehiclesCache.find(v => String(v.id) === String(lv.oystaId));
+      if (!ov || isNaN(parseFloat(ov.lat)) || isNaN(parseFloat(ov.lng))) return null;
+      return { lat: parseFloat(ov.lat), lng: parseFloat(ov.lng) };
+    }
+
+    // Orden canónico de trackers de una procesión (cabeza primero, cola al final)
+    const _TRACKER_ORDER = ['guia', 'cruz_guia', 'cristo', 'virgen', 'tracker_extra1', 'tracker_extra2'];
+    function _sortTrackers(trackers) {
+      return [...trackers].sort((a, b) => {
+        const ia = _TRACKER_ORDER.findIndex(o => (a.idTracker || '').toLowerCase().includes(o));
+        const ib = _TRACKER_ORDER.findIndex(o => (b.idTracker || '').toLowerCase().includes(o));
+        return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+      });
+    }
+
+    // Construye los waypoints de bypass (intermediates via) para evitar todos los corredores activos
+    // Devuelve array de {latitude, longitude} para la Routes API
+    function _buildTronosBypassWaypoints(originLat, originLng, destLat, destLng) {
+      const list = window._semanaSantaActiveList || [];
+      const waypoints = [];
+
+      list.forEach(t => {
+        if (!t.trackers || t.trackers.length === 0) return;
+        const activos = t.trackers.filter(tr => tr.activo === 1);
+        if (activos.length === 0) return;
+
+        const sorted = _sortTrackers(activos);
+        const head = sorted[0]; // Cruz Guía — cabeza
+        const tail = sorted[sorted.length - 1]; // último tracker — cola
+
+        const headLat = parseFloat(head.lat), headLng = parseFloat(head.long);
+        const tailLat = parseFloat(tail.lat), tailLng = parseFloat(tail.long);
+        if (isNaN(headLat) || isNaN(headLng) || isNaN(tailLat) || isNaN(tailLng)) return;
+
+        // Ángulo de marcha de la procesión (cabeza→cola)
+        const marchBear = _bearingRad(headLat, headLng, tailLat, tailLng);
+
+        // Punto 100m detrás de la cola (en la misma dirección de marcha)
+        const bufferPt = _offsetLatLng(tailLat, tailLng, 100, marchBear);
+
+        // Centroide del corredor completo (head → bufferPt)
+        const cLat = (headLat + bufferPt.lat) / 2;
+        const cLng = (headLng + bufferPt.lng) / 2;
+
+        // Vector perpendicular al corredor (rotar 90° = marchBear + π/2)
+        const perpBear = marchBear + Math.PI / 2;
+
+        // Calcular qué lado del perpendicular está más cerca del midpoint origen→destino
+        const midLat = (originLat + destLat) / 2;
+        const midLng = (originLng + destLng) / 2;
+        const ptLeft = _offsetLatLng(cLat, cLng, 350, perpBear);
+        const ptRight = _offsetLatLng(cLat, cLng, 350, perpBear + Math.PI);
+        const distLeft = _distMetros(midLat, midLng, ptLeft.lat, ptLeft.lng);
+        const distRight = _distMetros(midLat, midLng, ptRight.lat, ptRight.lng);
+        const bypassPt = distLeft <= distRight ? ptLeft : ptRight;
+
+        waypoints.push({ latitude: bypassPt.lat, longitude: bypassPt.lng });
+        console.log(`[V.15.8.0] Tronos bypass para "${t.nombre}": (${bypassPt.lat.toFixed(5)}, ${bypassPt.lng.toFixed(5)})`);
+      });
+
+      return waypoints;
+    }
+
+    // Función principal: calcular ruta desde el vehículo hasta la intervención
+    window.calcularRutaParaRecurso = async (vehicleId, intervencionId) => {
+      const btn = document.getElementById(`btn-calc-ruta-${vehicleId}`);
+      const resultEl = document.getElementById(`route-result-${vehicleId}`);
+      if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
+      if (resultEl) { resultEl.style.display = 'none'; resultEl.textContent = ''; }
+
+      // 1. Origen: posición actual del vehículo
+      const origin = _getVehicleCurrentPos(vehicleId);
+      if (!origin) {
+        if (btn) { btn.disabled = false; btn.textContent = '🗺️ Ruta'; }
+        mostrarToast('⚠️ Posición del vehículo no disponible en Oysta');
+        return;
+      }
+
+      // 2. Destino: coordenadas de la intervención
+      const interv = intervencionesCache[intervencionId];
+      if (!interv || !interv.coords || isNaN(interv.coords.lat)) {
+        if (btn) { btn.disabled = false; btn.textContent = '🗺️ Ruta'; }
+        mostrarToast('⚠️ La intervención no tiene coordenadas registradas');
+        return;
+      }
+      const dest = interv.coords;
+
+      // 3. Construir body Routes API
+      const body = {
+        origin: { location: { latLng: { latitude: origin.lat, longitude: origin.lng } } },
+        destination: { location: { latLng: { latitude: dest.lat, longitude: dest.lng } } },
+        travelMode: 'DRIVE',
+        routingPreference: 'TRAFFIC_UNAWARE',
+        languageCode: 'es'
+      };
+
+      // 4. Añadir waypoints de evitación si el switch está activo y hay tronos
+      const hasTronos = (window._semanaSantaActiveList || []).some(t =>
+        t.trackers && t.trackers.some(tr => tr.activo === 1)
+      );
+      if (evitarTronosEnabled && hasTronos) {
+        const bypassWaypoints = _buildTronosBypassWaypoints(origin.lat, origin.lng, dest.lat, dest.lng);
+        if (bypassWaypoints.length > 0) {
+          body.intermediates = bypassWaypoints.map(wp => ({
+            via: true,
+            location: { latLng: wp }
+          }));
+        }
+      }
+
+      // 5. Llamar a Routes API
+      try {
+        const res = await fetch(
+          `https://routes.googleapis.com/directions/v2:computeRoutes?key=${activeMapsApiKey}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.distanceMeters,routes.legs.duration'
+            },
+            body: JSON.stringify(body)
+          }
+        );
+        window.incrementApiUsage('maps_route');
+        const data = await res.json();
+
+        if (btn) { btn.disabled = false; btn.textContent = '🗺️ Ruta'; }
+
+        if (!data.routes || data.routes.length === 0) {
+          mostrarToast('No se pudo calcular la ruta. Comprueba la conectividad.');
+          console.error('[V.15.8.0] Routes API error:', data);
+          return;
+        }
+
+        const route = data.routes[0];
+
+        // 6. Limpiar ruta anterior en mapa preventivos
+        if (prevRoutePolyline) { prevRoutePolyline.setMap(null); prevRoutePolyline = null; }
+        activeIntRouteId = intervencionId;
+
+        // 7. Dibujar nueva ruta en mapa preventivos
+        if (route.polyline && route.polyline.encodedPolyline && mapPreventivos) {
+          const path = google.maps.geometry
+            ? google.maps.geometry.encoding.decodePath(route.polyline.encodedPolyline)
+            : [];
+          if (path.length) {
+            prevRoutePolyline = new google.maps.Polyline({
+              path,
+              geodesic: true,
+              strokeColor: '#7b1fa2',
+              strokeOpacity: 0.8,
+              strokeWeight: 5,
+              map: mapPreventivos
+            });
+            const bounds = new google.maps.LatLngBounds();
+            path.forEach(p => bounds.extend(p));
+            mapPreventivos.fitBounds(bounds, 60);
+          }
+        }
+
+        // 8. Mostrar distancia/tiempo bajo el botón
+        const distM = route.distanceMeters || (route.legs && route.legs[0]?.distanceMeters);
+        const durS = route.duration || (route.legs && route.legs[0]?.duration);
+        if (resultEl) {
+          resultEl.innerHTML = `📍 <b>${formatDistance(distM)}</b> · ⏱ <b>${formatDuration(durS)}</b>`;
+          resultEl.style.display = 'block';
+        }
+
+        const typeLabel = (evitarTronosEnabled && hasTronos) ? ' (evitando tronos)' : '';
+        mostrarToast(`Ruta calculada${typeLabel}: ${formatDistance(distM)}, ${formatDuration(durS)}`);
+
+      } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = '🗺️ Ruta'; }
+        console.error('[V.15.8.0] Error calculando ruta para recurso:', e);
+        mostrarToast('Error calculando ruta. Consulta la consola.');
+      }
+    };
+
+    // Sincronizar el switch "Evitar Tronos" (global, todos los controles comparten estado)
+    window.setEvitarTronos = (checked) => {
+      evitarTronosEnabled = checked;
+      // Sincronizar todos los checkboxes de evitar-tronos visibles
+      document.querySelectorAll('.evitar-tronos-chk').forEach(el => el.checked = checked);
+      // Si hay ruta activa, borrarla para que el usuario recalcule con el nuevo estado
+      if (prevRoutePolyline) {
+        prevRoutePolyline.setMap(null);
+        prevRoutePolyline = null;
+        activeIntRouteId = null;
+        // Limpiar resultados mostrados
+        document.querySelectorAll('[id^="route-result-"]').forEach(el => {
+          el.style.display = 'none'; el.textContent = '';
+        });
+        mostrarToast(checked ? '🕊️ Evitar tronos activado — recalcula la ruta' : 'Evitar tronos desactivado — recalcula la ruta');
+      }
+    };
+
 
     window.startRoutingPick = (fieldId) => {
       if (!mapEmergencias || !mapReady) return;
@@ -8118,6 +8350,9 @@ ${dataContext}
 
     window.cerrarGestionIntervencion = () => {
       activeIntManageId = null;
+      // V.15.8.0: Limpiar ruta pintada en mapa Preventivos al cerrar panel
+      if (prevRoutePolyline) { prevRoutePolyline.setMap(null); prevRoutePolyline = null; }
+      activeIntRouteId = null;
       const pm = document.getElementById('preventivos-management-panel');
       if (pm) pm.classList.remove('open');
       // Desactivar estado activo en listado
@@ -10199,12 +10434,32 @@ ${dataContext}
                     </div>`;
           }).join('');
 
+          // V.15.8.0: Comprobar si hay tronos activos para mostrar switch "evitar tronos"
+          const hasTronosActivos = (window._semanaSantaActiveList || []).some(t =>
+            t.trackers && t.trackers.some(tr => tr.activo === 1)
+          );
+
           const assignedList = (i.recursosAsignados || []).map(rvId => {
             const v = window.globalVehiculos?.[rvId];
-            return `<div class="res-item-row" style="display:flex; align-items:center; gap:8px; padding:6px 10px; background:var(--accent-light); border:1px solid var(--accent); border-radius:6px;">
-                      <span style="font-size:11px; font-weight:700; flex:1;">${v?.alias || v?.indicativo || rvId}</span>
-                      <button class="btn-cancel-m" style="padding:0; width:22px; height:22px; font-size:14px; background:#fdd; color:#c00; border-color:#faa;" onclick="retirarRecursoIntervencion('${id}', '${rvId}')">✕</button>
-                    </div>`;
+            const vLabel = escapeHTML(v?.alias || v?.indicativo || rvId);
+            // Switch "Evitar Tronos" solo si hay procesiones con trackers activos
+            const evitarSwitch = hasTronosActivos ? `
+              <label title="Evitar tronos en la ruta" style="display:flex; align-items:center; gap:3px; font-size:9px; color:var(--text-3); cursor:pointer; white-space:nowrap;">
+                <input type="checkbox" class="evitar-tronos-chk" ${evitarTronosEnabled ? 'checked' : ''} onchange="window.setEvitarTronos(this.checked)" style="width:12px; height:12px; cursor:pointer; margin:0;">
+                🕊️
+              </label>` : '';
+            return `
+              <div style="display:flex; flex-direction:column; gap:3px;">
+                <div class="res-item-row" style="display:flex; align-items:center; gap:6px; padding:6px 10px; background:var(--accent-light); border:1px solid var(--accent); border-radius:6px;">
+                  <span style="font-size:11px; font-weight:700; flex:1;">${vLabel}</span>
+                  ${evitarSwitch}
+                  <button id="btn-calc-ruta-${rvId}" class="btn-cancel-m"
+                    style="padding:2px 8px; height:24px; font-size:10px; border-radius:4px; white-space:nowrap;"
+                    onclick="window.calcularRutaParaRecurso('${rvId}', '${id}')">🗺️ Ruta</button>
+                  <button class="btn-cancel-m" style="padding:0; width:22px; height:22px; font-size:14px; background:#fdd; color:#c00; border-color:#faa;" onclick="retirarRecursoIntervencion('${id}', '${rvId}')">✕</button>
+                </div>
+                <div id="route-result-${rvId}" style="display:none; font-size:10px; color:var(--text-3); padding:2px 10px;"></div>
+              </div>`;
           }).join('');
 
           resourcesHtml = `
@@ -10216,6 +10471,7 @@ ${dataContext}
                 <div style="display:grid; grid-template-columns: 1fr 1fr; gap:6px;">${availList}</div>
               </div>
             </div>`;
+
         }
 
         contentCont.innerHTML = `
@@ -17548,7 +17804,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.7.0
+    EmerCRE V.15.8.0
   </div>
 </body>
 
