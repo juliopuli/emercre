@@ -1988,10 +1988,12 @@
     }
 
     // Construye los waypoints de bypass (intermediates via) para evitar todos los corredores activos
+    // destLat2/destLng2: coordenadas del destino para omitir la procesión si el destino está en su corredor
     // Devuelve array de {latitude, longitude} para la Routes API
-    function _buildTronosBypassWaypoints(originLat, originLng, destLat, destLng) {
+    function _buildTronosBypassWaypoints(originLat, originLng, destLat, destLng, destLat2, destLng2) {
       const list = window._semanaSantaActiveList || [];
       const waypoints = [];
+      const skipRadiusM = 150; // si el destino está a ≤150m de cualquier tracker, omitir esta cofradía
 
       list.forEach(t => {
         if (!t.trackers || t.trackers.length === 0) return;
@@ -2005,6 +2007,20 @@
         const headLat = parseFloat(head.lat), headLng = parseFloat(head.long);
         const tailLat = parseFloat(tail.lat), tailLng = parseFloat(tail.long);
         if (isNaN(headLat) || isNaN(headLng) || isNaN(tailLat) || isNaN(tailLng)) return;
+
+        // V.15.8.1: Si el destino está muy cerca de cualquier tracker de esta cofradía, no intentar evitar:
+        // La ambulancia va HACIA la calle del trono — la API no puede trazar un bypass en ese caso.
+        if (destLat2 !== undefined && destLng2 !== undefined) {
+          const tooClose = activos.some(tr => {
+            const tLat = parseFloat(tr.lat), tLng = parseFloat(tr.long);
+            if (isNaN(tLat) || isNaN(tLng)) return false;
+            return _distMetros(destLat2, destLng2, tLat, tLng) <= skipRadiusM;
+          });
+          if (tooClose) {
+            console.log(`[V.15.8.1] Omitiendo bypass de "${t.nombre}": destino muy cercano al corredor`);
+            return; // skip esta cofradía
+          }
+        }
 
         // Ángulo de marcha de la procesión (cabeza→cola)
         const marchBear = _bearingRad(headLat, headLng, tailLat, tailLng);
@@ -2029,10 +2045,49 @@
         const bypassPt = distLeft <= distRight ? ptLeft : ptRight;
 
         waypoints.push({ latitude: bypassPt.lat, longitude: bypassPt.lng });
-        console.log(`[V.15.8.0] Tronos bypass para "${t.nombre}": (${bypassPt.lat.toFixed(5)}, ${bypassPt.lng.toFixed(5)})`);
+        console.log(`[V.15.8.1] Tronos bypass para "${t.nombre}": (${bypassPt.lat.toFixed(5)}, ${bypassPt.lng.toFixed(5)})`);
       });
 
       return waypoints;
+    }
+
+
+    // Helper interno: llama a Routes API y devuelve {route} o null
+    async function _fetchRoute(bodyObj) {
+      const res = await fetch(
+        `https://routes.googleapis.com/directions/v2:computeRoutes?key=${activeMapsApiKey}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.distanceMeters,routes.legs.duration'
+          },
+          body: JSON.stringify(bodyObj)
+        }
+      );
+      window.incrementApiUsage('maps_route');
+      const data = await res.json();
+      if (data.routes && data.routes.length > 0) return data.routes[0];
+      console.warn('[V.15.8.1] Routes API devolvió vacío:', data?.error?.message || JSON.stringify(data).substring(0, 200));
+      return null;
+    }
+
+    // Helper: dibuja una polyline en el mapa preventivos y ajusta la vista
+    function _drawPrevRoutePolyline(encodedPolyline) {
+      if (prevRoutePolyline) { prevRoutePolyline.setMap(null); prevRoutePolyline = null; }
+      if (!encodedPolyline || !mapPreventivos) return;
+      const path = google.maps.geometry
+        ? google.maps.geometry.encoding.decodePath(encodedPolyline)
+        : [];
+      if (!path.length) return;
+      prevRoutePolyline = new google.maps.Polyline({
+        path, geodesic: true,
+        strokeColor: '#7b1fa2', strokeOpacity: 0.85, strokeWeight: 5,
+        map: mapPreventivos
+      });
+      const bounds = new google.maps.LatLngBounds();
+      path.forEach(p => bounds.extend(p));
+      mapPreventivos.fitBounds(bounds, 60);
     }
 
     // Función principal: calcular ruta desde el vehículo hasta la intervención
@@ -2040,9 +2095,9 @@
       const btn = document.getElementById(`btn-calc-ruta-${vehicleId}`);
       const resultEl = document.getElementById(`route-result-${vehicleId}`);
       if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
-      if (resultEl) { resultEl.style.display = 'none'; resultEl.textContent = ''; }
+      if (resultEl) { resultEl.style.display = 'none'; }
 
-      // 1. Origen: posición actual del vehículo
+      // 1. Origen: posición actual del vehículo (Oysta)
       const origin = _getVehicleCurrentPos(vehicleId);
       if (!origin) {
         if (btn) { btn.disabled = false; btn.textContent = '🗺️ Ruta'; }
@@ -2059,8 +2114,8 @@
       }
       const dest = interv.coords;
 
-      // 3. Construir body Routes API
-      const body = {
+      // Base del body para Routes API
+      const baseBody = {
         origin: { location: { latLng: { latitude: origin.lat, longitude: origin.lng } } },
         destination: { location: { latLng: { latitude: dest.lat, longitude: dest.lng } } },
         travelMode: 'DRIVE',
@@ -2068,85 +2123,72 @@
         languageCode: 'es'
       };
 
-      // 4. Añadir waypoints de evitación si el switch está activo y hay tronos
-      const hasTronos = (window._semanaSantaActiveList || []).some(t =>
-        t.trackers && t.trackers.some(tr => tr.activo === 1)
-      );
-      if (evitarTronosEnabled && hasTronos) {
-        const bypassWaypoints = _buildTronosBypassWaypoints(origin.lat, origin.lng, dest.lat, dest.lng);
-        if (bypassWaypoints.length > 0) {
-          body.intermediates = bypassWaypoints.map(wp => ({
-            via: true,
-            location: { latLng: wp }
-          }));
-        }
-      }
-
-      // 5. Llamar a Routes API
       try {
-        const res = await fetch(
-          `https://routes.googleapis.com/directions/v2:computeRoutes?key=${activeMapsApiKey}`,
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'X-Goog-FieldMask': 'routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.distanceMeters,routes.legs.duration'
-            },
-            body: JSON.stringify(body)
-          }
+        let route = null;
+        let usedAvoidance = false;
+
+        // 3. Intentar con evitación si el switch está activo y hay tronos
+        const hasTronos = (window._semanaSantaActiveList || []).some(t =>
+          t.trackers && t.trackers.some(tr => tr.activo === 1)
         );
-        window.incrementApiUsage('maps_route');
-        const data = await res.json();
+
+        if (evitarTronosEnabled && hasTronos) {
+          // V.15.8.1: Excluir cofradías cuyo corredor esté muy cerca del destino
+          // (el destino EN la calle del trono: no podemos evitarlo, solo llegar lo más cerca posible)
+          const bypassWaypoints = _buildTronosBypassWaypoints(
+            origin.lat, origin.lng, dest.lat, dest.lng,
+            dest.lat, dest.lng  // se pasa destino para filtrado interno
+          );
+
+          if (bypassWaypoints.length > 0) {
+            const bodyWithAvoid = {
+              ...baseBody,
+              intermediates: bypassWaypoints.map(wp => ({
+                via: true,
+                location: { latLng: wp }
+              }))
+            };
+            console.log(`[V.15.8.1] Intentando ruta con ${bypassWaypoints.length} waypoints de evitación...`);
+            route = await _fetchRoute(bodyWithAvoid);
+            if (route) usedAvoidance = true;
+          }
+        }
+
+        // 4. Fallback: si la evitación falló (waypoints fuera de carretera, etc.) → ruta normal
+        if (!route) {
+          if (evitarTronosEnabled && hasTronos) {
+            console.warn('[V.15.8.1] Fallback: calculando ruta normal (evitación falló)');
+          }
+          route = await _fetchRoute(baseBody);
+        }
 
         if (btn) { btn.disabled = false; btn.textContent = '🗺️ Ruta'; }
 
-        if (!data.routes || data.routes.length === 0) {
-          mostrarToast('No se pudo calcular la ruta. Comprueba la conectividad.');
-          console.error('[V.15.8.0] Routes API error:', data);
+        if (!route) {
+          mostrarToast('❌ No se pudo calcular la ruta (sin conexión o sin cobertura de calles)');
+          console.error('[V.15.8.1] Routes API no devolvió ninguna ruta');
           return;
         }
 
-        const route = data.routes[0];
-
-        // 6. Limpiar ruta anterior en mapa preventivos
-        if (prevRoutePolyline) { prevRoutePolyline.setMap(null); prevRoutePolyline = null; }
+        // 5. Dibujar ruta en mapa preventivos
         activeIntRouteId = intervencionId;
+        _drawPrevRoutePolyline(route.polyline?.encodedPolyline);
 
-        // 7. Dibujar nueva ruta en mapa preventivos
-        if (route.polyline && route.polyline.encodedPolyline && mapPreventivos) {
-          const path = google.maps.geometry
-            ? google.maps.geometry.encoding.decodePath(route.polyline.encodedPolyline)
-            : [];
-          if (path.length) {
-            prevRoutePolyline = new google.maps.Polyline({
-              path,
-              geodesic: true,
-              strokeColor: '#7b1fa2',
-              strokeOpacity: 0.8,
-              strokeWeight: 5,
-              map: mapPreventivos
-            });
-            const bounds = new google.maps.LatLngBounds();
-            path.forEach(p => bounds.extend(p));
-            mapPreventivos.fitBounds(bounds, 60);
-          }
-        }
-
-        // 8. Mostrar distancia/tiempo bajo el botón
-        const distM = route.distanceMeters || (route.legs && route.legs[0]?.distanceMeters);
-        const durS = route.duration || (route.legs && route.legs[0]?.duration);
+        // 6. Mostrar resultado bajo el botón
+        const distM = route.distanceMeters || route.legs?.[0]?.distanceMeters;
+        const durS = route.duration || route.legs?.[0]?.duration;
         if (resultEl) {
           resultEl.innerHTML = `📍 <b>${formatDistance(distM)}</b> · ⏱ <b>${formatDuration(durS)}</b>`;
           resultEl.style.display = 'block';
         }
 
-        const typeLabel = (evitarTronosEnabled && hasTronos) ? ' (evitando tronos)' : '';
-        mostrarToast(`Ruta calculada${typeLabel}: ${formatDistance(distM)}, ${formatDuration(durS)}`);
+        const label = usedAvoidance ? ' 🕊️ (evitando tronos)' : (evitarTronosEnabled && hasTronos ? ' ⚠️ (ruta directa, tronos no evitables)' : '');
+        mostrarToast(`Ruta calculada${label}: ${formatDistance(distM)}, ${formatDuration(durS)}`);
 
       } catch (e) {
         if (btn) { btn.disabled = false; btn.textContent = '🗺️ Ruta'; }
-        console.error('[V.15.8.0] Error calculando ruta para recurso:', e);
-        mostrarToast('Error calculando ruta. Consulta la consola.');
+        console.error('[V.15.8.1] Error de red calculando ruta:', e);
+        mostrarToast('❌ Error de red calculando ruta');
       }
     };
 
