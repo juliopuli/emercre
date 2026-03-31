@@ -1987,9 +1987,29 @@
       });
     }
 
-    // V.15.8.5: Detecta el primer punto de la ruta decodificada que está dentro de
-    // BLOCK_R metros de cualquier tracker activo. Devuelve info sobre el bloqueo o null.
-    const _BLOCK_R = 45; // metros — radio de "calle cortada" ampliado para cubrir ancho de calle
+    // V.15.8.7: Distancia mínima de un punto (px, py) a un segmento (ax, ay) - (bx, by) en metros
+    function _distToSegment(pLat, pLng, aLat, aLng, bLat, bLng) {
+      const R = 6371000;
+      // Convertir a radianes y aplicar proyección plana equirrectangular centrada en `a`
+      const rad = Math.PI / 180;
+      const xA = 0, yA = 0;
+      const xB = (bLng - aLng) * rad * Math.cos(aLat * rad) * R;
+      const yB = (bLat - aLat) * rad * R;
+      const xP = (pLng - aLng) * rad * Math.cos(aLat * rad) * R;
+      const yP = (pLat - aLat) * rad * R;
+
+      const l2 = xB*xB + yB*yB;
+      if (l2 === 0) return Math.sqrt(xP*xP + yP*yP); // a == b
+      let t = ((xP - xA)*xB + (yP - yA)*yB) / l2;
+      t = Math.max(0, Math.min(1, t));
+      const projX = xA + t * xB;
+      const projY = yA + t * yB;
+      return Math.sqrt((xP - projX)**2 + (yP - projY)**2);
+    }
+
+    // V.15.8.7: Detecta el primer punto de la ruta decodificada que choca con 
+    // la línea continua formada por los trackers de la procesión.
+    const _BLOCK_R = 45; // Ancho del corredor de la procesión (calle)
     function _findRouteBlockage(decodedPath) {
       const list = window._semanaSantaActiveList || [];
       let best = null; // { pathIdx, trackerLat, trackerLng, routeBearing, cofradia: string }
@@ -1997,30 +2017,72 @@
       for (const t of list) {
         if (!t.trackers) continue;
         const activos = t.trackers.filter(tr => tr.activo === 1);
-        if (!activos.length) continue;
+        if (activos.length < 1) continue;
+        
+        // Ordenar trackers canónicamente (cabeza a cola)
+        const ordenados = _sortTrackers(activos);
+        let segments = [];
+
+        // Generar segmentos uniendo los trackers
+        for (let i = 0; i < ordenados.length - 1; i++) {
+          segments.push({
+            a: { lat: parseFloat(ordenados[i].lat), lng: parseFloat(ordenados[i].long) },
+            b: { lat: parseFloat(ordenados[i+1].lat), lng: parseFloat(ordenados[i+1].long) }
+          });
+        }
+        
+        // Si hay al menos un tracker pero forma un solo punto, hacemos un pseudo-segmento de 100m hacia atrás
+        if (segments.length === 0) {
+           const lat = parseFloat(ordenados[0].lat);
+           const lng = parseFloat(ordenados[0].long);
+           // Como no sabemos la dirección, tomaremos un punto estático
+           segments.push({ a: { lat, lng }, b: { lat, lng } });
+        } else {
+           // Extender 100 metros hacia atrás desde el último tracker (cola) manteniendo la misma dirección
+           const lastSeg = segments[segments.length - 1];
+           const bearLast = _bearingRad(lastSeg.a.lat, lastSeg.a.lng, lastSeg.b.lat, lastSeg.b.lng);
+           // Extending in the same direction (forward from last point, actually procession moves forward so the tail is b, and we want to block BEHIND b)
+           // Wait! Processing moves Guia -> Trono. Guia is at the front. So the procession is walking TOWARDS the destination of Guia.
+           // The "Tail" is the last tracker. If we want 100m BEHIND the tail, we extend in the direction of (a -> b) away from b.
+           const extension = _offsetLatLng(lastSeg.b.lat, lastSeg.b.lng, 100, bearLast);
+           segments.push({ a: lastSeg.b, b: extension });
+        }
 
         for (let i = 0; i < decodedPath.length; i++) {
           const pt = decodedPath[i];
           const pLat = typeof pt.lat === 'function' ? pt.lat() : pt.lat;
           const pLng = typeof pt.lng === 'function' ? pt.lng() : pt.lng;
 
-          for (const tr of activos) {
-            const tLat = parseFloat(tr.lat), tLng = parseFloat(tr.long);
-            if (isNaN(tLat) || isNaN(tLng)) continue;
-            if (_distMetros(pLat, pLng, tLat, tLng) <= _BLOCK_R) {
-              if (!best || i < best.pathIdx) {
-                // Ángulo de la ruta en ese punto
-                const nxt = decodedPath[Math.min(i + 1, decodedPath.length - 1)];
-                const nLat = typeof nxt.lat === 'function' ? nxt.lat() : nxt.lat;
-                const nLng = typeof nxt.lng === 'function' ? nxt.lng() : nxt.lng;
-                best = {
-                  pathIdx: i, trackerLat: tLat, trackerLng: tLng,
-                  routeBearing: _bearingRad(pLat, pLng, nLat, nLng),
-                  cofradia: t.nombre || t.id
-                };
-              }
-              break;
+          // Choca la ruta contra alguno de los segmentos de esta procesión?
+          let collides = false;
+          let colLat = 0, colLng = 0;
+
+          for (const seg of segments) {
+             if (isNaN(seg.a.lat) || isNaN(seg.b.lat)) continue;
+             const d = _distToSegment(pLat, pLng, seg.a.lat, seg.a.lng, seg.b.lat, seg.b.lng);
+             if (d <= _BLOCK_R) {
+                collides = true;
+                // Usamos el punto medio del segmento para las matemáticas de rodeo
+                colLat = (seg.a.lat + seg.b.lat) / 2;
+                colLng = (seg.a.lng + seg.b.lng) / 2;
+                break;
+             }
+          }
+
+          if (collides) {
+            if (!best || i < best.pathIdx) {
+              const nxt = decodedPath[Math.min(i + 1, decodedPath.length - 1)];
+              const nLat = typeof nxt.lat === 'function' ? nxt.lat() : nxt.lat;
+              const nLng = typeof nxt.lng === 'function' ? nxt.lng() : nxt.lng;
+              best = {
+                pathIdx: i, 
+                trackerLat: colLat, // Se usa para pivotar el rodeo
+                trackerLng: colLng, 
+                routeBearing: _bearingRad(pLat, pLng, nLat, nLng),
+                cofradia: t.nombre || t.id
+              };
             }
+            break; // Pasamos a la siguiente trayectoria si ya detectamos choque en este path
           }
         }
       }
@@ -17914,7 +17976,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.8.6
+    EmerCRE V.15.8.7
   </div>
 </body>
 
