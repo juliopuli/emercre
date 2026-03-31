@@ -2244,8 +2244,8 @@
                     const r = routes[0];
                     const p = google.maps.geometry.encoding.decodePath(r.polyline.encodedPolyline);
                     const nb = _findRouteBlockage(p);
-                    // Solo aceptar si resuelve el trono que causó el bloqueo
-                    if (nb && nb.cofradia === blockage.cofradia) return null;
+                    // V.15.8.12: Rechazar si la ruta cruza CUALQUIER procesión activa, no solo la original
+                    if (nb) return null;
                     // Parsear duración (formato "123s")
                     const durSec = r.duration ? parseInt(r.duration.replace('s',''), 10) : Infinity;
                     return { route: r, node, wps: tryWps, durSec };
@@ -2256,7 +2256,7 @@
               // Filtrar nulos y elegir la ruta más rápida (menor tiempo)
               const cleanOptions = parallelResults.filter(Boolean);
               cleanOptions.sort((a, b) => a.durSec - b.durSec);
-              console.log(`[V.15.8.11] ${cleanOptions.length} opciones limpias de ${MALAGA_RING_NODES.length} nodos. Mejor: ${cleanOptions[0]?.durSec}s`);
+              console.log(`[V.15.8.12] ${cleanOptions.length} opciones limpias de ${MALAGA_RING_NODES.length} nodos. Mejor: ${cleanOptions[0]?.durSec}s`);
 
               let wpResolved = false;
               if (cleanOptions.length > 0) {
@@ -17983,7 +17983,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.8.11
+    EmerCRE V.15.8.12
   </div>
 </body>
 
