@@ -2011,24 +2011,23 @@
     // Descarga y parsea el KML del itinerario real de cada procesión.
     // Usa esas coordenadas calle a calle como pared sólida en _findRouteBlockage.
 
-    const _kmlCoordsCache = {}; // cofradiaId → [[lat,lng], ...]
+    const _kmlCoordsCache = {}; // rutaMapa URL → [[lat,lng], ...]
 
-    async function _loadKmlCoords(cofradiaId, rutaMapa) {
-      if (_kmlCoordsCache[cofradiaId]) return _kmlCoordsCache[cofradiaId];
+    async function _loadKmlCoords(rutaMapa) {
+      if (_kmlCoordsCache[rutaMapa]) return _kmlCoordsCache[rutaMapa];
       try {
         const xml = await fetch(rutaMapa).then(r => r.text());
         const doc = new DOMParser().parseFromString(xml, 'text/xml');
-        // Soporta <LineString> (ruta) y también colección de <Point> (fallback)
         const coordsText = doc.querySelector('LineString coordinates')?.textContent.trim() || '';
         const coords = coordsText.split(/\s+/)
           .map(c => { const p = c.split(','); return [parseFloat(p[1]), parseFloat(p[0])]; })
           .filter(c => !isNaN(c[0]) && !isNaN(c[1]));
-        console.log(`[KML] Cargado KML de "${cofradiaId}": ${coords.length} puntos`);
-        _kmlCoordsCache[cofradiaId] = coords;
+        console.log(`[KML] Cargado: ${rutaMapa.split('/').pop()} → ${coords.length} puntos`);
+        _kmlCoordsCache[rutaMapa] = coords;
         return coords;
       } catch (e) {
         console.warn('[KML] Error cargando KML:', e);
-        _kmlCoordsCache[cofradiaId] = [];
+        _kmlCoordsCache[rutaMapa] = [];
         return [];
       }
     }
@@ -2043,7 +2042,7 @@
       return bestIdx;
     }
 
-    // Extrae sub-segmento ocupado: desde el primer tracker (guia) hasta el último + 100m
+    // Extrae sub-segmento ocupado: desde el primer tracker (guia) hasta el último + 200m de margen en cada extremo
     function _getOccupiedKmlSegment(kmlCoords, ordenados) {
       if (!kmlCoords.length || !ordenados.length) return [];
       const primero = ordenados[0];
@@ -2053,15 +2052,25 @@
       let idxA = _findClosestKmlIdx(kmlCoords, latA, lngA);
       let idxB = _findClosestKmlIdx(kmlCoords, latB, lngB);
       if (idxA > idxB) [idxA, idxB] = [idxB, idxA];
-      // Añadir 100m extra al final: avanzar mientras la distancia acumulada sea < 100m
-      let extraDist = 0;
-      let extIdx = idxB;
-      for (let i = idxB + 1; i < kmlCoords.length - 1; i++) {
-        extraDist += _distMetros(kmlCoords[i-1][0], kmlCoords[i-1][1], kmlCoords[i][0], kmlCoords[i][1]);
-        extIdx = i;
-        if (extraDist >= 100) break;
+      // Expandir 200m hacia atrás desde A (margén GPS)
+      let backDist = 0;
+      let startIdx = idxA;
+      for (let i = idxA - 1; i >= 0; i--) {
+        backDist += _distMetros(kmlCoords[i+1][0], kmlCoords[i+1][1], kmlCoords[i][0], kmlCoords[i][1]);
+        startIdx = i;
+        if (backDist >= 200) break;
       }
-      return kmlCoords.slice(idxA, extIdx + 1);
+      // Expandir 200m hacia delante desde B
+      let fwdDist = 0;
+      let endIdx = idxB;
+      for (let i = idxB + 1; i < kmlCoords.length - 1; i++) {
+        fwdDist += _distMetros(kmlCoords[i-1][0], kmlCoords[i-1][1], kmlCoords[i][0], kmlCoords[i][1]);
+        endIdx = i;
+        if (fwdDist >= 200) break;
+      }
+      const seg = kmlCoords.slice(startIdx, endIdx + 1);
+      // Fallback conservador: si el sub-tramo es demasiado corto, usar el KML completo
+      return seg.length >= 5 ? seg : kmlCoords;
     }
 
     // V.15.8.13: Detecta el primer punto de la ruta decodificada que choca con
@@ -2076,8 +2085,8 @@
         const activos = t.trackers.filter(tr => tr.activo === 1);
         if (!activos.length) continue;
 
-        // Intentar usar KML cacheado; si no hay, usar trackers como fallback
-        const kmlCoords = _kmlCoordsCache[t.id] || [];
+        // Intentar usar KML cacheado por URL estable (t.rutaMapa); si no hay, usar trackers como fallback
+        const kmlCoords = t.rutaMapa ? (_kmlCoordsCache[t.rutaMapa] || []) : [];
         const ordenados = _sortTrackers(activos);
 
         let wallCoords; // [[lat,lng], ...]
@@ -2135,8 +2144,8 @@
     // Pre-carga en paralelo los KMLs de todas las procesiones activas
     async function _preloadKmls() {
       const list = window._semanaSantaActiveList || [];
-      await Promise.all(list.filter(t => t.rutaMapa && !_kmlCoordsCache[t.id])
-        .map(t => _loadKmlCoords(t.id, t.rutaMapa)));
+      await Promise.all(list.filter(t => t.rutaMapa && !_kmlCoordsCache[t.rutaMapa])
+        .map(t => _loadKmlCoords(t.rutaMapa)));
     }
 
     // Helper interno: llama a Routes API y devuelve TODAS las rutas o null
@@ -18036,7 +18045,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.8.13
+    EmerCRE V.15.8.14
   </div>
 </body>
 
