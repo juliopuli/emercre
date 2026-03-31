@@ -2007,86 +2007,136 @@
       return Math.sqrt((xP - projX)**2 + (yP - projY)**2);
     }
 
-    // V.15.8.7: Detecta el primer punto de la ruta decodificada que choca con 
-    // la línea continua formada por los trackers de la procesión.
-    const _BLOCK_R = 45; // Ancho del corredor de la procesión (calle)
+    // ── V.15.8.13: KML-BASED ROUTE BLOCKAGE DETECTION ────────────────────────────────
+    // Descarga y parsea el KML del itinerario real de cada procesión.
+    // Usa esas coordenadas calle a calle como pared sólida en _findRouteBlockage.
+
+    const _kmlCoordsCache = {}; // cofradiaId → [[lat,lng], ...]
+
+    async function _loadKmlCoords(cofradiaId, rutaMapa) {
+      if (_kmlCoordsCache[cofradiaId]) return _kmlCoordsCache[cofradiaId];
+      try {
+        const xml = await fetch(rutaMapa).then(r => r.text());
+        const doc = new DOMParser().parseFromString(xml, 'text/xml');
+        // Soporta <LineString> (ruta) y también colección de <Point> (fallback)
+        const coordsText = doc.querySelector('LineString coordinates')?.textContent.trim() || '';
+        const coords = coordsText.split(/\s+/)
+          .map(c => { const p = c.split(','); return [parseFloat(p[1]), parseFloat(p[0])]; })
+          .filter(c => !isNaN(c[0]) && !isNaN(c[1]));
+        console.log(`[KML] Cargado KML de "${cofradiaId}": ${coords.length} puntos`);
+        _kmlCoordsCache[cofradiaId] = coords;
+        return coords;
+      } catch (e) {
+        console.warn('[KML] Error cargando KML:', e);
+        _kmlCoordsCache[cofradiaId] = [];
+        return [];
+      }
+    }
+
+    // Índice del punto más cercano a (lat,lng) en el array de coordenadas KML
+    function _findClosestKmlIdx(kmlCoords, lat, lng) {
+      let bestIdx = 0, bestDist = Infinity;
+      for (let i = 0; i < kmlCoords.length; i++) {
+        const d = _distMetros(lat, lng, kmlCoords[i][0], kmlCoords[i][1]);
+        if (d < bestDist) { bestDist = d; bestIdx = i; }
+      }
+      return bestIdx;
+    }
+
+    // Extrae sub-segmento ocupado: desde el primer tracker (guia) hasta el último + 100m
+    function _getOccupiedKmlSegment(kmlCoords, ordenados) {
+      if (!kmlCoords.length || !ordenados.length) return [];
+      const primero = ordenados[0];
+      const ultimo  = ordenados[ordenados.length - 1];
+      const latA = parseFloat(primero.lat), lngA = parseFloat(primero.long);
+      const latB = parseFloat(ultimo.lat),  lngB = parseFloat(ultimo.long);
+      let idxA = _findClosestKmlIdx(kmlCoords, latA, lngA);
+      let idxB = _findClosestKmlIdx(kmlCoords, latB, lngB);
+      if (idxA > idxB) [idxA, idxB] = [idxB, idxA];
+      // Añadir 100m extra al final: avanzar mientras la distancia acumulada sea < 100m
+      let extraDist = 0;
+      let extIdx = idxB;
+      for (let i = idxB + 1; i < kmlCoords.length - 1; i++) {
+        extraDist += _distMetros(kmlCoords[i-1][0], kmlCoords[i-1][1], kmlCoords[i][0], kmlCoords[i][1]);
+        extIdx = i;
+        if (extraDist >= 100) break;
+      }
+      return kmlCoords.slice(idxA, extIdx + 1);
+    }
+
+    // V.15.8.13: Detecta el primer punto de la ruta decodificada que choca con
+    // el tramo ocupado del KML real de la procesión.
+    const _BLOCK_R = 35; // metros — ancho del corredor (ajustable)
     function _findRouteBlockage(decodedPath) {
       const list = window._semanaSantaActiveList || [];
-      let best = null; // { pathIdx, trackerLat, trackerLng, routeBearing, cofradia: string }
+      let best = null;
 
       for (const t of list) {
         if (!t.trackers) continue;
         const activos = t.trackers.filter(tr => tr.activo === 1);
-        if (activos.length < 1) continue;
-        
-        // Ordenar trackers canónicamente (cabeza a cola)
-        const ordenados = _sortTrackers(activos);
-        let segments = [];
+        if (!activos.length) continue;
 
-        // Generar segmentos uniendo los trackers
-        for (let i = 0; i < ordenados.length - 1; i++) {
-          segments.push({
-            a: { lat: parseFloat(ordenados[i].lat), lng: parseFloat(ordenados[i].long) },
-            b: { lat: parseFloat(ordenados[i+1].lat), lng: parseFloat(ordenados[i+1].long) }
-          });
-        }
-        
-        // Si hay al menos un tracker pero forma un solo punto, hacemos un pseudo-segmento de 100m hacia atrás
-        if (segments.length === 0) {
-           const lat = parseFloat(ordenados[0].lat);
-           const lng = parseFloat(ordenados[0].long);
-           // Como no sabemos la dirección, tomaremos un punto estático
-           segments.push({ a: { lat, lng }, b: { lat, lng } });
+        // Intentar usar KML cacheado; si no hay, usar trackers como fallback
+        const kmlCoords = _kmlCoordsCache[t.id] || [];
+        const ordenados = _sortTrackers(activos);
+
+        let wallCoords; // [[lat,lng], ...]
+        if (kmlCoords.length >= 2) {
+          wallCoords = _getOccupiedKmlSegment(kmlCoords, ordenados);
         } else {
-           // Extender 100 metros hacia atrás desde el último tracker (cola) manteniendo la misma dirección
-           const lastSeg = segments[segments.length - 1];
-           const bearLast = _bearingRad(lastSeg.a.lat, lastSeg.a.lng, lastSeg.b.lat, lastSeg.b.lng);
-           // Extending in the same direction (forward from last point, actually procession moves forward so the tail is b, and we want to block BEHIND b)
-           // Wait! Processing moves Guia -> Trono. Guia is at the front. So the procession is walking TOWARDS the destination of Guia.
-           // The "Tail" is the last tracker. If we want 100m BEHIND the tail, we extend in the direction of (a -> b) away from b.
-           const extension = _offsetLatLng(lastSeg.b.lat, lastSeg.b.lng, 100, bearLast);
-           segments.push({ a: lastSeg.b, b: extension });
+          // Fallback: unir trackers en orden
+          wallCoords = ordenados.map(tr => [parseFloat(tr.lat), parseFloat(tr.long)]);
+          if (wallCoords.length >= 2) {
+            const last = wallCoords[wallCoords.length - 1];
+            const prev = wallCoords[wallCoords.length - 2];
+            const bear = _bearingRad(prev[0], prev[1], last[0], last[1]);
+            const ext  = _offsetLatLng(last[0], last[1], 100, bear);
+            wallCoords.push([ext.lat, ext.lng]);
+          }
         }
+        if (wallCoords.length < 2) continue;
+
+        // Centro del muro para pivotar el rodeo
+        const midWall = wallCoords[Math.floor(wallCoords.length / 2)];
 
         for (let i = 0; i < decodedPath.length; i++) {
-          const pt = decodedPath[i];
+          const pt   = decodedPath[i];
           const pLat = typeof pt.lat === 'function' ? pt.lat() : pt.lat;
           const pLng = typeof pt.lng === 'function' ? pt.lng() : pt.lng;
 
-          // Choca la ruta contra alguno de los segmentos de esta procesión?
           let collides = false;
-          let colLat = 0, colLng = 0;
-
-          for (const seg of segments) {
-             if (isNaN(seg.a.lat) || isNaN(seg.b.lat)) continue;
-             const d = _distToSegment(pLat, pLng, seg.a.lat, seg.a.lng, seg.b.lat, seg.b.lng);
-             if (d <= _BLOCK_R) {
-                collides = true;
-                // Usamos el punto medio del segmento para las matemáticas de rodeo
-                colLat = (seg.a.lat + seg.b.lat) / 2;
-                colLng = (seg.a.lng + seg.b.lng) / 2;
-                break;
-             }
+          for (let j = 0; j < wallCoords.length - 1; j++) {
+            const d = _distToSegment(pLat, pLng,
+              wallCoords[j][0],   wallCoords[j][1],
+              wallCoords[j+1][0], wallCoords[j+1][1]);
+            if (d <= _BLOCK_R) { collides = true; break; }
           }
 
           if (collides) {
             if (!best || i < best.pathIdx) {
-              const nxt = decodedPath[Math.min(i + 1, decodedPath.length - 1)];
+              const nxt  = decodedPath[Math.min(i + 1, decodedPath.length - 1)];
               const nLat = typeof nxt.lat === 'function' ? nxt.lat() : nxt.lat;
               const nLng = typeof nxt.lng === 'function' ? nxt.lng() : nxt.lng;
               best = {
-                pathIdx: i, 
-                trackerLat: colLat, // Se usa para pivotar el rodeo
-                trackerLng: colLng, 
+                pathIdx: i,
+                trackerLat: midWall[0],
+                trackerLng: midWall[1],
                 routeBearing: _bearingRad(pLat, pLng, nLat, nLng),
                 cofradia: t.nombre || t.id
               };
             }
-            break; // Pasamos a la siguiente trayectoria si ya detectamos choque en este path
+            break;
           }
         }
       }
       return best;
+    }
+
+    // Pre-carga en paralelo los KMLs de todas las procesiones activas
+    async function _preloadKmls() {
+      const list = window._semanaSantaActiveList || [];
+      await Promise.all(list.filter(t => t.rutaMapa && !_kmlCoordsCache[t.id])
+        .map(t => _loadKmlCoords(t.id, t.rutaMapa)));
     }
 
     // Helper interno: llama a Routes API y devuelve TODAS las rutas o null
@@ -2162,6 +2212,9 @@
       const hasTronos = evitarTronosEnabled && (window._semanaSantaActiveList || []).some(t =>
         t.trackers && t.trackers.some(tr => tr.activo === 1)
       );
+
+      // V.15.8.13: Pre-cargar KMLs de todas las procesiones activas
+      if (hasTronos) await _preloadKmls();
 
       const baseBody = {
         origin: { location: { latLng: { latitude: origin.lat, longitude: origin.lng } } },
@@ -17983,7 +18036,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.8.12
+    EmerCRE V.15.8.13
   </div>
 </body>
 
