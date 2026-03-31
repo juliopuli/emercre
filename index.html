@@ -2089,6 +2089,14 @@
         const kmlCoords = t.rutaMapa ? (_kmlCoordsCache[t.rutaMapa] || []) : [];
         const ordenados = _sortTrackers(activos);
 
+        // DIAGNÓSTICO V.15.8.14
+        const cofNombre = t.nombre || t.id;
+        if (kmlCoords.length === 0) {
+          console.warn(`[BLOQ] ⚠️ Sin KML para "${cofNombre}" (rutaMapa=${t.rutaMapa ? 'sí' : 'no'}). Usando fallback tracker-segmentos.`);
+        } else {
+          console.log(`[BLOQ] ✅ KML OK de "${cofNombre}": ${kmlCoords.length} puntos totales.`);
+        }
+
         let wallCoords; // [[lat,lng], ...]
         if (kmlCoords.length >= 2) {
           wallCoords = _getOccupiedKmlSegment(kmlCoords, ordenados);
@@ -2103,7 +2111,12 @@
             wallCoords.push([ext.lat, ext.lng]);
           }
         }
-        if (wallCoords.length < 2) continue;
+        if (wallCoords.length < 2) {
+          console.warn(`[BLOQ] ⚠️ wallCoords vacío para "${cofNombre}", saltando.`);
+          continue;
+        }
+
+        console.log(`[BLOQ] Pared de "${cofNombre}" = ${wallCoords.length} puntos. R=${_BLOCK_R}m`);
 
         // Centro del muro para pivotar el rodeo
         const midWall = wallCoords[Math.floor(wallCoords.length / 2)];
@@ -18045,7 +18058,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.8.14
+    EmerCRE V.15.8.14d
   </div>
 </body>
 
