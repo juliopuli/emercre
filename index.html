@@ -1987,57 +1987,46 @@
       });
     }
 
-    // Construye los waypoints de bypass (intermediates via) para evitar todos los corredores activos.
-    // V.15.8.2: Nunca omite procesiones aunque el destino esté en su calle — siempre busca camino alternativo.
-    // Devuelve array de {latitude, longitude} para la Routes API.
-    function _buildTronosBypassWaypoints(originLat, originLng, destLat, destLng) {
+    // V.15.8.4: Detecta el primer punto de la ruta decodificada que está dentro de
+    // BLOCK_R metros de cualquier tracker activo. Devuelve info sobre el bloqueo o null.
+    const _BLOCK_R = 35; // metros — radio de "calle cortada"
+    function _findRouteBlockage(decodedPath) {
       const list = window._semanaSantaActiveList || [];
-      const waypoints = [];
+      let best = null; // { pathIdx, trackerLat, trackerLng, routeBearing }
 
-      list.forEach(t => {
-        if (!t.trackers || t.trackers.length === 0) return;
+      for (const t of list) {
+        if (!t.trackers) continue;
         const activos = t.trackers.filter(tr => tr.activo === 1);
-        if (activos.length === 0) return;
+        if (!activos.length) continue;
 
-        const sorted = _sortTrackers(activos);
-        const head = sorted[0]; // Cruz Guía — cabeza
-        const tail = sorted[sorted.length - 1]; // último tracker — cola
+        for (let i = 0; i < decodedPath.length; i++) {
+          const pt = decodedPath[i];
+          const pLat = typeof pt.lat === 'function' ? pt.lat() : pt.lat;
+          const pLng = typeof pt.lng === 'function' ? pt.lng() : pt.lng;
 
-        const headLat = parseFloat(head.lat), headLng = parseFloat(head.long);
-        const tailLat = parseFloat(tail.lat), tailLng = parseFloat(tail.long);
-        if (isNaN(headLat) || isNaN(headLng) || isNaN(tailLat) || isNaN(tailLng)) return;
-
-        // Ángulo de marcha de la procesión (cabeza→cola)
-        const marchBear = _bearingRad(headLat, headLng, tailLat, tailLng);
-
-        // Punto 100m detrás de la cola (en la misma dirección de marcha)
-        const bufferPt = _offsetLatLng(tailLat, tailLng, 100, marchBear);
-
-        // Centroide del corredor completo (head → bufferPt)
-        const cLat = (headLat + bufferPt.lat) / 2;
-        const cLng = (headLng + bufferPt.lng) / 2;
-
-        // Vector perpendicular al corredor (rotar 90° = marchBear + π/2)
-        const perpBear = marchBear + Math.PI / 2;
-
-        // Elegir el lado perpendicular más cercano al midpoint origen→destino
-        const midLat = (originLat + destLat) / 2;
-        const midLng = (originLng + destLng) / 2;
-        const ptLeft = _offsetLatLng(cLat, cLng, 80, perpBear);
-        const ptRight = _offsetLatLng(cLat, cLng, 80, perpBear + Math.PI);
-        const distLeft = _distMetros(midLat, midLng, ptLeft.lat, ptLeft.lng);
-        const distRight = _distMetros(midLat, midLng, ptRight.lat, ptRight.lng);
-        const bypassPt = distLeft <= distRight ? ptLeft : ptRight;
-
-        waypoints.push({ latitude: bypassPt.lat, longitude: bypassPt.lng });
-        console.log(`[V.15.8.2] Tronos bypass para "${t.nombre}": (${bypassPt.lat.toFixed(5)}, ${bypassPt.lng.toFixed(5)})`);
-      });
-
-      return waypoints;
+          for (const tr of activos) {
+            const tLat = parseFloat(tr.lat), tLng = parseFloat(tr.long);
+            if (isNaN(tLat) || isNaN(tLng)) continue;
+            if (_distMetros(pLat, pLng, tLat, tLng) <= _BLOCK_R) {
+              if (!best || i < best.pathIdx) {
+                // Ángulo de la ruta en ese punto
+                const nxt = decodedPath[Math.min(i + 1, decodedPath.length - 1)];
+                const nLat = typeof nxt.lat === 'function' ? nxt.lat() : nxt.lat;
+                const nLng = typeof nxt.lng === 'function' ? nxt.lng() : nxt.lng;
+                best = {
+                  pathIdx: i, trackerLat: tLat, trackerLng: tLng,
+                  routeBearing: _bearingRad(pLat, pLng, nLat, nLng)
+                };
+              }
+              break;
+            }
+          }
+        }
+      }
+      return best;
     }
 
-
-    // Helper interno: llama a Routes API y devuelve {route} o null
+    // Helper interno: llama a Routes API y devuelve route o null
     async function _fetchRoute(bodyObj) {
       const res = await fetch(
         `https://routes.googleapis.com/directions/v2:computeRoutes?key=${activeMapsApiKey}`,
@@ -2053,7 +2042,7 @@
       window.incrementApiUsage('maps_route');
       const data = await res.json();
       if (data.routes && data.routes.length > 0) return data.routes[0];
-      console.warn('[V.15.8.1] Routes API devolvió vacío:', data?.error?.message || JSON.stringify(data).substring(0, 200));
+      console.warn('[V.15.8.4] Routes API vacío:', data?.error?.message || JSON.stringify(data).substring(0, 150));
       return null;
     }
 
@@ -2075,7 +2064,7 @@
       mapPreventivos.fitBounds(bounds, 60);
     }
 
-    // Función principal: calcular ruta desde el vehículo hasta la intervención
+    // V.15.8.4: Función principal — ruta con calles de tronos tratadas como cortadas
     window.calcularRutaParaRecurso = async (vehicleId, intervencionId) => {
       const btn = document.getElementById(`btn-calc-ruta-${vehicleId}`);
       const resultEl = document.getElementById(`route-result-${vehicleId}`);
@@ -2090,7 +2079,7 @@
         return;
       }
 
-      // 2. Destino: coordenadas de la intervención
+      // 2. Destino: coordenadas de la intervención (soporta override de caché)
       const interv = intervencionesCache[intervencionId];
       if (!interv || !interv.coords || isNaN(interv.coords.lat)) {
         if (btn) { btn.disabled = false; btn.textContent = '🗺️ Ruta'; }
@@ -2099,7 +2088,18 @@
       }
       const dest = interv.coords;
 
-      // Base del body para Routes API
+      // 3. Cargar datos de tronos aunque la capa esté apagada
+      if (evitarTronosEnabled) {
+        const lst = window._semanaSantaActiveList;
+        if (!Array.isArray(lst) || lst.length === 0) {
+          try { await window.cargarSemanaSantaData(true); } catch (_) {}
+        }
+      }
+
+      const hasTronos = evitarTronosEnabled && (window._semanaSantaActiveList || []).some(t =>
+        t.trackers && t.trackers.some(tr => tr.activo === 1)
+      );
+
       const baseBody = {
         origin: { location: { latLng: { latitude: origin.lat, longitude: origin.lng } } },
         destination: { location: { latLng: { latitude: dest.lat, longitude: dest.lng } } },
@@ -2109,74 +2109,84 @@
       };
 
       try {
-        let route = null;
+        // 4. Calcular ruta base (sin restricciones)
+        let route = await _fetchRoute(baseBody);
         let usedAvoidance = false;
 
-        // 3. V.15.8.2: Cargar datos de tronos aunque la capa de Semana Santa esté desactivada
-        if (evitarTronosEnabled) {
-          const listStatus = window._semanaSantaActiveList;
-          if (!Array.isArray(listStatus) || listStatus.length === 0) {
-            try { await window.cargarSemanaSantaData(true); } catch (_) {}
+        // 5. Si hay tronos, iterar detectando bloqueos en el trayecto real
+        if (hasTronos && route && google.maps.geometry) {
+          let currentBody = { ...baseBody };
+          const viaWps = []; // acumulados entre iteraciones
+
+          for (let attempt = 0; attempt < 4; attempt++) {
+            const path = google.maps.geometry.encoding.decodePath(route.polyline.encodedPolyline);
+            const blockage = _findRouteBlockage(path);
+            if (!blockage) break; // Ruta limpia, terminar
+
+            // Perpendicular al sentido de la ruta en el punto bloqueado
+            const perpBear = blockage.routeBearing + Math.PI / 2;
+            const ptL = _offsetLatLng(blockage.trackerLat, blockage.trackerLng, 90, perpBear);
+            const ptR = _offsetLatLng(blockage.trackerLat, blockage.trackerLng, 90, perpBear + Math.PI);
+
+            // Elegir el lado que NO lleva al interior del corredor
+            // (el más cercano al midpoint origen→destino)
+            const midLat = (origin.lat + dest.lat) / 2;
+            const midLng = (origin.lng + dest.lng) / 2;
+            const bypassPt = _distMetros(midLat, midLng, ptL.lat, ptL.lng) <= _distMetros(midLat, midLng, ptR.lat, ptR.lng)
+              ? ptL : ptR;
+
+            console.log(`[V.15.8.4] Intento ${attempt+1}: bypass en (${bypassPt.lat.toFixed(5)}, ${bypassPt.lng.toFixed(5)})`);
+
+            viaWps.push({ via: true, location: { latLng: { latitude: bypassPt.lat, longitude: bypassPt.lng } } });
+
+            const tryBody = { ...baseBody, intermediates: [...viaWps] };
+            const tryRoute = await _fetchRoute(tryBody);
+
+            if (tryRoute) {
+              route = tryRoute;
+              currentBody = tryBody;
+              usedAvoidance = true;
+            } else {
+              // Intentar lado contrario
+              const bypassAlt = bypassPt === ptL ? ptR : ptL;
+              viaWps[viaWps.length - 1] = { via: true, location: { latLng: { latitude: bypassAlt.lat, longitude: bypassAlt.lng } } };
+              const tryBody2 = { ...baseBody, intermediates: [...viaWps] };
+              const tryRoute2 = await _fetchRoute(tryBody2);
+              if (tryRoute2) {
+                route = tryRoute2;
+                currentBody = tryBody2;
+                usedAvoidance = true;
+              } else {
+                viaWps.pop(); // descartar este waypoint y salir
+                break;
+              }
+            }
           }
-        }
-
-        const hasTronos = (window._semanaSantaActiveList || []).some(t =>
-          t.trackers && t.trackers.some(tr => tr.activo === 1)
-        );
-
-        if (evitarTronosEnabled && hasTronos) {
-          const bypassWaypoints = _buildTronosBypassWaypoints(
-            origin.lat, origin.lng, dest.lat, dest.lng
-          );
-
-          if (bypassWaypoints.length > 0) {
-            const bodyWithAvoid = {
-              ...baseBody,
-              intermediates: bypassWaypoints.map(wp => ({
-                via: true,
-                location: { latLng: wp }
-              }))
-            };
-            console.log(`[V.15.8.2] Intentando ruta con ${bypassWaypoints.length} waypoints de evitación...`);
-            route = await _fetchRoute(bodyWithAvoid);
-            if (route) usedAvoidance = true;
-          }
-        }
-
-        // 4. Fallback: si la evitación falló (waypoints fuera de carretera, etc.) → ruta normal
-        if (!route) {
-          if (evitarTronosEnabled && hasTronos) {
-            console.warn('[V.15.8.1] Fallback: calculando ruta normal (evitación falló)');
-          }
-          route = await _fetchRoute(baseBody);
         }
 
         if (btn) { btn.disabled = false; btn.textContent = '🗺️ Ruta'; }
 
         if (!route) {
-          mostrarToast('❌ No se pudo calcular la ruta (sin conexión o sin cobertura de calles)');
-          console.error('[V.15.8.1] Routes API no devolvió ninguna ruta');
+          mostrarToast('❌ No se pudo calcular la ruta');
           return;
         }
 
-        // 5. Dibujar ruta en mapa preventivos
+        // 6. Dibujar y mostrar resultado
         activeIntRouteId = intervencionId;
         _drawPrevRoutePolyline(route.polyline?.encodedPolyline);
 
-        // 6. Mostrar resultado bajo el botón
         const distM = route.distanceMeters || route.legs?.[0]?.distanceMeters;
         const durS = route.duration || route.legs?.[0]?.duration;
         if (resultEl) {
           resultEl.innerHTML = `📍 <b>${formatDistance(distM)}</b> · ⏱ <b>${formatDuration(durS)}</b>`;
           resultEl.style.display = 'block';
         }
-
         const label = usedAvoidance ? ' 🕊️' : '';
         mostrarToast(`Ruta calculada${label}: ${formatDistance(distM)}, ${formatDuration(durS)}`);
 
       } catch (e) {
         if (btn) { btn.disabled = false; btn.textContent = '🗺️ Ruta'; }
-        console.error('[V.15.8.1] Error de red calculando ruta:', e);
+        console.error('[V.15.8.4] Error calculando ruta:', e);
         mostrarToast('❌ Error de red calculando ruta');
       }
     };
@@ -9731,6 +9741,8 @@ ${dataContext}
             actualizadoEn: serverTimestamp()
           };
 
+          let newCreatedIntId = null; // V.15.8.4: ID de la intervención recién creada
+
           if (isEdit) {
             await updateDoc(doc(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones', editIntervencionId), data);
             mostrarToast('Intervención actualizada.');
@@ -9766,7 +9778,11 @@ ${dataContext}
 
             data.comentarios = initialComms;
 
-            await addDoc(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones'), data);
+            // V.15.8.4: Capturar el ID devuelto por addDoc
+            const newIntRef = await addDoc(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones'), data);
+            newCreatedIntId = newIntRef.id;
+            // Pre-popular la caché para que calcularRutaParaRecurso encuentre los coords inmediatamente
+            intervencionesCache[newCreatedIntId] = { ...data, abierta: true };
             mostrarToast('Intervención registrada.');
           }
           window.cerrarModalPreventivoIntervencion();
@@ -9778,22 +9794,9 @@ ${dataContext}
 
           if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
 
-          // V.15.8.3: Auto-calcular ruta para el primer recurso asignado al crear la intervención
-          if (!isEdit && recs && recs.length > 0 && data.coords) {
-            // Esperar un tick para que Firestore actualice la caché local
-            setTimeout(async () => {
-              try {
-                const intSnap = await getDocs(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones'));
-                const newIntDoc = intSnap.docs.find(d => {
-                  const dd = d.data();
-                  return dd.descripcion === data.descripcion && dd.abierta === true && !intervencionesCache[d.id];
-                });
-                const newIntId = newIntDoc?.id || null;
-                if (newIntId) {
-                  await window.calcularRutaParaRecurso(recs[0], newIntId);
-                }
-              } catch (_) {}
-            }, 1200);
+          // V.15.8.4: Auto-calcular ruta para el primer recurso al crear intervención
+          if (!isEdit && recs && recs.length > 0 && newCreatedIntId) {
+            window.calcularRutaParaRecurso(recs[0], newCreatedIntId).catch(_ => {});
           }
         } catch (e) {
           console.error("[CreateInt] Error:", e);
