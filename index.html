@@ -2023,8 +2023,8 @@
         // Elegir el lado perpendicular más cercano al midpoint origen→destino
         const midLat = (originLat + destLat) / 2;
         const midLng = (originLng + destLng) / 2;
-        const ptLeft = _offsetLatLng(cLat, cLng, 350, perpBear);
-        const ptRight = _offsetLatLng(cLat, cLng, 350, perpBear + Math.PI);
+        const ptLeft = _offsetLatLng(cLat, cLng, 80, perpBear);
+        const ptRight = _offsetLatLng(cLat, cLng, 80, perpBear + Math.PI);
         const distLeft = _distMetros(midLat, midLng, ptLeft.lat, ptLeft.lng);
         const distRight = _distMetros(midLat, midLng, ptRight.lat, ptRight.lng);
         const bypassPt = distLeft <= distRight ? ptLeft : ptRight;
@@ -9777,6 +9777,24 @@ ${dataContext}
           }
 
           if (typeof window.refreshGlobalPreventivoMarkers === 'function') window.refreshGlobalPreventivoMarkers();
+
+          // V.15.8.3: Auto-calcular ruta para el primer recurso asignado al crear la intervención
+          if (!isEdit && recs && recs.length > 0 && data.coords) {
+            // Esperar un tick para que Firestore actualice la caché local
+            setTimeout(async () => {
+              try {
+                const intSnap = await getDocs(collection(db, 'preventivos', currentPreventivoId, 'subpreventivos', currentPreventivoDiaId, 'intervenciones'));
+                const newIntDoc = intSnap.docs.find(d => {
+                  const dd = d.data();
+                  return dd.descripcion === data.descripcion && dd.abierta === true && !intervencionesCache[d.id];
+                });
+                const newIntId = newIntDoc?.id || null;
+                if (newIntId) {
+                  await window.calcularRutaParaRecurso(recs[0], newIntId);
+                }
+              } catch (_) {}
+            }, 1200);
+          }
         } catch (e) {
           console.error("[CreateInt] Error:", e);
           alert('Error: ' + e.message);
@@ -10386,6 +10404,12 @@ ${dataContext}
 
         if (!i || !pm || !contentCont) return;
 
+        // V.15.8.3: Limpiar ruta anterior si cambiamos de intervención
+        if (activeIntManageId !== id && prevRoutePolyline) {
+          prevRoutePolyline.setMap(null); prevRoutePolyline = null;
+          activeIntRouteId = null;
+        }
+
         activeIntManageId = id;
         pm.classList.add('open');
         titleCont.innerText = i.descripcion || 'Sin descripción';
@@ -10728,6 +10752,10 @@ ${dataContext}
           mostrarToast('Recurso asignado');
           // V.12.4.1: Refrescar modal forzando apertura
           abrirGestionIntervencion(id, true);
+          // V.15.8.3: Auto-calcular ruta para el recurso recién asignado
+          setTimeout(() => {
+            window.calcularRutaParaRecurso(recurso, id).catch(_ => {});
+          }, 400);
         } catch (e) { console.error(e); }
       };
 
