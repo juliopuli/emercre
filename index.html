@@ -1987,13 +1987,12 @@
       });
     }
 
-    // Construye los waypoints de bypass (intermediates via) para evitar todos los corredores activos
-    // destLat2/destLng2: coordenadas del destino para omitir la procesión si el destino está en su corredor
-    // Devuelve array de {latitude, longitude} para la Routes API
-    function _buildTronosBypassWaypoints(originLat, originLng, destLat, destLng, destLat2, destLng2) {
+    // Construye los waypoints de bypass (intermediates via) para evitar todos los corredores activos.
+    // V.15.8.2: Nunca omite procesiones aunque el destino esté en su calle — siempre busca camino alternativo.
+    // Devuelve array de {latitude, longitude} para la Routes API.
+    function _buildTronosBypassWaypoints(originLat, originLng, destLat, destLng) {
       const list = window._semanaSantaActiveList || [];
       const waypoints = [];
-      const skipRadiusM = 150; // si el destino está a ≤150m de cualquier tracker, omitir esta cofradía
 
       list.forEach(t => {
         if (!t.trackers || t.trackers.length === 0) return;
@@ -2008,20 +2007,6 @@
         const tailLat = parseFloat(tail.lat), tailLng = parseFloat(tail.long);
         if (isNaN(headLat) || isNaN(headLng) || isNaN(tailLat) || isNaN(tailLng)) return;
 
-        // V.15.8.1: Si el destino está muy cerca de cualquier tracker de esta cofradía, no intentar evitar:
-        // La ambulancia va HACIA la calle del trono — la API no puede trazar un bypass en ese caso.
-        if (destLat2 !== undefined && destLng2 !== undefined) {
-          const tooClose = activos.some(tr => {
-            const tLat = parseFloat(tr.lat), tLng = parseFloat(tr.long);
-            if (isNaN(tLat) || isNaN(tLng)) return false;
-            return _distMetros(destLat2, destLng2, tLat, tLng) <= skipRadiusM;
-          });
-          if (tooClose) {
-            console.log(`[V.15.8.1] Omitiendo bypass de "${t.nombre}": destino muy cercano al corredor`);
-            return; // skip esta cofradía
-          }
-        }
-
         // Ángulo de marcha de la procesión (cabeza→cola)
         const marchBear = _bearingRad(headLat, headLng, tailLat, tailLng);
 
@@ -2035,7 +2020,7 @@
         // Vector perpendicular al corredor (rotar 90° = marchBear + π/2)
         const perpBear = marchBear + Math.PI / 2;
 
-        // Calcular qué lado del perpendicular está más cerca del midpoint origen→destino
+        // Elegir el lado perpendicular más cercano al midpoint origen→destino
         const midLat = (originLat + destLat) / 2;
         const midLng = (originLng + destLng) / 2;
         const ptLeft = _offsetLatLng(cLat, cLng, 350, perpBear);
@@ -2045,7 +2030,7 @@
         const bypassPt = distLeft <= distRight ? ptLeft : ptRight;
 
         waypoints.push({ latitude: bypassPt.lat, longitude: bypassPt.lng });
-        console.log(`[V.15.8.1] Tronos bypass para "${t.nombre}": (${bypassPt.lat.toFixed(5)}, ${bypassPt.lng.toFixed(5)})`);
+        console.log(`[V.15.8.2] Tronos bypass para "${t.nombre}": (${bypassPt.lat.toFixed(5)}, ${bypassPt.lng.toFixed(5)})`);
       });
 
       return waypoints;
@@ -2127,17 +2112,21 @@
         let route = null;
         let usedAvoidance = false;
 
-        // 3. Intentar con evitación si el switch está activo y hay tronos
+        // 3. V.15.8.2: Cargar datos de tronos aunque la capa de Semana Santa esté desactivada
+        if (evitarTronosEnabled) {
+          const listStatus = window._semanaSantaActiveList;
+          if (!Array.isArray(listStatus) || listStatus.length === 0) {
+            try { await window.cargarSemanaSantaData(true); } catch (_) {}
+          }
+        }
+
         const hasTronos = (window._semanaSantaActiveList || []).some(t =>
           t.trackers && t.trackers.some(tr => tr.activo === 1)
         );
 
         if (evitarTronosEnabled && hasTronos) {
-          // V.15.8.1: Excluir cofradías cuyo corredor esté muy cerca del destino
-          // (el destino EN la calle del trono: no podemos evitarlo, solo llegar lo más cerca posible)
           const bypassWaypoints = _buildTronosBypassWaypoints(
-            origin.lat, origin.lng, dest.lat, dest.lng,
-            dest.lat, dest.lng  // se pasa destino para filtrado interno
+            origin.lat, origin.lng, dest.lat, dest.lng
           );
 
           if (bypassWaypoints.length > 0) {
@@ -2148,7 +2137,7 @@
                 location: { latLng: wp }
               }))
             };
-            console.log(`[V.15.8.1] Intentando ruta con ${bypassWaypoints.length} waypoints de evitación...`);
+            console.log(`[V.15.8.2] Intentando ruta con ${bypassWaypoints.length} waypoints de evitación...`);
             route = await _fetchRoute(bodyWithAvoid);
             if (route) usedAvoidance = true;
           }
@@ -2182,7 +2171,7 @@
           resultEl.style.display = 'block';
         }
 
-        const label = usedAvoidance ? ' 🕊️ (evitando tronos)' : (evitarTronosEnabled && hasTronos ? ' ⚠️ (ruta directa, tronos no evitables)' : '');
+        const label = usedAvoidance ? ' 🕊️' : '';
         mostrarToast(`Ruta calculada${label}: ${formatDistance(distM)}, ${formatDuration(durS)}`);
 
       } catch (e) {
