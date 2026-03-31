@@ -65,15 +65,32 @@
       const monthId = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
       const dayId = `${monthId}-${String(now.getDate()).padStart(2, '0')}`;
 
+      // V.15.7.0: Determinar qué cuenta está activa para desglose por cuenta.
+      // activeMapsApiKey se asigna en cargarGoogleMaps() ANTES de cualquier await,
+      // por lo que siempre estará disponible cuando se llame a esta función.
+      let activeKeyLabel = 'key1'; // fallback seguro
       try {
-        // Guardamos por mes (para Maps) y por día (Gemini/Firestore)
+        if (typeof activeMapsApiKey === 'string' && activeMapsApiKey.length > 10) {
+          const isKey2 = (activeMapsApiKey === "__GOOGLE_MAPS_API_KEY_2__");
+          activeKeyLabel = isKey2 ? 'key2' : 'key1';
+        }
+      } catch (_) { /* silencioso */ }
+
+      try {
         const monthRef = doc(db, 'api_usage', monthId);
         const dayRef = doc(db, 'api_usage', dayId);
 
         const updates = {};
         updates[type] = increment(amount);
 
-        // Actualizar ambos (si falla alguno no importa demasiado, es para estadística)
+        // Para llamadas de Maps, añadir también el desglose por cuenta:
+        // p.ej. maps_geocode_key1 o maps_geocode_key2
+        const isMapsCall = type.startsWith('maps_');
+        if (isMapsCall) {
+          updates[`${type}_${activeKeyLabel}`] = increment(amount);
+        }
+
+        // Guardamos por mes (Maps) y por día (Gemini/Firestore)
         await Promise.all([
           setDoc(monthRef, updates, { merge: true }),
           setDoc(dayRef, updates, { merge: true })
@@ -268,7 +285,7 @@
             formatted_address: results[0].formatted_address
           };
           geocodeCache[key] = res;
-          window.incrementApiUsage('maps_places'); // Se cuenta como uso de geocoding
+          window.incrementApiUsage('maps_geocode'); // V.15.7.0: etiqueta correcta
           callback(res);
         } else {
           callback(null);
@@ -300,6 +317,7 @@
           if (status === 'OK' && results[0]) {
             reverseGeocodeCache[key] = results[0].formatted_address;
             _saveRgcCache();
+            window.incrementApiUsage('maps_geocode'); // V.15.7.0: contabilizar reverse geocode
             callback(results[0].formatted_address);
           } else {
             // V.15.0.15: Guardamos el fallo para evitar martillear la API
@@ -375,6 +393,7 @@
             body: JSON.stringify(body)
           }
         );
+        window.incrementApiUsage('maps_route'); // V.15.7.0: solo en peticiones reales, no cache hits
         const data = await res.json();
 
         if (data.routes && data.routes.length > 0) {
@@ -1819,7 +1838,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.0.16 Loaded');
+    console.log('EmerCRE V.15.7.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -1867,7 +1886,7 @@
       btn.disabled = true; btn.textContent = '...';
       if (info) info.style.display = 'none';
 
-      window.incrementApiUsage('maps_route');
+      // V.15.7.0: maps_route se contabiliza dentro de calculateRouteWithCache
       calculateRouteWithCache(origin, dest, null, (result, status) => {
         btn.disabled = false; btn.textContent = 'Calcular';
         if (status === 'OK') {
@@ -2605,35 +2624,43 @@
     // Cargar Google Maps dinámicamente para asegurar que los callbacks estén listos
     // Cargar Google Maps dinámicamente (V.12.4.1)
     async function cargarGoogleMaps() {
-      // Las claves están configuradas internamente para evitar que aparezcan en el panel de decisión
+      // V.15.7.0: Las claves se inyectan vía GitHub Secrets en el build.
       const MAPS_KEYS = {
-        key1: "__GOOGLE_MAPS_API_KEY__", // Cuenta Principal (Vía GitHub Secrets)
-        key2: "__GOOGLE_MAPS_API_KEY_2__"  // Cuenta Nueva
+        key1: "__GOOGLE_MAPS_API_KEY__",   // Cuenta Principal
+        key2: "__GOOGLE_MAPS_API_KEY_2__"  // Cuenta Alternativa
       };
 
-      let apiKey = MAPS_KEYS.key1;
+      // CRÍTICO: asignar activeMapsApiKey ANTES del primer await.
+      // Si Firestore tarda o falla, activeMapsApiKey ya apunta a key1
+      // y no quedará null cuando el Geocoder o Routes API la necesiten.
+      activeMapsApiKey = MAPS_KEYS.key1;
+      let selectedKey = 'key1';
 
       try {
         const mapsSnap = await getDoc(doc(db, 'config', 'maps'));
         if (mapsSnap.exists()) {
           const cfg = mapsSnap.data();
           if (cfg.activeKey === 'key2') {
-            apiKey = MAPS_KEYS.key2;
-            console.log("🗺️ Usando Google Maps API Key: Cuenta 2 (Alternativa)");
+            selectedKey = 'key2';
+            activeMapsApiKey = MAPS_KEYS.key2;
+            console.log("🗺️ Google Maps: Cuenta 2 (Alternativa) seleccionada");
           } else {
-            console.log("🗺️ Usando Google Maps API Key: Cuenta 1 (Principal)");
+            console.log("🗺️ Google Maps: Cuenta 1 (Principal) seleccionada");
           }
+        } else {
+          console.log("🗺️ Google Maps: doc config/maps no existe, usando Cuenta 1");
         }
       } catch (e) {
-        console.warn("Error leyendo config de Mapas, usando cuenta principal:", e);
+        console.warn("🗺️ Error leyendo config/maps — manteniendo Cuenta 1:", e);
       }
 
+      console.log(`🗺️ activeMapsApiKey = ${selectedKey} (${activeMapsApiKey.substring(0, 8)}...)`);
+
       const script = document.createElement('script');
-      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,marker,geometry&callback=onGoogleMapsReady&language=es&loading=async`;
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${activeMapsApiKey}&libraries=places,marker,geometry&callback=onGoogleMapsReady&language=es&loading=async`;
       script.async = true;
       script.defer = true;
       document.head.appendChild(script);
-      activeMapsApiKey = apiKey; // V.15.2.0: Guardar para Routes API REST
     }
     cargarGoogleMaps();
 
@@ -7036,6 +7063,7 @@ ${dataContext}
           } catch (e) { }
         }
 
+        window.incrementApiUsage('maps_load'); // V.15.7.0: contabilizar carga mapa preventivos
         mapPreventivos = new google.maps.Map(mapDiv, {
           center: initialCenter,
           zoom: initialZoom,
@@ -17520,7 +17548,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.6.3
+    EmerCRE V.15.7.0
   </div>
 </body>
 
