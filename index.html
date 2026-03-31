@@ -2220,18 +2220,19 @@
                 break; // limpia!
               }
 
-              // Estrategia V.15.8.9: "Extrarradio / Nodos Perimetrales Málaga"
-              // Usamos coordenadas reales de las grandes avenidas de Málaga para evitar que la API 
-              // intente atajos marítimos (ej. ferry a Ceuta) al usar distancias fijas hacia el Sur.
+              // Estrategia V.15.8.10: "Extrarradio / Nodos Perimetrales Málaga"
+              // Usamos coordenadas precisas para evitar que los waypoints caigan dentro del recinto
+              // portuario (lo cual obliga a la API a coger un ferry a Melilla/Ceuta para salir del bloqueo).
               const MALAGA_RING_NODES = [
-                { lat: 36.715694, lng: -4.417933 }, // Sur: Muelle Heredia 
+                { lat: 36.718305, lng: -4.413783 }, // Sur: Paseo de los Curas (vía rápida muy segura)
+                { lat: 36.716500, lng: -4.423000 }, // Sur-Oeste: Muelle Heredia oeste (lejos del puerto)
                 { lat: 36.713831, lng: -4.426214 }, // Suroeste: Plaza de Toros Vieja / Rio
                 { lat: 36.717143, lng: -4.432240 }, // Oeste: Av. Andalucía (Corte Inglés)
-                { lat: 36.721666, lng: -4.427774 }, // Noroeste: Armengual de la Mota
-                { lat: 36.725178, lng: -4.423719 }, // Norte-Oeste 2: Gálvez Ginachero
-                { lat: 36.732926, lng: -4.422501 }, // Norte: Capuchinos / Eduardo Domínguez Ávila
-                { lat: 36.731451, lng: -4.412174 }, // Este: Cristo Epidemia / Victoria
-                { lat: 36.721415, lng: -4.410141 }, // Sureste: Paseo Reding / Túnel Alcazaba
+                { lat: 36.721477, lng: -4.426021 }, // Noroeste: Armengual de la Mota cruzando Hilera
+                { lat: 36.725916, lng: -4.425109 }, // Norte-Oeste 2: Gálvez Ginachero / Hospital Civil
+                { lat: 36.733075, lng: -4.422363 }, // Norte: Capuchinos / Eduardo Domínguez Ávila
+                { lat: 36.731306, lng: -4.412198 }, // Este: Cristo Epidemia / Victoria
+                { lat: 36.722606, lng: -4.414030 }, // Sureste: Túnel Alcazaba
               ];
 
               let candidates = [...MALAGA_RING_NODES];
@@ -17986,7 +17987,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.8.9
+    EmerCRE V.15.8.10
   </div>
 </body>
 
