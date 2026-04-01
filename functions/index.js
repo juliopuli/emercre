@@ -209,6 +209,42 @@ exports.getSemanaSantaData = functions.https.onCall(async (data, context) => {
     }
 });
 
+// 0.9. KML Coords Proxy — descarga y parsea un KML de El Penitente server-side (V.15.8.15)
+// El cliente no puede hacer fetch() directo a elpenitente.app por CSP; esto actúa de proxy.
+exports.getKmlCoords = functions.https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "Debe estar autenticado.");
+    }
+
+    const { url } = data;
+    if (!url || !url.startsWith("https://elpenitente.app/")) {
+        throw new functions.https.HttpsError("invalid-argument", "URL no permitida.");
+    }
+
+    try {
+        const resp = await fetch(url, { headers: { "Accept": "application/xml, text/xml, */*" } });
+        if (!resp.ok) throw new Error("KML fetch error: " + resp.status);
+        const xml = await resp.text();
+
+        // Parsear la LineString del KML con regex (no hay DOMParser en Node)
+        const match = xml.match(/<coordinates[^>]*>([\s\S]*?)<\/coordinates>/i);
+        if (!match) return { coords: [] };
+
+        const coords = match[1].trim().split(/\s+/).map(c => {
+            const parts = c.split(",");
+            const lat = parseFloat(parts[1]);
+            const lng = parseFloat(parts[0]);
+            return (!isNaN(lat) && !isNaN(lng)) ? [lat, lng] : null;
+        }).filter(Boolean);
+
+        console.log(`[KML Proxy] ${url.split("/").pop()} → ${coords.length} puntos`);
+        return { coords };
+    } catch (error) {
+        console.error("[KML Proxy] Error:", error);
+        throw new functions.https.HttpsError("internal", error.message);
+    }
+});
+
 // 1. Gemini Content Generator Function (V.6.2.0)
 exports.generateGeminiContent = functions.https.onCall(async (data, context) => {
     if (!context.auth) {

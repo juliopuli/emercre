@@ -2016,17 +2016,15 @@
     async function _loadKmlCoords(rutaMapa) {
       if (_kmlCoordsCache[rutaMapa]) return _kmlCoordsCache[rutaMapa];
       try {
-        const xml = await fetch(rutaMapa).then(r => r.text());
-        const doc = new DOMParser().parseFromString(xml, 'text/xml');
-        const coordsText = doc.querySelector('LineString coordinates')?.textContent.trim() || '';
-        const coords = coordsText.split(/\s+/)
-          .map(c => { const p = c.split(','); return [parseFloat(p[1]), parseFloat(p[0])]; })
-          .filter(c => !isNaN(c[0]) && !isNaN(c[1]));
-        console.log(`[KML] Cargado: ${rutaMapa.split('/').pop()} → ${coords.length} puntos`);
+        // Usamos Cloud Function proxy para evitar restricción CORS/CSP del browser
+        const fn = firebase.functions().httpsCallable('getKmlCoords');
+        const result = await fn({ url: rutaMapa });
+        const coords = result.data.coords || [];
+        console.log(`[KML] Proxy OK: ${rutaMapa.split('/').pop()} → ${coords.length} puntos`);
         _kmlCoordsCache[rutaMapa] = coords;
         return coords;
       } catch (e) {
-        console.warn('[KML] Error cargando KML:', e);
+        console.warn('[KML] Error cargando KML via proxy:', e);
         _kmlCoordsCache[rutaMapa] = [];
         return [];
       }
@@ -18058,7 +18056,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.8.15
+    EmerCRE V.15.8.16
   </div>
 </body>
 
