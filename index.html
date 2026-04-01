@@ -1955,7 +1955,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.9.5 Loaded');
+    console.log('EmerCRE V.15.9.6 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3485,12 +3485,17 @@
         window.suscribirNotificacionesChat();
       }
       
-      // V.15.9.4: Global listener for open preventivos to trigger Oysta sync even if not in Preventivos section
-      onSnapshot(query(collection(db, 'preventivos'), where('abierta', '==', true)), snap => {
-        window._hasOpenPreventivos = !snap.empty;
-        console.log(`[Oysta] Global Open Preventivos: ${window._hasOpenPreventivos}`);
+      // V.15.9.6: Fix global listener for open preventivos (Docs might not explicitly have {abierta: true}, they default to open if !== false)
+      onSnapshot(query(collection(db, 'preventivos'), orderBy('creadoEn', 'desc'), limit(30)), snap => {
+        let hasOpen = false;
+        snap.forEach(doc => {
+          if (doc.data().abierta !== false && doc.data().oculta !== true) {
+            hasOpen = true;
+          }
+        });
+        window._hasOpenPreventivos = hasOpen;
+        console.log(`[Oysta] Global Open Preventivos (bg scan): ${window._hasOpenPreventivos}`);
         if (window._hasOpenPreventivos && typeof cargarVehiculosOysta === 'function') {
-          // Trigger an immediate check if we just found an open preventivo
           cargarVehiculosOysta(false);
         }
       });
@@ -18234,7 +18239,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.9.5
+    EmerCRE V.15.9.6
   </div>
 </body>
 
