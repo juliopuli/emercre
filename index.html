@@ -2078,9 +2078,9 @@
       return seg.length >= 5 ? seg : kmlCoords;
     }
 
-    // V.15.8.18: Detecta el primer punto de la ruta decodificada que choca con
+    // V.15.8.19: Detecta el primer punto de la ruta decodificada que choca con
     // el tramo ocupado del KML real de la procesión.
-    const _BLOCK_R = 45; // metros — aumentado para evitar saltos (ajustable)
+    const _BLOCK_R = 45; // metros — radio de elusión
     function _findRouteBlockage(decodedPath) {
       const list = window._semanaSantaActiveList || [];
       let best = null;
@@ -2090,15 +2090,14 @@
       if (decodedPath.length > 0) {
         densePath.push(decodedPath[0]);
         for (let i = 1; i < decodedPath.length; i++) {
-          const p1 = decodedPath[i-1];
-          const p2 = decodedPath[i];
+          const p1 = decodedPath[i-1], p2 = decodedPath[i];
           const lat1 = typeof p1.lat === 'function' ? p1.lat() : p1.lat;
           const lng1 = typeof p1.lng === 'function' ? p1.lng() : p1.lng;
           const lat2 = typeof p2.lat === 'function' ? p2.lat() : p2.lat;
           const lng2 = typeof p2.lng === 'function' ? p2.lng() : p2.lng;
 
           const d = _distMetros(lat1, lng1, lat2, lng2);
-          if (d > 15) { // Si el segmento es largo (> 15m), interpolar puntos intermedios
+          if (d > 15 && d < 2000) { // Interpolar solo si tiene sentido (segmentos razonables)
             const steps = Math.floor(d / 15);
             for (let s = 1; s <= steps; s++) {
               densePath.push({
@@ -2116,23 +2115,13 @@
         const activos = t.trackers.filter(tr => tr.activo === 1);
         if (!activos.length) continue;
 
-        // Intentar usar KML cacheado por URL normalizada
         const kmlCoords = t.rutaMapa ? (_kmlCoordsCache[_normUrl(t.rutaMapa)] || []) : [];
         const ordenados = _sortTrackers(activos);
 
-        // DIAGNÓSTICO V.15.8.18
-        const cofNombre = t.nombre || t.id;
-        if (kmlCoords.length === 0) {
-          console.warn(`[BLOQ] ⚠️ Sin KML para "${cofNombre}" (key=${_normUrl(t.rutaMapa)}). Usando fallback tracker-segmentos.`);
-        } else {
-          console.log(`[BLOQ] ✅ KML OK de "${cofNombre}": ${kmlCoords.length} puntos totales.`);
-        }
-
-        let wallCoords; // [[lat,lng], ...]
+        let wallCoords; 
         if (kmlCoords.length >= 2) {
           wallCoords = _getOccupiedKmlSegment(kmlCoords, ordenados);
         } else {
-          // Fallback en cascada
           wallCoords = ordenados.map(tr => [parseFloat(tr.lat), parseFloat(tr.long)]);
           if (wallCoords.length >= 2) {
             const last = wallCoords[wallCoords.length - 1];
@@ -2144,14 +2133,23 @@
         }
         if (wallCoords.length < 2) continue;
 
-        console.log(`[BLOQ] Pared de "${cofNombre}" = ${wallCoords.length} puntos.`);
-
-        const midWall = wallCoords[Math.floor(wallCoords.length / 2)];
+        // --- OPTIMIZACIÓN V.15.8.19: Bounding Box (AABB) ---
+        let minLat =  90, maxLat = -90, minLng =  180, maxLng = -180;
+        for (const p of wallCoords) {
+          if (p[0] < minLat) minLat = p[0]; if (p[0] > maxLat) maxLat = p[0];
+          if (p[1] < minLng) minLng = p[1]; if (p[1] > maxLng) maxLng = p[1];
+        }
+        // Margen de seguridad para el AABB (aprox 100m)
+        const margin = 0.001; 
+        minLat -= margin; maxLat += margin; minLng -= margin; maxLng += margin;
 
         for (let i = 0; i < densePath.length; i++) {
           const pt   = densePath[i];
           const pLat = typeof pt.lat === 'function' ? pt.lat() : pt.lat;
           const pLng = typeof pt.lng === 'function' ? pt.lng() : pt.lng;
+
+          // Salto rápido si el punto está fuera del AABB de la procesión
+          if (pLat < minLat || pLat > maxLat || pLng < minLng || pLng > maxLng) continue;
 
           let collides = false;
           for (let j = 0; j < wallCoords.length - 1; j++) {
@@ -2163,6 +2161,7 @@
 
           if (collides) {
             if (!best) {
+              const midWall = wallCoords[Math.floor(wallCoords.length / 2)];
               const nxt  = densePath[Math.min(i + 1, densePath.length - 1)];
               const nLat = typeof nxt.lat === 'function' ? nxt.lat() : nxt.lat;
               const nLng = typeof nxt.lng === 'function' ? nxt.lng() : nxt.lng;
@@ -2171,7 +2170,7 @@
                 trackerLat: midWall[0],
                 trackerLng: midWall[1],
                 routeBearing: _bearingRad(pLat, pLng, nLat, nLng),
-                cofradia: cofNombre
+                cofradia: t.nombre || t.id
               };
             }
             break;
@@ -18088,7 +18087,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.8.18
+    EmerCRE V.15.8.19
   </div>
 </body>
 
