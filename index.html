@@ -1018,6 +1018,119 @@
       window.toggleSemanaSantaPanel();
     };
 
+    // ── DESA (DESFIBRILADORES) MÁLAGA CARDIOPROTEGIDA ─────────────
+    window.desaLayerEnabled = false;
+    let desaMarkers = {};
+    let desaInfoWindow = null;
+
+    window.toggleDESA = () => {
+      window.desaLayerEnabled = !window.desaLayerEnabled;
+      const btn = document.getElementById('btn-toggle-desa');
+      const btnPrev = document.getElementById('btn-toggle-desa-prev');
+      if (btn) btn.classList.toggle('active', window.desaLayerEnabled);
+      if (btnPrev) btnPrev.classList.toggle('active', window.desaLayerEnabled);
+
+      if (window.desaLayerEnabled) {
+        window.cargarDESAData();
+        mostrarToast('Capa DESA Málaga activa');
+      } else {
+        Object.values(desaMarkers).forEach(ms => {
+          if (ms.mEme) ms.mEme.setMap(null);
+          if (ms.mPrev) ms.mPrev.setMap(null);
+        });
+        desaMarkers = {};
+        mostrarToast('Capa DESA Málaga desactivada');
+      }
+    };
+
+    window.toggleDESAPrev = () => window.toggleDESA();
+
+    window.cargarDESAData = async () => {
+      if (!window.desaLayerEnabled) return;
+      try {
+        const res = await fetch('https://datosabiertos.malaga.eu/dataset/a455c822-e695-4fc4-abc9-b18f50a59a3a/resource/467c375a-8a74-40d7-a765-d5d160e13fe3/download/da_desfibriladores-4326.geojson');
+        const data = await res.json();
+        
+        if (!desaInfoWindow) {
+          desaInfoWindow = new google.maps.InfoWindow();
+        }
+
+        data.features.forEach(f => {
+          const coords = f.geometry.coordinates;
+          if (!coords || coords.length < 2 || (coords[0] === 0 && coords[1] === 0)) return;
+          const lat = coords[1];
+          const lng = coords[0];
+          const id = f.properties.ogc_fid || f.id;
+
+          if (!desaMarkers[id]) {
+            const mEmeEl = document.createElement('div');
+            mEmeEl.className = 'custom-marker';
+            mEmeEl.innerHTML = '⚡';
+            mEmeEl.style.backgroundColor = '#27ae60';
+            mEmeEl.style.borderRadius = '50%';
+            mEmeEl.style.padding = '4px';
+            mEmeEl.style.border = '2px solid white';
+            mEmeEl.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+            mEmeEl.style.fontSize = '14px';
+            mEmeEl.style.display = 'flex';
+            mEmeEl.style.alignItems = 'center';
+            mEmeEl.style.justifyContent = 'center';
+            mEmeEl.style.width = '24px';
+            mEmeEl.style.height = '24px';
+
+            let mEme = null;
+            if (mapEmergencias) {
+              mEme = new google.maps.marker.AdvancedMarkerElement({
+                position: { lat, lng },
+                map: mapEmergencias,
+                content: mEmeEl,
+                title: f.properties.nombre || 'DESA'
+              });
+              mEme.addListener('click', () => {
+                desaInfoWindow.setContent(`
+                  <div style="font-family: 'IBM Plex Sans', sans-serif; padding:5px; max-width:200px;">
+                    <h4 style="margin:0 0 5px 0;">⚡ ${f.properties.nombre || 'DESA'}</h4>
+                    <p style="margin:0 0 5px 0; font-size:12px;"><b>Ubicación:</b> ${f.properties.direccion || f.properties.descripcion || ''}</p>
+                    <p style="margin:0 0 5px 0; font-size:12px;"><b>Horario:</b> ${f.properties.horarios || 'No especificado'}</p>
+                    <p style="margin:0; font-size:12px;"><b>Titularidad:</b> ${f.properties.titularidad || ''}</p>
+                  </div>
+                `);
+                desaInfoWindow.open(mapEmergencias, mEme);
+              });
+            }
+
+            let mPrev = null;
+            if (mapPreventivos) {
+              const mPrevEl = mEmeEl.cloneNode(true);
+              mPrev = new google.maps.marker.AdvancedMarkerElement({
+                position: { lat, lng },
+                map: mapPreventivos,
+                content: mPrevEl,
+                title: f.properties.nombre || 'DESA'
+              });
+              mPrev.addListener('click', () => {
+                desaInfoWindow.setContent(`
+                  <div style="font-family: 'IBM Plex Sans', sans-serif; padding:5px; max-width:200px;">
+                    <h4 style="margin:0 0 5px 0;">⚡ ${f.properties.nombre || 'DESA'}</h4>
+                    <p style="margin:0 0 5px 0; font-size:12px;"><b>Ubicación:</b> ${f.properties.direccion || f.properties.descripcion || ''}</p>
+                    <p style="margin:0 0 5px 0; font-size:12px;"><b>Horario:</b> ${f.properties.horarios || 'No especificado'}</p>
+                    <p style="margin:0; font-size:12px;"><b>Titularidad:</b> ${f.properties.titularidad || ''}</p>
+                  </div>
+                `);
+                desaInfoWindow.open(mapPreventivos, mPrev);
+              });
+            }
+
+            desaMarkers[id] = { mEme, mPrev };
+          }
+        });
+
+      } catch (err) {
+        console.error('Error cargando datos de DESA:', err);
+        mostrarToast('Error cargando capa DESA');
+      }
+    };
+
     window.cargarSemanaSantaData = async (force = false) => {
       // V.14.5.5: Permitir sincronizar si al menos un mapa está listo
       if (!mapReady && !mapPreventivos) return;
@@ -1841,7 +1954,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.8.0 Loaded');
+    console.log('EmerCRE V.15.9.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -16216,6 +16329,7 @@ ${dataContext}
 
           <button id="btn-toggle-railway" class="map-btn-float" onclick="toggleRailwayPanel()">🛤️ Ferrocarril</button>
           <button id="btn-toggle-ais" class="map-btn-float" onclick="toggleAISPanel()">⚓ Marítimo</button>
+          <button id="btn-toggle-desa" class="map-btn-float" onclick="window.toggleDESA()" title="Desfibriladores Málaga">⚡ DESA</button>
           
           <!-- V.12.4.1: Buscador de direcciones -->
           <div class="map-search-container">
@@ -16623,6 +16737,7 @@ ${dataContext}
           <button id="btn-toggle-oysta-moving-prev" class="map-btn-float" onclick="toggleMovingOysta()"
             style="display:none;" title="Ver vehículos Oysta en movimiento">🚗 Movimiento</button>
           <button id="btn-toggle-semanasanta-prev" class="map-btn-float" onclick="toggleSemanaSantaPanel()" title="Semana Santa Málaga">✝️ S. Santa</button>
+          <button id="btn-toggle-desa-prev" class="map-btn-float" onclick="window.toggleDESAPrev()" title="Desfibriladores Málaga">⚡ DESA</button>
 
           <!-- V.12.4.1: Buscador de direcciones Preventivos -->
           <div class="map-search-container">
@@ -18087,7 +18202,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.8.19
+    EmerCRE V.15.9.0
   </div>
 </body>
 
