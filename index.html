@@ -2007,25 +2007,32 @@
       return Math.sqrt((xP - projX)**2 + (yP - projY)**2);
     }
 
-    // ── V.15.8.13: KML-BASED ROUTE BLOCKAGE DETECTION ────────────────────────────────
-    // Descarga y parsea el KML del itinerario real de cada procesión.
-    // Usa esas coordenadas calle a calle como pared sólida en _findRouteBlockage.
+    // Normaliza URLs para claves de caché consistentes
+    function _normUrl(url) {
+      if (!url) return '';
+      try {
+        const u = new URL(url);
+        return u.origin + u.pathname; // Quita query params y fragmentos
+      } catch(e) { return url.trim().toLowerCase(); }
+    }
 
-    const _kmlCoordsCache = {}; // rutaMapa URL → [[lat,lng], ...]
+    const _kmlCoordsCache = {}; // URL normalizada → [[lat,lng], ...]
 
     async function _loadKmlCoords(rutaMapa) {
-      if (_kmlCoordsCache[rutaMapa]) return _kmlCoordsCache[rutaMapa];
+      const key = _normUrl(rutaMapa);
+      if (!key) return [];
+      if (_kmlCoordsCache[key]) return _kmlCoordsCache[key];
       try {
         // Usamos Cloud Function proxy (v9 syntax) para evitar restricción CORS/CSP del browser
         const fn = httpsCallable(window.functions, 'getKmlCoords');
         const result = await fn({ url: rutaMapa });
-        const coords = result.data.coords || [];
-        console.log(`[KML] Proxy OK: ${rutaMapa.split('/').pop()} → ${coords.length} puntos`);
-        _kmlCoordsCache[rutaMapa] = coords;
+        const coords = (result.data && result.data.coords) || [];
+        console.log(`[KML] Proxy OK: ${key.split('/').pop()} → ${coords.length} puntos`);
+        _kmlCoordsCache[key] = coords;
         return coords;
       } catch (e) {
         console.warn('[KML] Error cargando KML via proxy:', e);
-        _kmlCoordsCache[rutaMapa] = [];
+        _kmlCoordsCache[key] = [];
         return [];
       }
     }
@@ -2071,26 +2078,52 @@
       return seg.length >= 5 ? seg : kmlCoords;
     }
 
-    // V.15.8.13: Detecta el primer punto de la ruta decodificada que choca con
+    // V.15.8.18: Detecta el primer punto de la ruta decodificada que choca con
     // el tramo ocupado del KML real de la procesión.
-    const _BLOCK_R = 35; // metros — ancho del corredor (ajustable)
+    const _BLOCK_R = 45; // metros — aumentado para evitar saltos (ajustable)
     function _findRouteBlockage(decodedPath) {
       const list = window._semanaSantaActiveList || [];
       let best = null;
+
+      // 1. Remuestrear la ruta (interpolación) para no saltarnos la pared
+      const densePath = [];
+      if (decodedPath.length > 0) {
+        densePath.push(decodedPath[0]);
+        for (let i = 1; i < decodedPath.length; i++) {
+          const p1 = decodedPath[i-1];
+          const p2 = decodedPath[i];
+          const lat1 = typeof p1.lat === 'function' ? p1.lat() : p1.lat;
+          const lng1 = typeof p1.lng === 'function' ? p1.lng() : p1.lng;
+          const lat2 = typeof p2.lat === 'function' ? p2.lat() : p2.lat;
+          const lng2 = typeof p2.lng === 'function' ? p2.lng() : p2.lng;
+
+          const d = _distMetros(lat1, lng1, lat2, lng2);
+          if (d > 15) { // Si el segmento es largo (> 15m), interpolar puntos intermedios
+            const steps = Math.floor(d / 15);
+            for (let s = 1; s <= steps; s++) {
+              densePath.push({
+                lat: lat1 + (lat2 - lat1) * (s / (steps + 1)),
+                lng: lng1 + (lng2 - lng1) * (s / (steps + 1))
+              });
+            }
+          }
+          densePath.push(p2);
+        }
+      }
 
       for (const t of list) {
         if (!t.trackers) continue;
         const activos = t.trackers.filter(tr => tr.activo === 1);
         if (!activos.length) continue;
 
-        // Intentar usar KML cacheado por URL estable (t.rutaMapa); si no hay, usar trackers como fallback
-        const kmlCoords = t.rutaMapa ? (_kmlCoordsCache[t.rutaMapa] || []) : [];
+        // Intentar usar KML cacheado por URL normalizada
+        const kmlCoords = t.rutaMapa ? (_kmlCoordsCache[_normUrl(t.rutaMapa)] || []) : [];
         const ordenados = _sortTrackers(activos);
 
-        // DIAGNÓSTICO V.15.8.14
+        // DIAGNÓSTICO V.15.8.18
         const cofNombre = t.nombre || t.id;
         if (kmlCoords.length === 0) {
-          console.warn(`[BLOQ] ⚠️ Sin KML para "${cofNombre}" (rutaMapa=${t.rutaMapa ? 'sí' : 'no'}). Usando fallback tracker-segmentos.`);
+          console.warn(`[BLOQ] ⚠️ Sin KML para "${cofNombre}" (key=${_normUrl(t.rutaMapa)}). Usando fallback tracker-segmentos.`);
         } else {
           console.log(`[BLOQ] ✅ KML OK de "${cofNombre}": ${kmlCoords.length} puntos totales.`);
         }
@@ -2099,7 +2132,7 @@
         if (kmlCoords.length >= 2) {
           wallCoords = _getOccupiedKmlSegment(kmlCoords, ordenados);
         } else {
-          // Fallback: unir trackers en orden
+          // Fallback en cascada
           wallCoords = ordenados.map(tr => [parseFloat(tr.lat), parseFloat(tr.long)]);
           if (wallCoords.length >= 2) {
             const last = wallCoords[wallCoords.length - 1];
@@ -2109,18 +2142,14 @@
             wallCoords.push([ext.lat, ext.lng]);
           }
         }
-        if (wallCoords.length < 2) {
-          console.warn(`[BLOQ] ⚠️ wallCoords vacío para "${cofNombre}", saltando.`);
-          continue;
-        }
+        if (wallCoords.length < 2) continue;
 
-        console.log(`[BLOQ] Pared de "${cofNombre}" = ${wallCoords.length} puntos. R=${_BLOCK_R}m`);
+        console.log(`[BLOQ] Pared de "${cofNombre}" = ${wallCoords.length} puntos.`);
 
-        // Centro del muro para pivotar el rodeo
         const midWall = wallCoords[Math.floor(wallCoords.length / 2)];
 
-        for (let i = 0; i < decodedPath.length; i++) {
-          const pt   = decodedPath[i];
+        for (let i = 0; i < densePath.length; i++) {
+          const pt   = densePath[i];
           const pLat = typeof pt.lat === 'function' ? pt.lat() : pt.lat;
           const pLng = typeof pt.lng === 'function' ? pt.lng() : pt.lng;
 
@@ -2133,8 +2162,8 @@
           }
 
           if (collides) {
-            if (!best || i < best.pathIdx) {
-              const nxt  = decodedPath[Math.min(i + 1, decodedPath.length - 1)];
+            if (!best) {
+              const nxt  = densePath[Math.min(i + 1, densePath.length - 1)];
               const nLat = typeof nxt.lat === 'function' ? nxt.lat() : nxt.lat;
               const nLng = typeof nxt.lng === 'function' ? nxt.lng() : nxt.lng;
               best = {
@@ -2142,7 +2171,7 @@
                 trackerLat: midWall[0],
                 trackerLng: midWall[1],
                 routeBearing: _bearingRad(pLat, pLng, nLat, nLng),
-                cofradia: t.nombre || t.id
+                cofradia: cofNombre
               };
             }
             break;
@@ -2155,8 +2184,11 @@
     // Pre-carga en paralelo los KMLs de todas las procesiones activas
     async function _preloadKmls() {
       const list = window._semanaSantaActiveList || [];
-      await Promise.all(list.filter(t => t.rutaMapa && !_kmlCoordsCache[t.rutaMapa])
-        .map(t => _loadKmlCoords(t.rutaMapa)));
+      const pending = list.filter(t => t.rutaMapa && !_kmlCoordsCache[_normUrl(t.rutaMapa)]);
+      if (pending.length > 0) {
+        console.log(`[KML] Pre-cargando KMLs de ${pending.length} hermandades...`);
+        await Promise.all(pending.map(t => _loadKmlCoords(t.rutaMapa)));
+      }
     }
 
     // Helper interno: llama a Routes API y devuelve TODAS las rutas o null
@@ -18056,7 +18088,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.8.17
+    EmerCRE V.15.8.18
   </div>
 </body>
 
