@@ -1954,7 +1954,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.9.2 Loaded');
+    console.log('EmerCRE V.15.9.3 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -5863,13 +5863,18 @@ ${dataContext}
 
           // V.12.4.1: Capturar recursos del día
           const recIndicativos = (op.recursos || []).map(rid => (window.globalVehiculos && (window.globalVehiculos[rid]?.alias || window.globalVehiculos[rid]?.indicativo)) || rid).join(', ');
-
           dataContext = `DÍA: ${op.nombre}\nRecursos Desplegados: ${recIndicativos}\nINTERVENCIONES REGISTRADAS (${snapInt.size}):\n`;
           let logs = [];
           snapInt.forEach(di => {
             const ii = di.data();
             const iName = ii.descripcion || 'Intervención sin nombre';
-            dataContext += `- ${iName}\n`;
+            dataContext += `- INTERVENCIÓN: ${iName}\n`;
+            if (ii.comentarios && ii.comentarios.length > 0) {
+              dataContext += `  Comentarios / Datos internos:\n`;
+              ii.comentarios.forEach(c => {
+                dataContext += `  * [${c.fecha}] ${c.autor}: ${c.texto}\n`;
+              });
+            }
             logs.push({ timestamp: ii.timestamp, texto: `Intervención registrada: ${iName}` });
           });
           snap = { empty: logs.length === 0, forEach: (cb) => logs.forEach(cb) };
@@ -5904,7 +5909,14 @@ ${dataContext}
             dataContext += `DÍA ${sd.nombre} (${sd.fecha}): ${sI.size} intervenciones.\n`;
             sI.forEach(di => {
               const ii = di.data();
-              dataContext += `  - ${ii.descripcion || 'Intervención'}\n`;
+              const iName = ii.descripcion || 'Intervención';
+              dataContext += `  - INTERVENCIÓN: ${iName}\n`;
+              if (ii.comentarios && ii.comentarios.length > 0) {
+                dataContext += `    Comentarios / Datos:\n`;
+                ii.comentarios.forEach(c => {
+                  dataContext += `    * [${c.fecha}] ${c.autor}: ${c.texto}\n`;
+                });
+              }
             });
             globalLogs.push({ timestamp: sd.creadoEn, texto: `Día iniciado: ${sd.nombre} (${sI.size} intervenciones)` });
           }
@@ -5917,7 +5929,8 @@ ${dataContext}
 
         const prompt = `Actúa como un experto de Cruz Roja. Genera un INFORME DE ACTIVACIÓN profesional. 
         LISTA TODOS LOS NOMBRES de las intervenciones encontradas. ASEGÚRATE de que los recuentos totales sean exactos.
-        Extrae Personas Atendidas (Hombres, Mujeres, Menores) o '-' si no hay. Extrae Recursos Desplegados.
+        Extrae Personas Atendidas (Hombres, Mujeres, Menores) basándote en las descripciones pero SOBRE TODO en los datos de los comentarios internos. 
+        Si no hay datos, pon '-'. Extrae Recursos Desplegados.
         RESPONDE SOLO JSON: {"resumen_ejecutivo": "HTML...", "hombres": "N", "mujeres": "N", "menores": "N", "recursos": ["R1", "R2"]}
         DATOS: ${dataContext}`;
 
@@ -18200,7 +18213,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.9.2
+    EmerCRE V.15.9.3
   </div>
 </body>
 
