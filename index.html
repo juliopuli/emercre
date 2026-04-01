@@ -154,6 +154,7 @@
     window._oystaGlobalLastStop = {}; // V.13.0.4: Cache global de últimas paradas para decalajes y origen de salida
     window._assignedVehiclesInEmergencies = new Set(); // V.15.0.1: Para seguimiento proactivo
     window._assignedVehiclesInOpenPreventivos = new Set(); // V.15.0.1
+    window._hasOpenPreventivos = false; // V.15.9.4: Global flag for active preventivos
 
     let localVehiclesByOystaId = {}; // V.12.4.1: Mapeo OystaID -> Datos Vehículo Local
     let localVehiclesById = {};       // V.12.4.1: Mapeo FirestoreID -> Datos Vehículo Local
@@ -1954,7 +1955,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.9.3 Loaded');
+    console.log('EmerCRE V.15.9.4 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3483,6 +3484,16 @@
       if (currentUserDoc.accesoEmergencias !== false) {
         window.suscribirNotificacionesChat();
       }
+      
+      // V.15.9.4: Global listener for open preventivos to trigger Oysta sync even if not in Preventivos section
+      onSnapshot(query(collection(db, 'preventivos'), where('abierta', '==', true)), snap => {
+        window._hasOpenPreventivos = !snap.empty;
+        console.log(`[Oysta] Global Open Preventivos: ${window._hasOpenPreventivos}`);
+        if (window._hasOpenPreventivos && typeof cargarVehiculosOysta === 'function') {
+          // Trigger an immediate check if we just found an open preventivo
+          cargarVehiculosOysta(false);
+        }
+      });
       if (mapEmergencias && mapReady) setTimeout(() => google.maps.event.trigger(mapEmergencias, 'resize'), 100);
 
       // ── MOBILE DRAWER POPULATION (V.12.4.1) ──────────────────────────
@@ -3543,22 +3554,22 @@
     }
 
     let oystaIntervalId = null;
+    window.currentOystaInterval = 39000;
+    window.restartOystaInterval = (ms) => {
+      if (oystaIntervalId) clearInterval(oystaIntervalId);
+      oystaIntervalId = setInterval(cargarVehiculosOysta, ms);
+      window.currentOystaInterval = ms;
+      console.log(`[Oysta] Sync interval set to ${ms / 1000}s`);
+    };
+
     function ensureOystaScriptIsRunning() {
       if (oystaIntervalId) return;
       console.log("[Oysta] Starting monitoring script...");
       const hasCache = populateOystaVehicleListFromCache();
       populateOystaVehicleListPrevFromCache(); // V.12.4.1
       // V.12.4.1: Adaptive Oysta Sync (Throttled & Visibility-aware)
-      let oystaInterval = 39000; // V.15.6.0: 39s as requested
       cargarVehiculosOysta(!hasCache);
-
-      const restartOystaInterval = (ms) => {
-        if (oystaIntervalId) clearInterval(oystaIntervalId);
-        oystaIntervalId = setInterval(cargarVehiculosOysta, ms);
-        console.log(`[Oysta] Sync interval set to ${ms / 1000}s`);
-      };
-
-      restartOystaInterval(oystaInterval);
+      window.restartOystaInterval(window.currentOystaInterval);
 
       // Throttling based on visibility
       document.addEventListener('visibilitychange', () => {
@@ -3569,7 +3580,7 @@
         } else {
           console.log("[Oysta] Tab visible, resuming sync.");
           cargarVehiculosOysta(true);
-          restartOystaInterval(oystaInterval);
+          window.restartOystaInterval(window.currentOystaInterval);
         }
       });
     }
@@ -3939,8 +3950,15 @@
       const hasActiveTracking = (window._assignedVehiclesInOpenPreventivos && window._assignedVehiclesInOpenPreventivos.size > 0) || 
                                (typeof window._assignedVehiclesInEmergencies !== 'undefined' && window._assignedVehiclesInEmergencies.size > 0);
       const isMovingBtnActive = typeof showMovingOysta !== 'undefined' && showMovingOysta === true;
+      const hasOpenPreventivos = window._hasOpenPreventivos === true;
 
-      const shouldSync = anyVisibleGlobal || hasActiveTracking || isMovingBtnActive || force;
+      // V.15.9.4: Adaptive interval adjustment
+      const targetInterval = hasOpenPreventivos ? 30000 : 39000;
+      if (window.currentOystaInterval !== targetInterval && typeof window.restartOystaInterval === 'function') {
+        window.restartOystaInterval(targetInterval);
+      }
+
+      const shouldSync = anyVisibleGlobal || hasActiveTracking || isMovingBtnActive || force || hasOpenPreventivos;
 
       if (!shouldSync) {
         console.log("[Oysta] No active tracking needed (no visible, no movement btn, no assigned), skipping fetch.");
@@ -18213,7 +18231,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.9.3
+    EmerCRE V.15.9.4
   </div>
 </body>
 
