@@ -2016,8 +2016,8 @@
     async function _loadKmlCoords(rutaMapa) {
       if (_kmlCoordsCache[rutaMapa]) return _kmlCoordsCache[rutaMapa];
       try {
-        // Usamos Cloud Function proxy para evitar restricción CORS/CSP del browser
-        const fn = firebase.functions().httpsCallable('getKmlCoords');
+        // Usamos Cloud Function proxy (v9 syntax) para evitar restricción CORS/CSP del browser
+        const fn = httpsCallable(window.functions, 'getKmlCoords');
         const result = await fn({ url: rutaMapa });
         const coords = result.data.coords || [];
         console.log(`[KML] Proxy OK: ${rutaMapa.split('/').pop()} → ${coords.length} puntos`);
@@ -18056,7 +18056,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.8.16
+    EmerCRE V.15.8.17
   </div>
 </body>
 
