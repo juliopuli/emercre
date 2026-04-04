@@ -729,7 +729,7 @@ exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
 let vehiculosCache = {};
 let vehiculosCacheTime = {};
 
-// 5. Monitor Oysta Vehicles (V.15.11.0)
+// 5. Monitor Oysta Vehicles (V.15.11.1)
 exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRun(async (context) => {
     const db = admin.firestore();
     const bridgeUrl = process.env.OYSTA_BRIDGE_URL;
