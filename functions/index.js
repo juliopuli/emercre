@@ -796,6 +796,16 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         if (!resp.ok) throw new Error("Oysta GAS error");
         const oystaData = await resp.json();
 
+        // V.15.10.3: Debugging - Log raw data sample to find odometer field
+        if (oystaData.vehicles && oystaData.vehicles.length > 0) {
+            await db.collection("oysta_logs").add({
+                fecha: admin.firestore.FieldValue.serverTimestamp(),
+                usuario: "Oysta (Debug)",
+                tipo: "Oysta",
+                detalle: "RAW SAMPLE: " + JSON.stringify(oystaData.vehicles[0]).substring(0, 1000)
+            });
+        }
+
         if (oystaData.loginPerformed) {
             await db.collection("oysta_logs").add({
                 fecha: admin.firestore.FieldValue.serverTimestamp(),
