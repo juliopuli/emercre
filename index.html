@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <!-- V.15.10.3: Oysta Backend Debugging (Logs) -->
+  <!-- V.15.10.4: Oysta Backend Debugging (Force Execution) -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://maps.googleapis.com https://www.google.com https://apis.google.com;
@@ -154,7 +154,7 @@
     window._oystaGlobalLastStop = {}; // V.13.0.4: Cache global de últimas paradas para decalajes y origen de salida
     window._assignedVehiclesInEmergencies = new Set(); // V.15.0.1: Para seguimiento proactivo
     window._assignedVehiclesInOpenPreventivos = new Set(); // V.15.0.1
-    window._hasOpenPreventivos = false; // V.15.10.3: Global flag for active preventivos
+    window._hasOpenPreventivos = false; // V.15.10.4: Global flag for active preventivos
 
     let localVehiclesByOystaId = {}; // V.12.4.1: Mapeo OystaID -> Datos Vehículo Local
     let localVehiclesById = {};       // V.12.4.1: Mapeo FirestoreID -> Datos Vehículo Local
@@ -1955,7 +1955,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.10.3 Loaded');
+    console.log('EmerCRE V.15.10.4 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3485,7 +3485,7 @@
         window.suscribirNotificacionesChat();
       }
       
-      // V.15.10.3: Fix global listener for open preventivos (Docs might not explicitly have {abierta: true}, they default to open if !== false)
+      // V.15.10.4: Fix global listener for open preventivos (Docs might not explicitly have {abierta: true}, they default to open if !== false)
       onSnapshot(query(collection(db, 'preventivos'), orderBy('creadoEn', 'desc'), limit(30)), snap => {
         let hasOpen = false;
         snap.forEach(doc => {
@@ -3945,8 +3945,8 @@
       const isPreventivosActive = document.getElementById('section-preventivos') && document.getElementById('section-preventivos').style.display === 'flex';
       const hasOpenPreventivos = window._hasOpenPreventivos === true;
 
-      // V.15.10.3: Consider map effectively "visible" for background syncing if there are open preventivos
-      // V.15.10.3: Fixed invalid DOM references for map containers
+      // V.15.10.4: Consider map effectively "visible" for background syncing if there are open preventivos
+      // V.15.10.4: Fixed invalid DOM references for map containers
       const isMapVisible = (isOpsActive && document.getElementById('map')?.style.display !== 'none') ||
         (isPreventivosActive && document.getElementById('preventivos-map')?.style.display !== 'none') || 
         hasOpenPreventivos;
@@ -3961,7 +3961,7 @@
                                (typeof window._assignedVehiclesInEmergencies !== 'undefined' && window._assignedVehiclesInEmergencies.size > 0);
       const isMovingBtnActive = typeof showMovingOysta !== 'undefined' && showMovingOysta === true;
 
-      // V.15.10.3: Adaptive interval adjustment
+      // V.15.10.4: Adaptive interval adjustment
       const targetInterval = hasOpenPreventivos ? 30000 : 39000;
       if (window.currentOystaInterval !== targetInterval && typeof window.restartOystaInterval === 'function') {
         window.restartOystaInterval(targetInterval);
@@ -18240,7 +18240,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.10.3
+    EmerCRE V.15.10.4
   </div>
 </body>
 
