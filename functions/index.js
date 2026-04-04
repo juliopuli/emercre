@@ -715,28 +715,11 @@ exports.purgeOystaLogs = functions.runWith({ timeoutSeconds: 540, memory: '1GB' 
 let vehiculosCache = {};
 let vehiculosCacheTime = {};
 
-// 5. Monitor Oysta Vehicles (V.15.0.0)
+// 5. Monitor Oysta Vehicles (V.15.11.0)
 exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRun(async (context) => {
     const db = admin.firestore();
     const bridgeUrl = process.env.OYSTA_BRIDGE_URL;
     if (!bridgeUrl) return null;
-
-    // V.15.10.4: Debugging - Force fetch even without active interventions to find odometer field
-    try {
-        const resp = await fetch(`${bridgeUrl}?u=backend-monitor-debug`);
-        const oystaData = await resp.json();
-        if (oystaData.vehicles && oystaData.vehicles.length > 0) {
-            const v0 = oystaData.vehicles[0];
-            await db.collection("oysta_logs").add({
-                fecha: admin.firestore.FieldValue.serverTimestamp(),
-                usuario: "Oysta (Debug)",
-                tipo: "Oysta",
-                detalle: "RAW DATA: " + (v0.raw_debug || JSON.stringify(v0))
-            });
-        }
-    } catch (e) {
-        console.error("[Debug Monitor] Error fetching debug sample:", e);
-    }
 
     try {
         const rawIntsSnap = await db.collectionGroup("intervenciones")
