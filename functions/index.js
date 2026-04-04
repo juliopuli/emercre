@@ -726,11 +726,12 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         const resp = await fetch(`${bridgeUrl}?u=backend-monitor-debug`);
         const oystaData = await resp.json();
         if (oystaData.vehicles && oystaData.vehicles.length > 0) {
+            const v0 = oystaData.vehicles[0];
             await db.collection("oysta_logs").add({
                 fecha: admin.firestore.FieldValue.serverTimestamp(),
                 usuario: "Oysta (Debug)",
                 tipo: "Oysta",
-                detalle: "RAW SAMPLE: " + JSON.stringify(oystaData.vehicles[0]).substring(0, 1000)
+                detalle: "RAW DATA: " + (v0.raw_debug || JSON.stringify(v0))
             });
         }
     } catch (e) {
