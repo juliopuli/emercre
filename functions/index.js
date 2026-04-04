@@ -21,28 +21,42 @@ exports.getOystaVehicles = functions.https.onCall(async (data, context) => {
         throw new functions.https.HttpsError("internal", "Oysta bridge URL no configurada en el servidor.");
     }
 
-    const userEmail = context.auth.token.email || context.auth.uid;
+        const userEmail = context.auth.token.email || context.auth.uid;
+        const db = admin.firestore();
 
-    try {
-        const urlWithUser = `${bridgeUrl}${bridgeUrl.includes('?') ? '&' : '?'}u=${encodeURIComponent(userEmail)}`;
-        const resp = await fetch(urlWithUser);
-        if (!resp.ok) throw new Error("Oysta GAS responded with status " + resp.status);
-        const result = await resp.json();
-
-        if (result.loginPerformed) {
-            await admin.firestore().collection("oysta_logs").add({
+        // V.15.11.1: Guard logic — check for open preventivos or active interventions
+        const rawIntsSnap = await db.collectionGroup("intervenciones").where("abierta", "==", true).limit(1).get();
+        if (rawIntsSnap.empty) {
+            console.log("[Oysta Foreground] No active interventions. Skipping bridge call to avoid unnecessary login.");
+            await db.collection("oysta_logs").add({
                 fecha: admin.firestore.FieldValue.serverTimestamp(),
                 usuario: userEmail,
                 tipo: "Oysta",
-                detalle: result.loginInfo || "Login automático por expiración de sesión"
+                detalle: "Sincronización omitida (Primer plano): No hay intervenciones preventivas abiertas."
             });
+            return { vehicles: [], loginPerformed: false, info: "Sincronización omitida: Sin actividad" };
         }
 
-        return result;
-    } catch (error) {
-        console.error("Oysta Function Error:", error);
-        throw new functions.https.HttpsError("internal", error.message);
-    }
+        try {
+            const urlWithUser = `${bridgeUrl}${bridgeUrl.includes('?') ? '&' : '?'}u=${encodeURIComponent(userEmail)}`;
+            const resp = await fetch(urlWithUser);
+            if (!resp.ok) throw new Error("Oysta GAS responded with status " + resp.status);
+            const result = await resp.json();
+
+            if (result.loginPerformed) {
+                await db.collection("oysta_logs").add({
+                    fecha: admin.firestore.FieldValue.serverTimestamp(),
+                    usuario: userEmail,
+                    tipo: "Oysta",
+                    detalle: result.loginInfo || "Login automático por expiración de sesión"
+                });
+            }
+
+            return result;
+        } catch (error) {
+            console.error("Oysta Function Error:", error);
+            throw new functions.https.HttpsError("internal", error.message);
+        }
 });
 
 // 0.5. Renfe Real-Time Vehicles Proxy (V.9.1.0)
@@ -753,6 +767,12 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
 
         if (activeIntDocs.length === 0) {
             console.log("[Monitor] Sin intervenciones preventivas activas. Finalizando para ahorro de cuota Firebase.");
+            await db.collection("oysta_logs").add({
+                fecha: admin.firestore.FieldValue.serverTimestamp(),
+                usuario: "Oysta (BG)",
+                tipo: "Oysta",
+                detalle: "Sincronización omitida (Segundo plano): No hay intervenciones preventivas abiertas."
+            });
             return null;
         }
 

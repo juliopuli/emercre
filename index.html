@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <!-- V.15.11.0: Oysta Odometer Integration (Final) -->
+  <!-- V.15.11.1: Oysta Login Logs Restoration -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://maps.googleapis.com https://www.google.com https://apis.google.com;
@@ -4009,6 +4009,13 @@
         const result = await getOystaVehiclesFn();
         const data = result.data;
         console.log(`[Oysta] Cloud Function successful, received ${data?.vehicles?.length} vehicles.`);
+
+        if (data && data.info === "Sincronización omitida: Sin actividad") {
+          if (statusText) statusText.textContent = "Pausado: Sin preventivos activos";
+          const statusTextPrev = document.getElementById('oysta-status-text-prev');
+          if (statusTextPrev) statusTextPrev.textContent = "Pausado: Sin preventivos activos";
+          return;
+        }
 
         if (!data || !data.vehicles) {
           if (statusText) statusText.textContent = "Error de datos";
