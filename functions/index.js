@@ -835,6 +835,12 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 const v = oystaId ? vehiclesMap[oystaId] : null;
                 if (!v) continue;
 
+                // V.15.10.0: Persistir kilometraje (odómetro) si está disponible en la respuesta de Oysta
+                const odometer = v.kilometraje || v.odometer || v.mileage;
+                if (odometer !== undefined && odometer !== null) {
+                    await db.collection("vehiculos").doc(rid).update({ odometer: odometer });
+                }
+
                 const pos = { lat: parseFloat(v.lat), lng: parseFloat(v.lng) };
                 // V.15.6.3: Absolute rule-based state machine
                 const speed = parseFloat(v.speed) || 0;
