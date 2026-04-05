@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <!-- V.15.19.0: DESA Map Layer Refinement (Colors & Legends) -->
+  <!-- V.15.20.0: DESA Map Layer Filtering (Legend Checkboxes) -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://maps.googleapis.com https://www.google.com https://apis.google.com;
@@ -1053,6 +1053,8 @@
     let desaMarkers = {};
     let desaInfoWindow = null;
 
+    window.desaFilters = { h24: true, bus: true, other: true };
+
     window.toggleDESA = () => {
       window.desaLayerEnabled = !window.desaLayerEnabled;
       const btn = document.getElementById('btn-toggle-desa');
@@ -1061,18 +1063,35 @@
       if (btnPrev) btnPrev.classList.toggle('active', window.desaLayerEnabled);
 
       if (window.desaLayerEnabled) {
+        window.desaFilters = { h24: true, bus: true, other: true };
+        document.querySelectorAll('.desa-filter-chk').forEach(el => el.checked = true);
         window.cargarDESAData();
         mostrarToast('Capa DESA Málaga activa');
         document.querySelectorAll('.desa-legend').forEach(el => el.style.display = 'flex');
       } else {
         Object.values(desaMarkers).forEach(ms => {
-          if (ms.mEme) ms.mEme.setMap(null);
-          if (ms.mPrev) ms.mPrev.setMap(null);
+          if (ms.mEme) ms.setMapEme(null);
+          if (ms.mPrev) ms.setMapPrev(null);
         });
         desaMarkers = {};
         mostrarToast('Capa DESA Málaga desactivada');
         document.querySelectorAll('.desa-legend').forEach(el => el.style.display = 'none');
       }
+    };
+
+    window.toggleDesaFilter = (type, checked) => {
+      window.desaFilters[type] = checked;
+      // Sincronizar checkboxes en ambos mapas
+      document.querySelectorAll(`.desa-filter-chk-${type}`).forEach(el => el.checked = checked);
+      window.applyDesaFilters();
+    };
+
+    window.applyDesaFilters = () => {
+      Object.values(desaMarkers).forEach(m => {
+        const isVisible = window.desaLayerEnabled && window.desaFilters[m.type];
+        m.setMapEme(isVisible ? mapEmergencias : null);
+        m.setMapPrev(isVisible ? mapPreventivos : null);
+      });
     };
 
     window.toggleDESAPrev = () => window.toggleDESA();
@@ -1103,6 +1122,7 @@
             const dir = (p.direccion || "").toUpperCase();
             const is24h = p.VEINTICUATROHORAS === "Si" || hor.includes("24");
             const isBus = nom.includes("EMT") || des.includes("AUTOBÚS") || dir.includes("AUTOBÚS");
+            const type = is24h ? 'h24' : (isBus ? 'bus' : 'other');
             
             let color = "#27ae60"; // Verde (resto)
             if (is24h) color = "#e74c3c"; // Rojo (24h)
@@ -1128,7 +1148,7 @@
             if (mapEmergencias) {
               mEme = new google.maps.marker.AdvancedMarkerElement({
                 position: { lat, lng },
-                map: mapEmergencias,
+                map: window.desaFilters[type] ? mapEmergencias : null,
                 content: mEmeEl,
                 title: p.nombre || 'DESA'
               });
@@ -1153,7 +1173,7 @@
               const mPrevEl = mEmeEl.cloneNode(true);
               mPrev = new google.maps.marker.AdvancedMarkerElement({
                 position: { lat, lng },
-                map: mapPreventivos,
+                map: window.desaFilters[type] ? mapPreventivos : null,
                 content: mPrevEl,
                 title: p.nombre || 'DESA'
               });
@@ -1173,7 +1193,11 @@
               });
             }
 
-            desaMarkers[id] = { mEme, mPrev };
+            desaMarkers[id] = { 
+                mEme, mPrev, type,
+                setMapEme: (m) => { if (mEme) mEme.map = m; },
+                setMapPrev: (m) => { if (mPrev) mPrev.map = m; }
+            };
           }
         });
 
@@ -12314,14 +12338,15 @@ ${dataContext}
 
     .users-table-row-inactive { background-color: #fffafa !important; border-left: 3px solid #ef4444 !important; }
 
-    /* V.15.19.0: Leyenda DESA */
+    /* V.15.20.0: Leyenda DESA */
     .desa-legend {
       position: absolute; bottom: 85px; right: 12px; background: rgba(255, 255, 255, 0.95);
-      padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-mid);
+      padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-mid);
       z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-family: 'IBM Plex Sans';
       font-size: 10px; display: none; flex-direction: column; gap: 6px; backdrop-filter: blur(4px);
     }
-    .desa-legend-item { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--text-1); }
+    .desa-legend-item { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--text-1); cursor: pointer; }
+    .desa-legend-item input[type="checkbox"] { cursor: pointer; width: 12px; height: 12px; margin: 0; }
     .desa-legend-dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid white; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
 
     input:checked+.slider {
@@ -16759,9 +16784,18 @@ ${dataContext}
 
         <div class="pick-banner" id="pick-banner">📍 Haz clic en el mapa para fijar la ubicación</div>
         <div id="desa-legend-eme" class="desa-legend">
-            <div class="desa-legend-item"><span class="desa-legend-dot" style="background:#e74c3c;"></span> 24 Horas</div>
-            <div class="desa-legend-item"><span class="desa-legend-dot" style="background:#3498db;"></span> Autobuses (EMT)</div>
-            <div class="desa-legend-item"><span class="desa-legend-dot" style="background:#27ae60;"></span> Con Horario / Otros</div>
+            <label class="desa-legend-item">
+                <input type="checkbox" class="desa-filter-chk desa-filter-chk-h24" checked onchange="window.toggleDesaFilter('h24', this.checked)">
+                <span class="desa-legend-dot" style="background:#e74c3c;"></span> 24 Horas
+            </label>
+            <label class="desa-legend-item">
+                <input type="checkbox" class="desa-filter-chk desa-filter-chk-bus" checked onchange="window.toggleDesaFilter('bus', this.checked)">
+                <span class="desa-legend-dot" style="background:#3498db;"></span> Autobuses (EMT)
+            </label>
+            <label class="desa-legend-item">
+                <input type="checkbox" class="desa-filter-chk desa-filter-chk-other" checked onchange="window.toggleDesaFilter('other', this.checked)">
+                <span class="desa-legend-dot" style="background:#27ae60;"></span> Otros
+            </label>
         </div>
         <div id="map"></div>
       </div>
@@ -16956,9 +16990,18 @@ ${dataContext}
         <div class="pick-banner" id="prev-pick-banner">📍 Haz clic en el mapa para fijar la ubicación de la intervención
         </div>
         <div id="desa-legend-prev" class="desa-legend">
-            <div class="desa-legend-item"><span class="desa-legend-dot" style="background:#e74c3c;"></span> 24 Horas</div>
-            <div class="desa-legend-item"><span class="desa-legend-dot" style="background:#3498db;"></span> Autobuses (EMT)</div>
-            <div class="desa-legend-item"><span class="desa-legend-dot" style="background:#27ae60;"></span> Con Horario / Otros</div>
+            <label class="desa-legend-item">
+                <input type="checkbox" class="desa-filter-chk desa-filter-chk-h24" checked onchange="window.toggleDesaFilter('h24', this.checked)">
+                <span class="desa-legend-dot" style="background:#e74c3c;"></span> 24 Horas
+            </label>
+            <label class="desa-legend-item">
+                <input type="checkbox" class="desa-filter-chk desa-filter-chk-bus" checked onchange="window.toggleDesaFilter('bus', this.checked)">
+                <span class="desa-legend-dot" style="background:#3498db;"></span> Autobuses (EMT)
+            </label>
+            <label class="desa-legend-item">
+                <input type="checkbox" class="desa-filter-chk desa-filter-chk-other" checked onchange="window.toggleDesaFilter('other', this.checked)">
+                <span class="desa-legend-dot" style="background:#27ae60;"></span> Otros
+            </label>
         </div>
         <div id="preventivos-map"></div>
       </div>
