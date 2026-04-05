@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <!-- V.15.23.0: AI Report Date & Text Refinement -->
+  <!-- V.15.24.0: AI Report Header & Chronology Refinement -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://maps.googleapis.com https://www.google.com https://apis.google.com;
@@ -154,7 +154,7 @@
     window._oystaGlobalLastStop = {}; // V.13.0.4: Cache global de últimas paradas para decalajes y origen de salida
     window._assignedVehiclesInEmergencies = new Set(); // V.15.0.1: Para seguimiento proactivo
     window._assignedVehiclesInOpenPreventivos = new Set(); // V.15.0.1
-    window._hasOpenPreventivos = false; // V.15.19.0: Global flag for active preventivos
+    window._hasOpenPreventivos = false; // V.15.24.0: Global flag for active preventivos
 
     let localVehiclesByOystaId = {}; // V.12.4.1: Mapeo OystaID -> Datos Vehículo Local
     let localVehiclesById = {};       // V.12.4.1: Mapeo FirestoreID -> Datos Vehículo Local
@@ -469,7 +469,7 @@
     }
 
     function isVehicleVisible(id) {
-          // V.15.19.0: Visibilidad unificada entre mapas
+          // V.15.24.0: Visibilidad unificada entre mapas
       return !!visibleVehicles[id] || !!visibleVehiclesPrev[id];
     }
 
@@ -477,7 +477,7 @@
     function canShowHidden() {
       return currentRole === 'admin' || currentRole === 'manager' || currentRole === 'super_admin';
     }
-    // V.15.19.0: Comparador global de recursos por prefijo (A/AM > R > T > S > Otros)
+    // V.15.24.0: Comparador global de recursos por prefijo (A/AM > R > T > S > Otros)
     window.compareResourceIds = (idA, idB) => {
       const vA = (window.globalVehiculos && window.globalVehiculos[idA]) || (typeof localVehiclesById !== 'undefined' ? localVehiclesById[idA] : null) || { alias: idA, indicativo: idA };
       const vB = (window.globalVehiculos && window.globalVehiculos[idB]) || (typeof localVehiclesById !== 'undefined' ? localVehiclesById[idB] : null) || { alias: idB, indicativo: idB };
@@ -517,7 +517,7 @@
     function canEditIntervencion(i) {
       if (currentRole === 'manager' || currentRole === 'super_admin') return true;
       if (currentRole === 'admin') return i ? i.abierta !== false : true;
-      // V.15.19.0: Usuarios pueden gestionar si está abierta O si es de un preventivo y el día está abierto
+      // V.15.24.0: Usuarios pueden gestionar si está abierta O si es de un preventivo y el día está abierto
       if (currentRole === 'usuario') {
         if (!i) return true;
         if (i.abierta !== false) return true;
@@ -899,7 +899,7 @@
 
     // V.12.4.1: Lógica independiente para mostrar/ocultar coches en Preventivos
     function isVehicleVisiblePrev(id) {
-          // V.15.19.0: Visibilidad unificada entre mapas
+          // V.15.24.0: Visibilidad unificada entre mapas
       return !!visibleVehiclesPrev[id] || !!visibleVehicles[id];
     }
 
@@ -1115,7 +1115,7 @@
           const p = f.properties;
 
           if (!desaMarkers[id]) {
-            // V.15.19.0: Lógica de colores DESA
+            // V.15.24.0: Lógica de colores DESA
             const hor = (p.horarios || "").toUpperCase();
             const nom = (p.nombre || "").toUpperCase();
             const des = (p.descripcion || "").toUpperCase();
@@ -2030,7 +2030,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.19.0 Loaded');
+    console.log('EmerCRE V.15.24.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3560,7 +3560,7 @@
         window.suscribirNotificacionesChat();
       }
       
-      // V.15.19.0: Fix global listener for open preventivos (Docs might not explicitly have {abierta: true}, they default to open if !== false)
+      // V.15.24.0: Fix global listener for open preventivos (Docs might not explicitly have {abierta: true}, they default to open if !== false)
       onSnapshot(query(collection(db, 'preventivos'), orderBy('creadoEn', 'desc'), limit(30)), snap => {
         let hasOpen = false;
         snap.forEach(doc => {
@@ -4020,8 +4020,8 @@
       const isPreventivosActive = document.getElementById('section-preventivos') && document.getElementById('section-preventivos').style.display === 'flex';
       const hasOpenPreventivos = window._hasOpenPreventivos === true;
 
-      // V.15.19.0: Consider map effectively "visible" for background syncing if there are open preventivos
-      // V.15.19.0: Fixed invalid DOM references for map containers
+      // V.15.24.0: Consider map effectively "visible" for background syncing if there are open preventivos
+      // V.15.24.0: Fixed invalid DOM references for map containers
       const isMapVisible = (isOpsActive && document.getElementById('map')?.style.display !== 'none') ||
         (isPreventivosActive && document.getElementById('preventivos-map')?.style.display !== 'none') || 
         hasOpenPreventivos;
@@ -4036,7 +4036,7 @@
                                (typeof window._assignedVehiclesInEmergencies !== 'undefined' && window._assignedVehiclesInEmergencies.size > 0);
       const isMovingBtnActive = typeof showMovingOysta !== 'undefined' && showMovingOysta === true;
 
-      // V.15.19.0: Adaptive interval adjustment
+      // V.15.24.0: Adaptive interval adjustment
       const targetInterval = hasOpenPreventivos ? 30000 : 39000;
       if (window.currentOystaInterval !== targetInterval && typeof window.restartOystaInterval === 'function') {
         window.restartOystaInterval(targetInterval);
@@ -5909,6 +5909,8 @@ ${dataContext}
         let opData = {};
         let logsParaTabla = [];
         let pId_global = (type === 'preventivo') ? id : (type === 'dia' ? parentId : (parentId2 || currentPreventivoId));
+        const nowStr = new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const userGenera = (window.currentUserDoc && window.currentUserDoc.nombre) || "Usuario";
         
         // Obtener datos del preventivo madre siempre para contexto de fechas planificadas
         const motherSnap = await getDoc(doc(db, 'preventivos', pId_global));
@@ -5966,18 +5968,6 @@ ${dataContext}
             const iName = ii.descripcion || 'Intervención';
             dataContext += `- ${iName}: ${ii.comentarios?.map(c => c.texto).join(' | ') || ''}\n`;
             logsParaTabla.push({ timestamp: ii.timestamp, texto: `Apertura de intervención: ${iName}` });
-            if (ii.comentarios) {
-              ii.comentarios.forEach(c => {
-                let ts = null;
-                if (c.timestamp) ts = { toDate: () => new Date(c.timestamp) };
-                else if (c.fecha) {
-                  const [d, h] = c.fecha.split(' ');
-                  const [day, mon, yr] = d.split('/');
-                  ts = { toDate: () => new Date(`20${yr}-${mon}-${day}T${h}`) };
-                }
-                logsParaTabla.push({ timestamp: ts, texto: `${iName}: ${c.texto}` });
-              });
-            }
           });
         } else {
           opData = motherData;
@@ -6005,7 +5995,7 @@ ${dataContext}
           dataContext += `RECURSOS TOTALES: ${recSorted}\n`;
         }
 
-        // Ordenar cronología (V.15.23.0)
+        // Ordenar cronología (V.15.24.0)
         logsParaTabla.sort((a, b) => {
           const tA = a.timestamp?.toDate ? a.timestamp.toDate().getTime() : 0;
           const tB = b.timestamp?.toDate ? b.timestamp.toDate().getTime() : 0;
@@ -6058,6 +6048,12 @@ ${dataContext}
             </table>
             <div style="border:1.5px solid #0b2241; border-radius:3px; margin-bottom:10px; display:flex;"><div style="width:120px; background:#0b2241; color:#fff; font-weight:bold; font-size:11px; display:flex; align-items:center; justify-content:center; text-align:center; padding:5px; border-right:1px solid #0b2241;">Motivo / Nombre:</div><div style="flex:1; padding:8px 12px; font-size:13px; font-weight:bold; background:#fff;">${nombreOp}</div></div>
             <table style="width:100%; border-collapse:collapse; margin-bottom:10px; border:1.5px solid #0b2241;">
+              <tr style="font-size:11px;">
+                <td style="background:#0b2241; color:#fff; width:15%; padding:6px; font-weight:bold; border:1px solid #0b2241;">Generado por:</td>
+                <td style="width:15%; color:#e3000f; font-weight:bold; padding:6px; text-align:center; border:1px solid #0b2241; background:#fff;">${userGenera}</td>
+                <td style="background:#0b2241; color:#fff; width:15%; padding:6px; font-weight:bold; border:1px solid #0b2241;">Emisión:</td>
+                <td colspan="3" style="color:#e3000f; font-weight:bold; padding:6px; text-align:center; border:1px solid #0b2241; background:#fff;">${nowStr}</td>
+              </tr>
               <tr style="font-size:11px;">
                 <td style="background:#0b2241; color:#fff; width:15%; padding:6px; font-weight:bold; border:1px solid #0b2241;">${type === 'dia' ? 'Fecha del Día:' : 'Fecha Informe:'}</td>
                 <td style="width:15%; color:#e3000f; font-weight:bold; padding:6px; text-align:center; border:1px solid #0b2241; background:#fff;">${fechaEventoStr}</td>
@@ -6699,7 +6695,7 @@ ${dataContext}
       renderUsersTable();
     };
 
-    // V.15.19.0: Nuevas funciones de gestión de usuarios
+    // V.15.24.0: Nuevas funciones de gestión de usuarios
     window.toggleUserActive = async (id, deactivating) => {
       if (id === currentUser.uid) return;
       try {
@@ -8305,13 +8301,13 @@ ${dataContext}
 
     window.toggleVehicleVisibilityPrev = async (id, checked) => {
       visibleVehiclesPrev[id] = checked;
-      visibleVehicles[id] = checked; // V.15.19.0: Sincronizar estado
+      visibleVehicles[id] = checked; // V.15.24.0: Sincronizar estado
       if (currentUser) {
         localStorage.setItem(`emercre_vehs_prev_${currentUser.uid}`, JSON.stringify(visibleVehiclesPrev));
         localStorage.setItem(`emercre_vehs_${currentUser.uid}`, JSON.stringify(visibleVehicles));
       }
       
-      // V.15.19.0: Sincronizar checkbox en Emergencias
+      // V.15.24.0: Sincronizar checkbox en Emergencias
       const chkEme = document.getElementById(`chk-veh-${id}`);
       if (chkEme) chkEme.checked = checked;
 
@@ -9104,7 +9100,7 @@ ${dataContext}
           const isClosed = i.abierta === false;
           const prioColor = { azul: '#3498db', amarillo: '#f1c40f', rojo: '#e74c3c', negro: '#000' }[i.prioridad] || '#95a5a6';
           const dayIsOpen = subpreventivosCache[currentPreventivoDiaId]?.abierta !== false;
-          // V.15.19.0: Solo ver cerradas si el toggle está activo
+          // V.15.24.0: Solo ver cerradas si el toggle está activo
           const userCanSeeClosed = currentRole === 'usuario' && dayIsOpen && mostrarCerradas;
 
           if (i.coords && i.oculta !== true && !(isClosed && currentRole === 'usuario' && !dayIsOpen)) { hasCoords = true; bounds.extend(i.coords); }
@@ -12340,7 +12336,7 @@ ${dataContext}
       border-radius: 50%;
     }
 
-    /* V.15.19.0: Switch específico para desactivación (Rojo cuando está ON=Desactivado) */
+    /* V.15.24.0: Switch específico para desactivación (Rojo cuando está ON=Desactivado) */
     .switch-deactivate {
       position: relative;
       display: inline-block;
@@ -12361,7 +12357,7 @@ ${dataContext}
 
     .users-table-row-inactive { background-color: #fffafa !important; border-left: 3px solid #ef4444 !important; }
 
-    /* V.15.23.0: Leyenda DESA */
+    /* V.15.24.0: Leyenda DESA */
     .desa-legend {
       position: absolute; bottom: 85px; right: 12px; background: rgba(255, 255, 255, 0.95);
       padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-mid);
@@ -18461,7 +18457,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.19.0
+    EmerCRE V.15.24.0
   </div>
 </body>
 
