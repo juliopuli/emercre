@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <!-- V.15.24.0: AI Report Header & Chronology Refinement -->
+  <!-- V.15.25.0: AI Report Labeling & UI Refinement -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://maps.googleapis.com https://www.google.com https://apis.google.com;
@@ -5910,7 +5910,7 @@ ${dataContext}
         let logsParaTabla = [];
         let pId_global = (type === 'preventivo') ? id : (type === 'dia' ? parentId : (parentId2 || currentPreventivoId));
         const nowStr = new Date().toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-        const userGenera = (window.currentUserDoc && window.currentUserDoc.nombre) || "Usuario";
+        const userGenera = (currentUserDoc && currentUserDoc.nombre) || "Usuario";
         
         // Obtener datos del preventivo madre siempre para contexto de fechas planificadas
         const motherSnap = await getDoc(doc(db, 'preventivos', pId_global));
@@ -5954,7 +5954,7 @@ ${dataContext}
           const dSnap = await getDoc(doc(db, 'preventivos', pId_global, 'subpreventivos', id));
           if (!dSnap.exists()) throw new Error("No se encontró el día");
           opData = dSnap.data();
-          nombreOp = `Resumen Diario: ${opData.nombre}`;
+          nombreOp = `${motherData.nombre} / ${opData.nombre}`;
           fechaEventoStr = opData.fecha || '-';
           provincia = motherData.provincia || 'Andalucía';
           loc = motherData.localizacion || "";
@@ -5967,11 +5967,11 @@ ${dataContext}
             const ii = di.data();
             const iName = ii.descripcion || 'Intervención';
             dataContext += `- ${iName}: ${ii.comentarios?.map(c => c.texto).join(' | ') || ''}\n`;
-            logsParaTabla.push({ timestamp: ii.timestamp, texto: `Apertura de intervención: ${iName}` });
+            logsParaTabla.push({ timestamp: ii.timestamp, texto: iName });
           });
         } else {
           opData = motherData;
-          nombreOp = `Informe Global: ${opData.nombre}`;
+          nombreOp = opData.nombre;
           fechaEventoStr = "-"; // En global se usan las planificadas
           provincia = opData.provincia || 'Andalucía';
           loc = opData.localizacion || "";
@@ -6046,12 +6046,12 @@ ${dataContext}
               <tr><td style="background:#0b2241; color:#fff; padding:8px 12px; font-weight:bold; font-size:12px; text-transform:uppercase;" colspan="2">Informe de Activación - Dispositivo de Riesgos Previsibles (DRP)</td><td style="color:#e3000f; font-weight:bold; font-size:11px; text-align:center; width:25%; border-left:1.5px solid #0b2241; background:#fff;">DRP / Preventivos</td></tr>
               <tr><td style="background:#e6eaf0; font-weight:bold; padding:6px 10px; font-size:11px; width:120px; border:1px solid #0b2241;">Nº Referencia</td><td style="padding:6px 10px; font-weight:bold; text-align:center; border:1px solid #0b2241;">${numeroIntervencion}</td><td style="background:#0b2241; color:#fff; padding:6px 10px; font-size:11px; border:1px solid #0b2241;">Provincia: <span style="font-weight:normal;">${provincia.toUpperCase()}</span></td></tr>
             </table>
-            <div style="border:1.5px solid #0b2241; border-radius:3px; margin-bottom:10px; display:flex;"><div style="width:120px; background:#0b2241; color:#fff; font-weight:bold; font-size:11px; display:flex; align-items:center; justify-content:center; text-align:center; padding:5px; border-right:1px solid #0b2241;">Motivo / Nombre:</div><div style="flex:1; padding:8px 12px; font-size:13px; font-weight:bold; background:#fff;">${nombreOp}</div></div>
+            <div style="border:1.5px solid #0b2241; border-radius:3px; margin-bottom:10px; display:flex;"><div style="width:120px; background:#0b2241; color:#fff; font-weight:bold; font-size:11px; display:flex; align-items:center; justify-content:center; text-align:center; padding:5px; border-right:1px solid #0b2241;">Nombre:</div><div style="flex:1; padding:8px 12px; font-size:13px; font-weight:bold; background:#fff;">${nombreOp}</div></div>
             <table style="width:100%; border-collapse:collapse; margin-bottom:10px; border:1.5px solid #0b2241;">
               <tr style="font-size:11px;">
                 <td style="background:#0b2241; color:#fff; width:15%; padding:6px; font-weight:bold; border:1px solid #0b2241;">Generado por:</td>
                 <td style="width:15%; color:#e3000f; font-weight:bold; padding:6px; text-align:center; border:1px solid #0b2241; background:#fff;">${userGenera}</td>
-                <td style="background:#0b2241; color:#fff; width:15%; padding:6px; font-weight:bold; border:1px solid #0b2241;">Emisión:</td>
+                <td style="background:#0b2241; color:#fff; width:20%; padding:6px; font-weight:bold; border:1px solid #0b2241;">Fecha/hora emisión informe:</td>
                 <td colspan="3" style="color:#e3000f; font-weight:bold; padding:6px; text-align:center; border:1px solid #0b2241; background:#fff;">${nowStr}</td>
               </tr>
               <tr style="font-size:11px;">
@@ -18456,8 +18456,8 @@ ${dataContext}
     }, 2000);
 
   </script>
-  <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.24.0
+  <div id="global-version-watermark" style="position: fixed; bottom: 20px; left: 20px; z-index: 9999999; font-size: 10px; color: #0b2241; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.2); padding: 3px 8px; border-radius: 4px; border: 1px solid #0b2241; font-family: monospace; pointer-events: none; font-weight: 700;">
+    EmerCRE V.15.25.0
   </div>
 </body>
 
