@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <!-- V.15.20.0: DESA Map Layer Filtering (Legend Checkboxes) -->
+  <!-- V.15.21.0: AI Report Refinement (Dates, Sorting & Expanded Stats) -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://maps.googleapis.com https://www.google.com https://apis.google.com;
@@ -5892,8 +5892,8 @@ ${dataContext}
       let orgSolicita = "";
       let contacto = "";
       let localidad = "";
-      let creadoEn = null;
-      let actualizadoEn = null;
+      let fechaEventoStr = "";
+      let fechaPlanificadaStr = "";
       let org = "";
       let dir = "";
       let loc = "";
@@ -5905,142 +5905,118 @@ ${dataContext}
       btn.textContent = '⏳ Generando...';
 
       try {
-        let op = {};
-        let snap = { empty: true };
+        let opData = {};
+        let logsParaTabla = [];
+        let pId_global = (type === 'preventivo') ? id : (type === 'dia' ? parentId : (parentId2 || currentPreventivoId));
+        
+        // Obtener datos del preventivo madre siempre para contexto de fechas planificadas
+        const motherSnap = await getDoc(doc(db, 'preventivos', pId_global));
+        const motherData = motherSnap.exists() ? motherSnap.data() : {};
+        fechaPlanificadaStr = (motherData.fechaInicio && motherData.fechaFin) ? `${motherData.fechaInicio} al ${motherData.fechaFin}` : (motherData.fechaInicio || motherData.fecha || '-');
+        org = motherData.organizacion || "";
+        dir = motherData.contacto || "";
 
         if (type === 'intervencion') {
-          const pId = parentId2 || currentPreventivoId;
           const dId = parentId || currentPreventivoDiaId;
-          if (!pId || !dId) throw new Error("Faltan IDs de referencia (Preventivo/Día)");
-
-          const docRef = doc(db, 'preventivos', pId, 'subpreventivos', dId, 'intervenciones', id);
-          const iSnap = await getDoc(docRef);
+          const iSnap = await getDoc(doc(db, 'preventivos', pId_global, 'subpreventivos', dId, 'intervenciones', id));
           if (!iSnap.exists()) throw new Error("No se encontró la intervención");
-          op = iSnap.data();
-          nombreOp = op.descripcion || 'Intervención';
-          numeroIntervencion = op.numeroIntervencion || 'S/N';
-          provincia = op.provincia || 'Andalucía';
-          creadoEn = op.timestamp; // V.12.4.1: Usar timestamp de la intervención
-          actualizadoEn = op.actualizadoEn;
+          opData = iSnap.data();
+          nombreOp = opData.descripcion || 'Intervención';
+          numeroIntervencion = opData.numeroIntervencion || 'S/N';
+          provincia = opData.provincia || motherData.provincia || 'Andalucía';
+          loc = opData.direccion || motherData.localizacion || "";
+          
+          const dSnap = await getDoc(doc(db, 'preventivos', pId_global, 'subpreventivos', dId));
+          fechaEventoStr = dSnap.exists() ? dSnap.data().fecha : (opData.timestamp?.toDate ? opData.timestamp.toDate().toLocaleDateString('es-ES') : '-');
 
-          const pSnap = await getDoc(doc(db, 'preventivos', pId));
-          if (pSnap.exists()) {
-            const pData = pSnap.data();
-            org = pData.organizacion || "";
-            dir = pData.contacto || "";
-            loc = op.direccion || pData.localizacion || ""; // V.12.4.1: Priorizar dirección de la intervención
-          }
-
-          const recIndicativos = (op.recursosAsignados || []).map(rid => (window.globalVehiculos && (window.globalVehiculos[rid]?.alias || window.globalVehiculos[rid]?.indicativo)) || rid).join(', ');
-          dataContext = `INTERVENCIÓN: ${nombreOp}\nNúmero: ${numeroIntervencion}\nRecursos: ${recIndicativos}\nCOMENTARIOS/LOGS:\n`;
-          (op.comentarios || []).forEach(c => {
-            dataContext += `[${c.fecha}] ${c.autor}: ${c.texto}\n`;
-          });
-
-          const logData = [];
-          if (op.comentarios) {
-            op.comentarios.slice().reverse().forEach(c => {
-              // V.12.4.1: Robust date parsing
-              let ts = null;
-              if (c.timestamp) {
-                ts = { toDate: () => new Date(c.timestamp) };
-              } else if (c.fecha) {
-                const [d, h] = c.fecha.split(' ');
-                const [day, mon, yr] = d.split('/');
-                ts = { toDate: () => new Date(`20${yr}-${mon}-${day}T${h}`) };
-              }
-              logData.push({ timestamp: ts, texto: `[${c.autor}] ${c.texto}` });
+          const recIndicativos = (opData.recursosAsignados || []).map(rid => (window.globalVehiculos && (window.globalVehiculos[rid]?.alias || window.globalVehiculos[rid]?.indicativo)) || rid).join(', ');
+          dataContext = `INTERVENCIÓN: ${nombreOp}\nNúmero: ${numeroIntervencion}\nRecursos: ${recIndicativos}\nCOMENTARIOS:\n`;
+          
+          if (opData.comentarios) {
+            opData.comentarios.forEach(c => {
+                  dataContext += `[${c.fecha}] ${c.autor}: ${c.texto}\n`;
+                  let ts = null;
+                  if (c.timestamp) ts = { toDate: () => new Date(c.timestamp) };
+                  else if (c.fecha) {
+                    const [d, h] = c.fecha.split(' ');
+                    const [day, mon, yr] = d.split('/');
+                    ts = { toDate: () => new Date(`20${yr}-${mon}-${day}T${h}`) };
+                  }
+                  logsParaTabla.push({ timestamp: ts, texto: `[${c.autor}] ${c.texto}` });
             });
           }
-          snap = { empty: logData.length === 0, forEach: (cb) => logData.forEach(cb) };
-
         } else if (type === 'dia') {
-          const pId = parentId || currentPreventivoId;
-          if (!pId) throw new Error("Falta ID del Preventivo madre");
-
-          const dSnap = await getDoc(doc(db, 'preventivos', pId, 'subpreventivos', id));
+          const dSnap = await getDoc(doc(db, 'preventivos', pId_global, 'subpreventivos', id));
           if (!dSnap.exists()) throw new Error("No se encontró el día");
-          op = dSnap.data();
-          nombreOp = `Resumen Diario: ${op.nombre}`;
-          numeroIntervencion = "S/N (Diario)";
-          provincia = op.provincia || 'Andalucía';
-          creadoEn = op.creadoEn;
-          actualizadoEn = op.actualizadoEn;
+          opData = dSnap.data();
+          nombreOp = `Resumen Diario: ${opData.nombre}`;
+          fechaEventoStr = opData.fecha || '-';
+          provincia = motherData.provincia || 'Andalucía';
+          loc = motherData.localizacion || "";
 
-          const qInt = query(collection(db, 'preventivos', pId, 'subpreventivos', id, 'intervenciones'));
-          const snapInt = await getDocs(qInt);
-
-          // V.12.4.1: Capturar recursos del día
-          const recIndicativos = (op.recursos || []).map(rid => (window.globalVehiculos && (window.globalVehiculos[rid]?.alias || window.globalVehiculos[rid]?.indicativo)) || rid).join(', ');
-          dataContext = `DÍA: ${op.nombre}\nRecursos Desplegados: ${recIndicativos}\nINTERVENCIONES REGISTRADAS (${snapInt.size}):\n`;
-          let logs = [];
+          const snapInt = await getDocs(collection(db, 'preventivos', pId_global, 'subpreventivos', id, 'intervenciones'));
+          const recIndicativos = (opData.recursos || []).map(rid => (window.globalVehiculos && (window.globalVehiculos[rid]?.alias || window.globalVehiculos[rid]?.indicativo)) || rid).join(', ');
+          dataContext = `DÍA: ${opData.nombre} (${fechaEventoStr})\nRecursos Desplegados: ${recIndicativos}\nINTERVENCIONES (${snapInt.size}):\n`;
+          
           snapInt.forEach(di => {
             const ii = di.data();
-            const iName = ii.descripcion || 'Intervención sin nombre';
-            dataContext += `- INTERVENCIÓN: ${iName}\n`;
-            if (ii.comentarios && ii.comentarios.length > 0) {
-              dataContext += `  Comentarios / Datos internos:\n`;
+            const iName = ii.descripcion || 'Intervención';
+            dataContext += `- ${iName}: ${ii.comentarios?.map(c => c.texto).join(' | ') || ''}\n`;
+            logsParaTabla.push({ timestamp: ii.timestamp, texto: `Intervención: ${iName}` });
+            if (ii.comentarios) {
               ii.comentarios.forEach(c => {
-                dataContext += `  * [${c.fecha}] ${c.autor}: ${c.texto}\n`;
+                let ts = null;
+                if (c.timestamp) ts = { toDate: () => new Date(c.timestamp) };
+                else if (c.fecha) {
+                  const [d, h] = c.fecha.split(' ');
+                  const [day, mon, yr] = d.split('/');
+                  ts = { toDate: () => new Date(`20${yr}-${mon}-${day}T${h}`) };
+                }
+                logsParaTabla.push({ timestamp: ts, texto: `[Log ${iName}] ${c.texto}` });
               });
             }
-            logs.push({ timestamp: ii.timestamp, texto: `Intervención registrada: ${iName}` });
           });
-          snap = { empty: logs.length === 0, forEach: (cb) => logs.forEach(cb) };
+        } else {
+          opData = motherData;
+          nombreOp = `Informe Global: ${opData.nombre}`;
+          fechaEventoStr = fechaPlanificadaStr;
+          provincia = opData.provincia || 'Andalucía';
+          loc = opData.localizacion || "";
 
-        } else if (type === 'preventivo') {
-          const pSnap = await getDoc(doc(db, 'preventivos', id));
-          if (!pSnap.exists()) throw new Error("No se encontró el preventivo");
-          op = pSnap.data();
-          nombreOp = `Informe Global: ${op.nombre}`;
-          numeroIntervencion = "S/G";
-          provincia = op.provincia || 'Andalucía';
-          creadoEn = op.creadoEn;
-          actualizadoEn = op.actualizadoEn;
-          org = op.organizacion || "";
-          dir = op.contacto || "";
-          loc = op.localizacion || "";
+          const snapSub = await getDocs(collection(db, 'preventivos', id, 'subpreventivos'));
+          dataContext = `PREVENTIVO GLOBAL: ${opData.nombre}\n`;
+          let allRecSet = new Set();
 
-          const qSub = query(collection(db, 'preventivos', id, 'subpreventivos'));
-          const snapSub = await getDocs(qSub);
-
-          // V.12.4.1: Deduplicar recursos de todos los días
-          const allRecSet = new Set();
-
-          dataContext = `PREVENTIVO GLOBAL: ${op.nombre}\n`;
-          let globalLogs = [];
           for (const ds of snapSub.docs) {
             const sd = ds.data();
             (sd.recursos || []).forEach(r => allRecSet.add(r));
-
-            const qI = query(collection(db, 'preventivos', id, 'subpreventivos', ds.id, 'intervenciones'));
-            const sI = await getDocs(qI);
-            dataContext += `DÍA ${sd.nombre} (${sd.fecha}): ${sI.size} intervenciones.\n`;
-            sI.forEach(di => {
+            const snapI = await getDocs(collection(db, 'preventivos', id, 'subpreventivos', ds.id, 'intervenciones'));
+            dataContext += `DÍA ${sd.nombre} (${sd.fecha}): ${snapI.size} intervenciones.\n`;
+            snapI.forEach(di => {
               const ii = di.data();
-              const iName = ii.descripcion || 'Intervención';
-              dataContext += `  - INTERVENCIÓN: ${iName}\n`;
-              if (ii.comentarios && ii.comentarios.length > 0) {
-                dataContext += `    Comentarios / Datos:\n`;
-                ii.comentarios.forEach(c => {
-                  dataContext += `    * [${c.fecha}] ${c.autor}: ${c.texto}\n`;
-                });
-              }
+              dataContext += `  - ${ii.descripcion}: ${ii.comentarios?.map(c => c.texto).join(' | ') || ''}\n`;
             });
-            globalLogs.push({ timestamp: sd.creadoEn, texto: `Día iniciado: ${sd.nombre} (${sI.size} intervenciones)` });
+            logsParaTabla.push({ timestamp: sd.creadoEn, texto: `Jornada finalizada: ${sd.nombre}` });
           }
-
           const recSorted = Array.from(allRecSet).map(rid => (window.globalVehiculos && (window.globalVehiculos[rid]?.alias || window.globalVehiculos[rid]?.indicativo)) || rid).join(', ');
-          dataContext += `RECURSOS TOTALES UTILIZADOS: ${recSorted}\n`;
-
-          snap = { empty: globalLogs.length === 0, forEach: (cb) => globalLogs.forEach(cb) };
+          dataContext += `RECURSOS TOTALES: ${recSorted}\n`;
         }
 
+        // Ordenar cronología (V.15.21.0)
+        logsParaTabla.sort((a, b) => {
+          const tA = a.timestamp?.toDate ? a.timestamp.toDate().getTime() : 0;
+          const tB = b.timestamp?.toDate ? b.timestamp.toDate().getTime() : 0;
+          return tA - tB;
+        });
+
         const prompt = `Actúa como un experto de Cruz Roja. Genera un INFORME DE ACTIVACIÓN profesional. 
-        LISTA TODOS LOS NOMBRES de las intervenciones encontradas. ASEGÚRATE de que los recuentos totales sean exactos.
-        Extrae Personas Atendidas (Hombres, Mujeres, Menores) basándote en las descripciones pero SOBRE TODO en los datos de los comentarios internos. 
-        Si no hay datos, pon '-'. Extrae Recursos Desplegados.
-        RESPONDE SOLO JSON: {"resumen_ejecutivo": "HTML...", "hombres": "N", "mujeres": "N", "menores": "N", "recursos": ["R1", "R2"]}
+        Analiza detenidamente la descripción de las intervenciones y los comentarios para extraer Personas Atendidas. 
+        IMPORTANTE: Deduplica pacientes. Si la descripción y los comentarios se refieren a la misma persona (ej: "Varón 40 años" y "Se atiende a un hombre"), cuéntalo como UNA sola persona.
+        Categorías obligatorias: hombres, mujeres, menores, sin_determinar, fallecidos. 
+        Si no hay datos para una categoría, pon 0.
+        Extrae Recursos Desplegados de forma resumida.
+        Genera un resumen_ejecutivo en HTML profesional (usando <p>, <ul>, <li>).
+        RESPONDE SOLO JSON: {"resumen_ejecutivo": "...", "hombres": 0, "mujeres": 0, "menores": 0, "sin_determinar": 0, "fallecidos": 0, "recursos": ["R1", "R2"]}
         DATOS: ${dataContext}`;
 
         const generateGeminiContent = httpsCallable(functions, 'generateGeminiContent');
@@ -6048,24 +6024,22 @@ ${dataContext}
         let aiResultStr = resG.data.candidates[0].content.parts[0].text.replace(/^```json\n?/, '').replace(/\n?```$/, '');
         let aiData = JSON.parse(aiResultStr);
 
-        let totalAtendidos = (parseInt(aiData.hombres) || 0) + (parseInt(aiData.mujeres) || 0) + (parseInt(aiData.menores) || 0);
-        if (totalAtendidos === 0 && (aiData.hombres === '-' && aiData.mujeres === '-' && aiData.menores === '-')) totalAtendidos = '-';
+        let nH = parseInt(aiData.hombres) || 0;
+        let nM = parseInt(aiData.mujeres) || 0;
+        let nN = parseInt(aiData.menores) || 0;
+        let nS = parseInt(aiData.sin_determinar) || 0;
+        let nF = parseInt(aiData.fallecidos) || 0;
+        let totalAtendidos = nH + nM + nN + nS + nF;
 
-        let fechaInicioStr = creadoEn?.toDate ? creadoEn.toDate().toLocaleDateString('es-ES') : '-';
-        let horaInicioStr = creadoEn?.toDate ? creadoEn.toDate().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '-';
-        let fechaFinStr = actualizadoEn?.toDate ? actualizadoEn.toDate().toLocaleDateString('es-ES') : '-';
-        let horaFinStr = actualizadoEn?.toDate ? actualizadoEn.toDate().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '-';
-
-        let recursosHtml = (aiData.recursos || []).map(r => `<div>• ${r}</div>`).join('') || '<div>No detallados</div>';
         let tablaAccionesHtml = '';
-        if (snap.empty) {
+        if (logsParaTabla.length === 0) {
           tablaAccionesHtml = `<tr><td colspan="2" style="padding:15px; text-align:center;">Sin seguimiento cronológico disponible</td></tr>`;
         } else {
-          snap.forEach(a => {
+          logsParaTabla.forEach(a => {
             const dateStr = a.timestamp?.toDate ? a.timestamp.toDate().toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '--/--/----';
             const timeStr = a.timestamp?.toDate ? a.timestamp.toDate().toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : '--:--';
             const fullTs = `${dateStr} - ${timeStr}`;
-            tablaAccionesHtml += `<tr><td style="width:110px; font-weight:bold; border-right:1.5px solid #0b2241; padding:8px; vertical-align:top; font-size:11px; background:#f9f9f9; text-align:center; color:#0b2241;">${fullTs}</td><td style="padding:8px; font-size:12px; line-height:1.4;">${a.texto}</td></tr>`;
+            tablaAccionesHtml += `<tr><td style="width:110px; font-weight:bold; border-right:1.5px solid #0b2241; padding:8px; vertical-align:top; font-size:10px; background:#f9f9f9; text-align:center; color:#0b2241;">${fullTs}</td><td style="padding:8px; font-size:11px; line-height:1.4;">${a.texto}</td></tr>`;
           });
         }
 
@@ -6081,20 +6055,31 @@ ${dataContext}
             </table>
             <div style="border:1.5px solid #0b2241; border-radius:3px; margin-bottom:10px; display:flex;"><div style="width:120px; background:#0b2241; color:#fff; font-weight:bold; font-size:11px; display:flex; align-items:center; justify-content:center; text-align:center; padding:5px; border-right:1px solid #0b2241;">Motivo / Nombre:</div><div style="flex:1; padding:8px 12px; font-size:13px; font-weight:bold; background:#fff;">${nombreOp}</div></div>
             <table style="width:100%; border-collapse:collapse; margin-bottom:10px; border:1.5px solid #0b2241;">
-              <tr style="font-size:11px;"><td style="background:#0b2241; color:#fff; width:20%; padding:6px; font-weight:bold; border:1px solid #0b2241;">Fecha/Hora Inicio:</td><td style="width:15%; color:#e3000f; font-weight:bold; padding:6px; text-align:center; border:1px solid #0b2241; background:#fff;">${fechaInicioStr}</td><td style="width:15%; color:#e3000f; font-weight:bold; padding:6px; text-align:center; border:1px solid #0b2241; background:#fff;">${horaInicioStr}</td><td style="background:#0b2241; color:#fff; width:20%; padding:6px; font-weight:bold; border:1px solid #0b2241;">Fecha/Hora Fin:</td><td style="width:15%; color:#e3000f; font-weight:bold; padding:6px; text-align:center; border:1px solid #0b2241; background:#fff;">${fechaFinStr}</td><td style="width:15%; color:#e3000f; font-weight:bold; padding:6px; text-align:center; border:1px solid #0b2241; background:#fff;">${horaFinStr}</td></tr>
+              <tr style="font-size:11px;">
+                <td style="background:#0b2241; color:#fff; width:15%; padding:6px; font-weight:bold; border:1px solid #0b2241;">Fecha Informe:</td>
+                <td style="width:15%; color:#e3000f; font-weight:bold; padding:6px; text-align:center; border:1px solid #0b2241; background:#fff;">${fechaEventoStr}</td>
+                <td style="background:#0b2241; color:#fff; width:15%; padding:6px; font-weight:bold; border:1px solid #0b2241;">Fecha Prevista:</td>
+                <td colspan="3" style="color:#e3000f; font-weight:bold; padding:6px; text-align:center; border:1px solid #0b2241; background:#fff;">${fechaPlanificadaStr}</td>
+              </tr>
               <tr style="font-size:11px;"><td style="background:#0b2241; color:#fff; padding:6px; font-weight:bold; border:1px solid #0b2241;">Organización:</td><td colspan="5" style="padding:6px; text-transform:uppercase; background:#fff; border:1px solid #0b2241;">${org || '-'}</td></tr>
               <tr style="font-size:11px;"><td style="background:#0b2241; color:#fff; padding:6px; font-weight:bold; border:1px solid #0b2241;">Localización:</td><td colspan="5" style="padding:6px; text-transform:uppercase; background:#fff; border:1px solid #0b2241;">${loc || '-'}</td></tr>
             </table>
             <table style="width:100%; border-collapse:collapse; margin-bottom:15px; border:1.5px solid #0b2241;">
-              <thead><tr><th style="background:#0b2241; color:#fff; width:110px; padding:6px; font-size:12px; border-right:1px solid #fff;">Fecha - Hora</th><th style="background:#0b2241; color:#fff; padding:6px; font-size:12px;">Seguimiento / Cronología de Actividad</th></tr></thead>
+              <thead><tr><th style="background:#0b2241; color:#fff; width:110px; padding:6px; font-size:11px; border-right:1px solid #fff;">Fecha - Hora</th><th style="background:#0b2241; color:#fff; padding:6px; font-size:11px;">Seguimiento / Cronología de Actividad (Orden Cronológico)</th></tr></thead>
               <tbody style="border-top:1.5px solid #0b2241;">${tablaAccionesHtml}</tbody>
             </table>
             <table style="width:100%; border-collapse:collapse; margin-bottom:10px; border:1.5px solid #0b2241;">
-              <tr><th colspan="3" style="background:#e6eaf0; font-size:13px; padding:8px; border-bottom:1.5px solid #0b2241; text-align:center; position:relative;">ESTADÍSTICAS: Personas Atendidas <div style="position:absolute; right:10px; top:5px; bottom:5px; width:45px; background:#0b2241; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:16px;">${totalAtendidos}</div></th></tr>
-              <tr style="background:#fff;"><td style="width:33.3%; text-align:center; padding:10px; border-right:1px solid #0b2241; font-size:12px;">👴 Hombres<br><strong style="font-size:16px; color:#0b2241;">${aiData.hombres}</strong></td><td style="width:33.3%; text-align:center; padding:10px; border-right:1px solid #0b2241; font-size:12px;">👩 Mujeres<br><strong style="font-size:16px; color:#0b2241;">${aiData.mujeres}</strong></td><td style="width:33.3%; text-align:center; padding:10px; font-size:12px;">👶 Menores<br><strong style="font-size:16px; color:#0b2241;">${aiData.menores}</strong></td></tr>
+              <tr><th colspan="5" style="background:#e6eaf0; font-size:12px; padding:8px; border-bottom:1.5px solid #0b2241; text-align:center; position:relative;">ESTADÍSTICAS: Personas Atendidas <div style="position:absolute; right:10px; top:5px; bottom:5px; width:45px; background:#0b2241; color:#fff; display:flex; align-items:center; justify-content:center; font-weight:bold; font-size:16px;">${totalAtendidos}</div></th></tr>
+              <tr style="background:#fff; font-size:10px;">
+                <td style="width:20%; text-align:center; padding:8px; border-right:1px solid #0b2241;">👴 Hombres<br><strong style="font-size:14px; color:#0b2241;">${nH}</strong></td>
+                <td style="width:20%; text-align:center; padding:8px; border-right:1px solid #0b2241;">👩 Mujeres<br><strong style="font-size:14px; color:#0b2241;">${nM}</strong></td>
+                <td style="width:20%; text-align:center; padding:8px; border-right:1px solid #0b2241;">👶 Menores<br><strong style="font-size:14px; color:#0b2241;">${nN}</strong></td>
+                <td style="width:20%; text-align:center; padding:8px; border-right:1px solid #0b2241;">❓ Sin Determinar<br><strong style="font-size:14px; color:#0b2241;">${nS}</strong></td>
+                <td style="width:20%; text-align:center; padding:8px;">💀 Fallecidos<br><strong style="font-size:14px; color:#0b2241;">${nF}</strong></td>
+              </tr>
             </table>
-            <table style="width:100%; border-collapse:collapse; margin-bottom:20px; border:1.5px solid #0b2241;"><tr><th style="background:#e6eaf0; font-size:13px; padding:8px; border-bottom:1.5px solid #0b2241; text-align:center;">Recursos Desplegados</th></tr><tr style="background:#fff;"><td style="padding:12px; font-size:12px; column-count:2; line-height:1.6;">${recursosHtml}</td></tr></table>
-            <div style="margin-top:25px; border-top:2px dashed #999; padding-top:15px;"><div style="color:#0b2241; font-weight:bold; font-size:16px; margin-bottom:8px;">✨ Resumen Ejecutivo IA</div><div style="font-size:13px; line-height:1.6; color:#444; background:#f0f4f8; padding:15px; border-radius:8px;">${aiData.resumen_ejecutivo}</div></div>
+            <table style="width:100%; border-collapse:collapse; margin-bottom:20px; border:1.5px solid #0b2241;"><tr><th style="background:#e6eaf0; font-size:12px; padding:8px; border-bottom:1.5px solid #0b2241; text-align:center;">Recursos Desplegados</th></tr><tr style="background:#fff;"><td style="padding:12px; font-size:11px; column-count:2; line-height:1.6;">${(aiData.recursos || []).map(r => `<div>• ${r}</div>`).join('') || 'No detallados'}</td></tr></table>
+            <div style="margin-top:25px; border-top:2px dashed #999; padding-top:15px;"><div style="color:#0b2241; font-weight:bold; font-size:14px; margin-bottom:8px;">✨ Resumen Ejecutivo IA (Análisis de Casuística)</div><div style="font-size:12px; line-height:1.6; color:#444; background:#f0f4f8; padding:15px; border-radius:8px;">${aiData.resumen_ejecutivo}</div></div>
           </div>
         `;
         document.getElementById('ai-report-content').innerHTML = templateHtml;
@@ -12338,7 +12323,7 @@ ${dataContext}
 
     .users-table-row-inactive { background-color: #fffafa !important; border-left: 3px solid #ef4444 !important; }
 
-    /* V.15.20.0: Leyenda DESA */
+    /* V.15.21.0: Leyenda DESA */
     .desa-legend {
       position: absolute; bottom: 85px; right: 12px; background: rgba(255, 255, 255, 0.95);
       padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-mid);
