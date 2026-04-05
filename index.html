@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <!-- V.15.15.2: Conditional Visibility for Usuario -->
+  <!-- V.15.16.0: Custom Resource Sorting (A/AM, R, T, S) -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://maps.googleapis.com https://www.google.com https://apis.google.com;
@@ -154,7 +154,7 @@
     window._oystaGlobalLastStop = {}; // V.13.0.4: Cache global de últimas paradas para decalajes y origen de salida
     window._assignedVehiclesInEmergencies = new Set(); // V.15.0.1: Para seguimiento proactivo
     window._assignedVehiclesInOpenPreventivos = new Set(); // V.15.0.1
-    window._hasOpenPreventivos = false; // V.15.15.2: Global flag for active preventivos
+    window._hasOpenPreventivos = false; // V.15.16.0: Global flag for active preventivos
 
     let localVehiclesByOystaId = {}; // V.12.4.1: Mapeo OystaID -> Datos Vehículo Local
     let localVehiclesById = {};       // V.12.4.1: Mapeo FirestoreID -> Datos Vehículo Local
@@ -469,7 +469,7 @@
     }
 
     function isVehicleVisible(id) {
-          // V.15.15.2: Visibilidad unificada entre mapas
+          // V.15.16.0: Visibilidad unificada entre mapas
       return !!visibleVehicles[id] || !!visibleVehiclesPrev[id];
     }
 
@@ -477,6 +477,27 @@
     function canShowHidden() {
       return currentRole === 'admin' || currentRole === 'manager' || currentRole === 'super_admin';
     }
+    // V.15.16.0: Comparador global de recursos por prefijo (A/AM > R > T > S > Otros)
+    window.compareResourceIds = (idA, idB) => {
+      const vA = (window.globalVehiculos && window.globalVehiculos[idA]) || (typeof localVehiclesById !== 'undefined' ? localVehiclesById[idA] : null) || { alias: idA, indicativo: idA };
+      const vB = (window.globalVehiculos && window.globalVehiculos[idB]) || (typeof localVehiclesById !== 'undefined' ? localVehiclesById[idB] : null) || { alias: idB, indicativo: idB };
+      const nameA = (vA.alias || vA.indicativo || '').toUpperCase();
+      const nameB = (vB.alias || vB.indicativo || '').toUpperCase();
+
+      const getPrio = (n) => {
+        if (n.startsWith('A-') || n.startsWith('AM-')) return 1;
+        if (n.startsWith('R-')) return 2;
+        if (n.startsWith('T-')) return 3;
+        if (n.startsWith('S-')) return 4;
+        return 5;
+      };
+
+      const pA = getPrio(nameA);
+      const pB = getPrio(nameB);
+      if (pA !== pB) return pA - pB;
+      return nameA.localeCompare(nameB);
+    };
+
     function canEditPreventivo(p) {
       if (currentRole === 'manager' || currentRole === 'super_admin') return true;
       if (currentRole === 'admin') return p ? p.abierta !== false : true;
@@ -496,7 +517,7 @@
     function canEditIntervencion(i) {
       if (currentRole === 'manager' || currentRole === 'super_admin') return true;
       if (currentRole === 'admin') return i ? i.abierta !== false : true;
-      // V.15.15.2: Usuarios pueden gestionar si está abierta O si es de un preventivo y el día está abierto
+      // V.15.16.0: Usuarios pueden gestionar si está abierta O si es de un preventivo y el día está abierto
       if (currentRole === 'usuario') {
         if (!i) return true;
         if (i.abierta !== false) return true;
@@ -878,7 +899,7 @@
 
     // V.12.4.1: Lógica independiente para mostrar/ocultar coches en Preventivos
     function isVehicleVisiblePrev(id) {
-          // V.15.15.2: Visibilidad unificada entre mapas
+          // V.15.16.0: Visibilidad unificada entre mapas
       return !!visibleVehiclesPrev[id] || !!visibleVehicles[id];
     }
 
@@ -1963,7 +1984,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.15.2 Loaded');
+    console.log('EmerCRE V.15.16.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3493,7 +3514,7 @@
         window.suscribirNotificacionesChat();
       }
       
-      // V.15.15.2: Fix global listener for open preventivos (Docs might not explicitly have {abierta: true}, they default to open if !== false)
+      // V.15.16.0: Fix global listener for open preventivos (Docs might not explicitly have {abierta: true}, they default to open if !== false)
       onSnapshot(query(collection(db, 'preventivos'), orderBy('creadoEn', 'desc'), limit(30)), snap => {
         let hasOpen = false;
         snap.forEach(doc => {
@@ -3953,8 +3974,8 @@
       const isPreventivosActive = document.getElementById('section-preventivos') && document.getElementById('section-preventivos').style.display === 'flex';
       const hasOpenPreventivos = window._hasOpenPreventivos === true;
 
-      // V.15.15.2: Consider map effectively "visible" for background syncing if there are open preventivos
-      // V.15.15.2: Fixed invalid DOM references for map containers
+      // V.15.16.0: Consider map effectively "visible" for background syncing if there are open preventivos
+      // V.15.16.0: Fixed invalid DOM references for map containers
       const isMapVisible = (isOpsActive && document.getElementById('map')?.style.display !== 'none') ||
         (isPreventivosActive && document.getElementById('preventivos-map')?.style.display !== 'none') || 
         hasOpenPreventivos;
@@ -3969,7 +3990,7 @@
                                (typeof window._assignedVehiclesInEmergencies !== 'undefined' && window._assignedVehiclesInEmergencies.size > 0);
       const isMovingBtnActive = typeof showMovingOysta !== 'undefined' && showMovingOysta === true;
 
-      // V.15.15.2: Adaptive interval adjustment
+      // V.15.16.0: Adaptive interval adjustment
       const targetInterval = hasOpenPreventivos ? 30000 : 39000;
       if (window.currentOystaInterval !== targetInterval && typeof window.restartOystaInterval === 'function') {
         window.restartOystaInterval(targetInterval);
@@ -6913,7 +6934,7 @@ ${dataContext}
       if (!tbody) return;
       tbody.innerHTML = '';
 
-      const allVehs = Object.values(localVehiclesById);
+      const allVehs = Object.values(localVehiclesById).sort((a, b) => window.compareResourceIds(a.id, b.id));
       // Filtrado por ámbito (con fallback a Málaga)
       let visible = allVehs.filter(v => {
         const prov = v.provincia || 'Málaga';
@@ -8167,13 +8188,13 @@ ${dataContext}
 
     window.toggleVehicleVisibilityPrev = async (id, checked) => {
       visibleVehiclesPrev[id] = checked;
-      visibleVehicles[id] = checked; // V.15.15.2: Sincronizar estado
+      visibleVehicles[id] = checked; // V.15.16.0: Sincronizar estado
       if (currentUser) {
         localStorage.setItem(`emercre_vehs_prev_${currentUser.uid}`, JSON.stringify(visibleVehiclesPrev));
         localStorage.setItem(`emercre_vehs_${currentUser.uid}`, JSON.stringify(visibleVehicles));
       }
       
-      // V.15.15.2: Sincronizar checkbox en Emergencias
+      // V.15.16.0: Sincronizar checkbox en Emergencias
       const chkEme = document.getElementById(`chk-veh-${id}`);
       if (chkEme) chkEme.checked = checked;
 
@@ -8424,7 +8445,7 @@ ${dataContext}
       if (vehs.length === 0) {
         resList.innerHTML = '<div style="font-size:11px;color:var(--text-4);">No hay vehículos.</div>';
       } else {
-        resList.innerHTML = vehs.map(v => {
+        resList.innerHTML = vehs.sort((a,b) => window.compareResourceIds(a.id, b.id)).map(v => {
           let iconUrl = 'assets/icons/icon_transp_personal.png';
           if (v.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
           else if (v.tipo === 'Ambulancia') iconUrl = 'assets/icons/icon_ambulancia.png';
@@ -8733,7 +8754,7 @@ ${dataContext}
       if (vehs.length === 0) {
         recList.innerHTML = '<div style="font-size:11px; color:var(--text-4);">No hay vehículos en esta provincia.</div>';
       } else {
-        recList.innerHTML = vehs.map(v => {
+        recList.innerHTML = vehs.sort((a,b) => window.compareResourceIds(a.id, b.id)).map(v => {
           window.globalVehiculos[v.id] = v;
           let iconUrl = 'assets/icons/icon_transp_personal.png';
           if (v.tipo === 'Camión') iconUrl = 'assets/icons/icon_camion.png';
@@ -8966,7 +8987,7 @@ ${dataContext}
           const isClosed = i.abierta === false;
           const prioColor = { azul: '#3498db', amarillo: '#f1c40f', rojo: '#e74c3c', negro: '#000' }[i.prioridad] || '#95a5a6';
           const dayIsOpen = subpreventivosCache[currentPreventivoDiaId]?.abierta !== false;
-          // V.15.15.2: Solo ver cerradas si el toggle está activo
+          // V.15.16.0: Solo ver cerradas si el toggle está activo
           const userCanSeeClosed = currentRole === 'usuario' && dayIsOpen && mostrarCerradas;
 
           if (i.coords && i.oculta !== true && !(isClosed && currentRole === 'usuario' && !dayIsOpen)) { hasCoords = true; bounds.extend(i.coords); }
@@ -18260,7 +18281,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.15.2
+    EmerCRE V.15.16.0
   </div>
 </body>
 
