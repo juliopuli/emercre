@@ -24,18 +24,17 @@ exports.getOystaVehicles = functions.https.onCall(async (data, context) => {
         const userEmail = context.auth.token.email || context.auth.uid;
         const db = admin.firestore();
 
+        const force = data?.force === true;
+        
         // V.15.11.1: Guard logic — check for open preventivos or active interventions
+        // [V.15.12.0] REMOVIDO: Permitimos siempre para carga inicial y seguimiento de vehículos seleccionados
+        /*
         const rawIntsSnap = await db.collectionGroup("intervenciones").where("abierta", "==", true).limit(1).get();
-        if (rawIntsSnap.empty) {
-            console.log("[Oysta Foreground] No active interventions. Skipping bridge call to avoid unnecessary login.");
-            await db.collection("oysta_logs").add({
-                fecha: admin.firestore.FieldValue.serverTimestamp(),
-                usuario: userEmail,
-                tipo: "Oysta",
-                detalle: "Sincronización omitida (Primer plano): No hay intervenciones preventivas abiertas."
-            });
+        if (rawIntsSnap.empty && !force) {
+            console.log("[Oysta Foreground] No active interventions. Skipping bridge call.");
             return { vehicles: [], loginPerformed: false, info: "Sincronización omitida: Sin actividad" };
         }
+        */
 
         try {
             const urlWithUser = `${bridgeUrl}${bridgeUrl.includes('?') ? '&' : '?'}u=${encodeURIComponent(userEmail)}`;
@@ -766,13 +765,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         }
 
         if (activeIntDocs.length === 0) {
-            console.log("[Monitor] Sin intervenciones preventivas activas. Finalizando para ahorro de cuota Firebase.");
-            await db.collection("oysta_logs").add({
-                fecha: admin.firestore.FieldValue.serverTimestamp(),
-                usuario: "Oysta (BG)",
-                tipo: "Oysta",
-                detalle: "Sincronización omitida (Segundo plano): No hay intervenciones preventivas abiertas."
-            });
+            console.log("[Monitor] Sin intervenciones preventivas activas. Finalizando.");
             return null;
         }
 

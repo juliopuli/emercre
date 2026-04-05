@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <!-- V.15.11.1: Oysta Login Logs Restoration -->
+  <!-- V.15.12.0: Oysta Sync and Visibility Fixes -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://maps.googleapis.com https://www.google.com https://apis.google.com;
@@ -154,7 +154,7 @@
     window._oystaGlobalLastStop = {}; // V.13.0.4: Cache global de últimas paradas para decalajes y origen de salida
     window._assignedVehiclesInEmergencies = new Set(); // V.15.0.1: Para seguimiento proactivo
     window._assignedVehiclesInOpenPreventivos = new Set(); // V.15.0.1
-    window._hasOpenPreventivos = false; // V.15.11.1: Global flag for active preventivos
+    window._hasOpenPreventivos = false; // V.15.12.0: Global flag for active preventivos
 
     let localVehiclesByOystaId = {}; // V.12.4.1: Mapeo OystaID -> Datos Vehículo Local
     let localVehiclesById = {};       // V.12.4.1: Mapeo FirestoreID -> Datos Vehículo Local
@@ -469,7 +469,8 @@
     }
 
     function isVehicleVisible(id) {
-      return !!visibleVehicles[id];
+          // V.15.12.0: Visibilidad unificada entre mapas
+      return !!visibleVehicles[id] || !!visibleVehiclesPrev[id];
     }
 
     // V.12.4.1: Ayudantes de permisos
@@ -871,7 +872,8 @@
 
     // V.12.4.1: Lógica independiente para mostrar/ocultar coches en Preventivos
     function isVehicleVisiblePrev(id) {
-      return !!visibleVehiclesPrev[id];
+          // V.15.12.0: Visibilidad unificada entre mapas
+      return !!visibleVehiclesPrev[id] || !!visibleVehicles[id];
     }
 
     // Helper para cálculo de distancia (Haversine) - V.12.4.1
@@ -1955,7 +1957,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.11.1 Loaded');
+    console.log('EmerCRE V.15.12.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3485,7 +3487,7 @@
         window.suscribirNotificacionesChat();
       }
       
-      // V.15.11.1: Fix global listener for open preventivos (Docs might not explicitly have {abierta: true}, they default to open if !== false)
+      // V.15.12.0: Fix global listener for open preventivos (Docs might not explicitly have {abierta: true}, they default to open if !== false)
       onSnapshot(query(collection(db, 'preventivos'), orderBy('creadoEn', 'desc'), limit(30)), snap => {
         let hasOpen = false;
         snap.forEach(doc => {
@@ -3945,8 +3947,8 @@
       const isPreventivosActive = document.getElementById('section-preventivos') && document.getElementById('section-preventivos').style.display === 'flex';
       const hasOpenPreventivos = window._hasOpenPreventivos === true;
 
-      // V.15.11.1: Consider map effectively "visible" for background syncing if there are open preventivos
-      // V.15.11.1: Fixed invalid DOM references for map containers
+      // V.15.12.0: Consider map effectively "visible" for background syncing if there are open preventivos
+      // V.15.12.0: Fixed invalid DOM references for map containers
       const isMapVisible = (isOpsActive && document.getElementById('map')?.style.display !== 'none') ||
         (isPreventivosActive && document.getElementById('preventivos-map')?.style.display !== 'none') || 
         hasOpenPreventivos;
@@ -3961,7 +3963,7 @@
                                (typeof window._assignedVehiclesInEmergencies !== 'undefined' && window._assignedVehiclesInEmergencies.size > 0);
       const isMovingBtnActive = typeof showMovingOysta !== 'undefined' && showMovingOysta === true;
 
-      // V.15.11.1: Adaptive interval adjustment
+      // V.15.12.0: Adaptive interval adjustment
       const targetInterval = hasOpenPreventivos ? 30000 : 39000;
       if (window.currentOystaInterval !== targetInterval && typeof window.restartOystaInterval === 'function') {
         window.restartOystaInterval(targetInterval);
@@ -4006,7 +4008,7 @@
         if (statusText) statusText.textContent = "Sincronizando...";
         // V.12.4.1: Usar Cloud Function autenticada en vez de fetch directo al GAS
         const getOystaVehiclesFn = httpsCallable(functions, 'getOystaVehicles');
-        const result = await getOystaVehiclesFn();
+        const result = await getOystaVehiclesFn({ force });
         const data = result.data;
         console.log(`[Oysta] Cloud Function successful, received ${data?.vehicles?.length} vehicles.`);
 
@@ -8159,9 +8161,15 @@ ${dataContext}
 
     window.toggleVehicleVisibilityPrev = async (id, checked) => {
       visibleVehiclesPrev[id] = checked;
+      visibleVehicles[id] = checked; // V.15.12.0: Sincronizar estado
       if (currentUser) {
         localStorage.setItem(`emercre_vehs_prev_${currentUser.uid}`, JSON.stringify(visibleVehiclesPrev));
+        localStorage.setItem(`emercre_vehs_${currentUser.uid}`, JSON.stringify(visibleVehicles));
       }
+      
+      // V.15.12.0: Sincronizar checkbox en Emergencias
+      const chkEme = document.getElementById(`chk-veh-${id}`);
+      if (chkEme) chkEme.checked = checked;
 
       const v = oystaVehiclesCache.find(x => String(x.id) === String(id));
       if (v) {
@@ -18247,7 +18255,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.11.1
+    EmerCRE V.15.12.0
   </div>
 </body>
 
