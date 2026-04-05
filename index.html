@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <!-- V.15.21.0: AI Report Refinement (Dates, Sorting & Expanded Stats) -->
+  <!-- V.15.22.0: AI Report Date Fix & Word Export -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://maps.googleapis.com https://www.google.com https://apis.google.com;
@@ -5893,7 +5893,8 @@ ${dataContext}
       let contacto = "";
       let localidad = "";
       let fechaEventoStr = "";
-      let fechaPlanificadaStr = "";
+      let fechaDesdePlan = "-";
+      let fechaHastaPlan = "-";
       let org = "";
       let dir = "";
       let loc = "";
@@ -5912,7 +5913,9 @@ ${dataContext}
         // Obtener datos del preventivo madre siempre para contexto de fechas planificadas
         const motherSnap = await getDoc(doc(db, 'preventivos', pId_global));
         const motherData = motherSnap.exists() ? motherSnap.data() : {};
-        fechaPlanificadaStr = (motherData.fechaInicio && motherData.fechaFin) ? `${motherData.fechaInicio} al ${motherData.fechaFin}` : (motherData.fechaInicio || motherData.fecha || '-');
+        fechaDesdePlan = motherData.fechaInicio || motherData.fecha || '-';
+        fechaHastaPlan = motherData.fechaFin || motherData.fecha || '-';
+        
         org = motherData.organizacion || "";
         dir = motherData.contacto || "";
 
@@ -5979,7 +5982,7 @@ ${dataContext}
         } else {
           opData = motherData;
           nombreOp = `Informe Global: ${opData.nombre}`;
-          fechaEventoStr = fechaPlanificadaStr;
+          fechaEventoStr = "-"; // En global se usan las planificadas
           provincia = opData.provincia || 'Andalucía';
           loc = opData.localizacion || "";
 
@@ -6044,7 +6047,7 @@ ${dataContext}
         }
 
         const templateHtml = `
-          <div class="erie-report-wrapper" style="font-family:'IBM Plex Sans', sans-serif; color:#333;">
+          <div id="erie-report-to-export" class="erie-report-wrapper" style="font-family:'IBM Plex Sans', sans-serif; color:#333; background:#fff; padding:20px;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
               <div style="display:flex; align-items:center; gap:10px;"><img src="assets/cr_logo.png" style="height:38px;"><span style="background:#e3000f; color:white; padding:4px 10px; font-weight:bold; border-radius:3px; letter-spacing:1px;">ERIE</span></div>
               <div><img src="assets/coa_logo.png" style="height:45px; opacity:0.8;"></div>
@@ -6058,8 +6061,10 @@ ${dataContext}
               <tr style="font-size:11px;">
                 <td style="background:#0b2241; color:#fff; width:15%; padding:6px; font-weight:bold; border:1px solid #0b2241;">Fecha Informe:</td>
                 <td style="width:15%; color:#e3000f; font-weight:bold; padding:6px; text-align:center; border:1px solid #0b2241; background:#fff;">${fechaEventoStr}</td>
-                <td style="background:#0b2241; color:#fff; width:15%; padding:6px; font-weight:bold; border:1px solid #0b2241;">Fecha Prevista:</td>
-                <td colspan="3" style="color:#e3000f; font-weight:bold; padding:6px; text-align:center; border:1px solid #0b2241; background:#fff;">${fechaPlanificadaStr}</td>
+                <td style="background:#0b2241; color:#fff; width:10%; padding:6px; font-weight:bold; border:1px solid #0b2241;">Desde:</td>
+                <td style="width:20%; color:#e3000f; font-weight:bold; padding:6px; text-align:center; border:1px solid #0b2241; background:#fff;">${fechaDesdePlan}</td>
+                <td style="background:#0b2241; color:#fff; width:10%; padding:6px; font-weight:bold; border:1px solid #0b2241;">Hasta:</td>
+                <td style="width:20%; color:#e3000f; font-weight:bold; padding:6px; text-align:center; border:1px solid #0b2241; background:#fff;">${fechaHastaPlan}</td>
               </tr>
               <tr style="font-size:11px;"><td style="background:#0b2241; color:#fff; padding:6px; font-weight:bold; border:1px solid #0b2241;">Organización:</td><td colspan="5" style="padding:6px; text-transform:uppercase; background:#fff; border:1px solid #0b2241;">${org || '-'}</td></tr>
               <tr style="font-size:11px;"><td style="background:#0b2241; color:#fff; padding:6px; font-weight:bold; border:1px solid #0b2241;">Localización:</td><td colspan="5" style="padding:6px; text-transform:uppercase; background:#fff; border:1px solid #0b2241;">${loc || '-'}</td></tr>
@@ -6081,6 +6086,10 @@ ${dataContext}
             <table style="width:100%; border-collapse:collapse; margin-bottom:20px; border:1.5px solid #0b2241;"><tr><th style="background:#e6eaf0; font-size:12px; padding:8px; border-bottom:1.5px solid #0b2241; text-align:center;">Recursos Desplegados</th></tr><tr style="background:#fff;"><td style="padding:12px; font-size:11px; column-count:2; line-height:1.6;">${(aiData.recursos || []).map(r => `<div>• ${r}</div>`).join('') || 'No detallados'}</td></tr></table>
             <div style="margin-top:25px; border-top:2px dashed #999; padding-top:15px;"><div style="color:#0b2241; font-weight:bold; font-size:14px; margin-bottom:8px;">✨ Resumen Ejecutivo IA (Análisis de Casuística)</div><div style="font-size:12px; line-height:1.6; color:#444; background:#f0f4f8; padding:15px; border-radius:8px;">${aiData.resumen_ejecutivo}</div></div>
           </div>
+          <div style="margin-top:20px; display:flex; justify-content:center; gap:10px;">
+            <button class="btn-primary" onclick="window.exportToWordIA()" style="height:40px; padding:0 25px; font-size:14px; font-weight:700;">📄 Exportar Informe a Word</button>
+            <button class="btn-secondary" onclick="window.cerrarModalInformeIA()" style="height:40px; padding:0 25px;">Cerrar Vista Previa</button>
+          </div>
         `;
         document.getElementById('ai-report-content').innerHTML = templateHtml;
         const modal = document.getElementById('overlay-ai-report');
@@ -6094,6 +6103,35 @@ ${dataContext}
           mostrarToast("Error: " + err.message, "error");
         }
       } finally { btn.disabled = false; btn.textContent = oldText; }
+    };
+
+    window.exportToWordIA = () => {
+      const content = document.getElementById('erie-report-to-export').innerHTML;
+      const header = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+      <head><meta charset='utf-8'><title>Informe de Activación</title>
+      <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        table { border-collapse: collapse; width: 100%; }
+        td, th { border: 1px solid #0b2241; padding: 5px; }
+      </style>
+      </head><body>`;
+      const footer = "</body></html>";
+      const sourceHTML = header + content + footer;
+      
+      const fileBlob = new Blob(['\ufeff', sourceHTML], { type: 'application/msword' });
+      const fileName = `Informe_IA_${new Date().toISOString().split('T')[0]}.doc`;
+      
+      if (window.navigator.msSaveOrOpenBlob) {
+        window.navigator.msSaveOrOpenBlob(fileBlob, fileName);
+      } else {
+        const downloadLink = document.createElement("a");
+        document.body.appendChild(downloadLink);
+        const url = URL.createObjectURL(fileBlob);
+        downloadLink.href = url;
+        downloadLink.download = fileName;
+        downloadLink.click();
+        document.body.removeChild(downloadLink);
+      }
     };
 
     window.abrirModalQuotaIA = () => {
