@@ -26,15 +26,6 @@ exports.getOystaVehicles = functions.https.onCall(async (data, context) => {
 
         const force = data?.force === true;
         
-        // V.15.11.1: Guard logic — check for open preventivos or active interventions
-        // [V.15.12.0] REMOVIDO: Permitimos siempre para carga inicial y seguimiento de vehículos seleccionados
-        /*
-        const rawIntsSnap = await db.collectionGroup("intervenciones").where("abierta", "==", true).limit(1).get();
-        if (rawIntsSnap.empty && !force) {
-            console.log("[Oysta Foreground] No active interventions. Skipping bridge call.");
-            return { vehicles: [], loginPerformed: false, info: "Sincronización omitida: Sin actividad" };
-        }
-        */
 
         try {
             const urlWithUser = `${bridgeUrl}${bridgeUrl.includes('?') ? '&' : '?'}u=${encodeURIComponent(userEmail)}`;
