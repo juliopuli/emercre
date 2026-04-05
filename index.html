@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <!-- V.15.14.0: User Permissions Adjusted for Closed Interventions -->
+  <!-- V.15.15.0: User Permissions Adjusted for Closed Interventions -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://maps.googleapis.com https://www.google.com https://apis.google.com;
@@ -154,7 +154,7 @@
     window._oystaGlobalLastStop = {}; // V.13.0.4: Cache global de últimas paradas para decalajes y origen de salida
     window._assignedVehiclesInEmergencies = new Set(); // V.15.0.1: Para seguimiento proactivo
     window._assignedVehiclesInOpenPreventivos = new Set(); // V.15.0.1
-    window._hasOpenPreventivos = false; // V.15.14.0: Global flag for active preventivos
+    window._hasOpenPreventivos = false; // V.15.15.0: Global flag for active preventivos
 
     let localVehiclesByOystaId = {}; // V.12.4.1: Mapeo OystaID -> Datos Vehículo Local
     let localVehiclesById = {};       // V.12.4.1: Mapeo FirestoreID -> Datos Vehículo Local
@@ -469,7 +469,7 @@
     }
 
     function isVehicleVisible(id) {
-          // V.15.14.0: Visibilidad unificada entre mapas
+          // V.15.15.0: Visibilidad unificada entre mapas
       return !!visibleVehicles[id] || !!visibleVehiclesPrev[id];
     }
 
@@ -496,7 +496,7 @@
     function canEditIntervencion(i) {
       if (currentRole === 'manager' || currentRole === 'super_admin') return true;
       if (currentRole === 'admin') return i ? i.abierta !== false : true;
-      // V.15.14.0: Usuarios pueden gestionar si está abierta O si es de un preventivo y el día está abierto
+      // V.15.15.0: Usuarios pueden gestionar si está abierta O si es de un preventivo y el día está abierto
       if (currentRole === 'usuario') {
         if (!i) return true;
         if (i.abierta !== false) return true;
@@ -878,7 +878,7 @@
 
     // V.12.4.1: Lógica independiente para mostrar/ocultar coches en Preventivos
     function isVehicleVisiblePrev(id) {
-          // V.15.14.0: Visibilidad unificada entre mapas
+          // V.15.15.0: Visibilidad unificada entre mapas
       return !!visibleVehiclesPrev[id] || !!visibleVehicles[id];
     }
 
@@ -1963,7 +1963,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.14.0 Loaded');
+    console.log('EmerCRE V.15.15.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3493,7 +3493,7 @@
         window.suscribirNotificacionesChat();
       }
       
-      // V.15.14.0: Fix global listener for open preventivos (Docs might not explicitly have {abierta: true}, they default to open if !== false)
+      // V.15.15.0: Fix global listener for open preventivos (Docs might not explicitly have {abierta: true}, they default to open if !== false)
       onSnapshot(query(collection(db, 'preventivos'), orderBy('creadoEn', 'desc'), limit(30)), snap => {
         let hasOpen = false;
         snap.forEach(doc => {
@@ -3953,8 +3953,8 @@
       const isPreventivosActive = document.getElementById('section-preventivos') && document.getElementById('section-preventivos').style.display === 'flex';
       const hasOpenPreventivos = window._hasOpenPreventivos === true;
 
-      // V.15.14.0: Consider map effectively "visible" for background syncing if there are open preventivos
-      // V.15.14.0: Fixed invalid DOM references for map containers
+      // V.15.15.0: Consider map effectively "visible" for background syncing if there are open preventivos
+      // V.15.15.0: Fixed invalid DOM references for map containers
       const isMapVisible = (isOpsActive && document.getElementById('map')?.style.display !== 'none') ||
         (isPreventivosActive && document.getElementById('preventivos-map')?.style.display !== 'none') || 
         hasOpenPreventivos;
@@ -3969,7 +3969,7 @@
                                (typeof window._assignedVehiclesInEmergencies !== 'undefined' && window._assignedVehiclesInEmergencies.size > 0);
       const isMovingBtnActive = typeof showMovingOysta !== 'undefined' && showMovingOysta === true;
 
-      // V.15.14.0: Adaptive interval adjustment
+      // V.15.15.0: Adaptive interval adjustment
       const targetInterval = hasOpenPreventivos ? 30000 : 39000;
       if (window.currentOystaInterval !== targetInterval && typeof window.restartOystaInterval === 'function') {
         window.restartOystaInterval(targetInterval);
@@ -8167,13 +8167,13 @@ ${dataContext}
 
     window.toggleVehicleVisibilityPrev = async (id, checked) => {
       visibleVehiclesPrev[id] = checked;
-      visibleVehicles[id] = checked; // V.15.14.0: Sincronizar estado
+      visibleVehicles[id] = checked; // V.15.15.0: Sincronizar estado
       if (currentUser) {
         localStorage.setItem(`emercre_vehs_prev_${currentUser.uid}`, JSON.stringify(visibleVehiclesPrev));
         localStorage.setItem(`emercre_vehs_${currentUser.uid}`, JSON.stringify(visibleVehicles));
       }
       
-      // V.15.14.0: Sincronizar checkbox en Emergencias
+      // V.15.15.0: Sincronizar checkbox en Emergencias
       const chkEme = document.getElementById(`chk-veh-${id}`);
       if (chkEme) chkEme.checked = checked;
 
@@ -8967,7 +8967,7 @@ ${dataContext}
           const prioColor = { azul: '#3498db', amarillo: '#f1c40f', rojo: '#e74c3c', negro: '#000' }[i.prioridad] || '#95a5a6';
           if (i.coords && i.oculta !== true && !(isClosed && currentRole === 'usuario')) { hasCoords = true; bounds.extend(i.coords); }
           if ((i.oculta === true || isClosed) && !mostrarCerradas) return '';
-          // V.15.14.0: Permitir a usuario ver intervenciones cerradas en preventivos con días abiertos
+          // V.15.15.0: Permitir a usuario ver intervenciones cerradas en preventivos con días abiertos
           if (isClosed && currentRole === 'usuario') {
             const day = subpreventivosCache[currentPreventivoDiaId];
             if (!day || day.abierta === false) return ''; 

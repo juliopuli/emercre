@@ -872,7 +872,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 const oystaTsStr = v.last_pos ? v.last_pos.replace(' ', 'T') : null;
                 const oystaTime = oystaTsStr ? new Date(oystaTsStr).getTime() : now;
 
-                const vs = intStates[rid] || { moving: false, hasDeparted: false, hasArrived: false, lastStopAddr: "" };
+                const vs = intStates[rid] || { moving: false, hasDeparted: false, hasArrived: false, hasReachedGoal: false, lastStopAddr: "" };
                 let vehicleStateChanged = false;
 
                 if (vs.hasArrived && distToDest > 0.25) {
@@ -888,7 +888,8 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                     
                     if (!alreadySent) {
                         const addrStr = `[${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}] (Ver mapa: https://www.google.com/maps?q=${pos.lat},${pos.lng})`;
-                        const target = iData.direccion || "destino";
+                        // V.15.15.0: Si ya llegó al objetivo una vez, el destino es genérico
+                        const target = vs.hasReachedGoal ? "destino" : (iData.direccion || "destino");
                         const msg = `${indicativo} sale desde ${addrStr} hacia ${target}`;
                         
                         const newComm = {
@@ -925,6 +926,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                     if (isGoal) {
                         msg = `${indicativo} llega a lugar del aviso (${iData.direccion || 'sin dirección'})`;
                         vs.hasArrived = true;
+                        vs.hasReachedGoal = true; // V.15.15.0: Ya llegó
                     } else {
                         const addrStr = `[${pos.lat.toFixed(4)}, ${pos.lng.toFixed(4)}] (Ver mapa: https://www.google.com/maps?q=${pos.lat},${pos.lng})`;
                         msg = `${indicativo} llega a ${addrStr}`;
@@ -937,21 +939,24 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                                 const newSaleText = `${indicativo} sale desde ${vs.lastSaleAddr} hacia ${addrStr}`;
                                 if (oldText !== newSaleText) {
                                     currentComms[idx].texto = newSaleText;
-                                    await iRef.update({ comentarios: currentComms });
+                                    // V.15.15.0: Guardamos para actualizar en el bloque final
+                                    iData.comentarios = currentComms; 
                                 }
                             }
                         }
                     }
                     
+                    const arrivalComm = {
+                        texto: msg,
+                        coords: pos,
+                        autor: 'Sist. Oysta (BG)',
+                        autorId: 'system',
+                        timestamp: oystaTime,
+                        fecha: formatCommentFecha(new Date(oystaTime))
+                    };
+
                     await iRef.update({
-                        comentarios: admin.firestore.FieldValue.arrayUnion({
-                            texto: msg,
-                            coords: pos,
-                            autor: 'Sist. Oysta (BG)',
-                            autorId: 'system',
-                            timestamp: oystaTime,
-                            fecha: formatCommentFecha(new Date(oystaTime))
-                        }),
+                        comentarios: [...(iData.comentarios || []), arrivalComm],
                         actualizadoEn: admin.firestore.FieldValue.serverTimestamp()
                     });
                     
