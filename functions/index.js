@@ -34,21 +34,12 @@ exports.getOystaVehicles = functions.https.onCall(async (data, context) => {
             const result = await resp.json();
             const total = result.vehicles?.length || 0;
 
-            if (force) {
-                await db.collection("oysta_logs").add({
-                    fecha: admin.firestore.FieldValue.serverTimestamp(),
-                    usuario: userEmail,
-                    tipo: "Oysta",
-                    detalle: `Sincronización forzada (Inicio APP / Manual). [Vehículos: ${total}]`
-                });
-            }
-
             if (result.loginPerformed) {
                 await db.collection("oysta_logs").add({
                     fecha: admin.firestore.FieldValue.serverTimestamp(),
                     usuario: userEmail,
                     tipo: "Oysta",
-                    detalle: result.loginInfo || "Login realizado en Oysta (Primer plano)"
+                    detalle: `Login por falta de caché (Provocado por ${userEmail})`
                 });
             }
 
@@ -816,7 +807,7 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
                 fecha: admin.firestore.FieldValue.serverTimestamp(),
                 usuario: "Oysta (BG)",
                 tipo: "Oysta",
-                detalle: oystaData.loginInfo || "Login realizado en Oysta (Segundo plano)"
+                detalle: "Login por falta de caché (Oysta BG)"
             });
         }
 
