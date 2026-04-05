@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <!-- V.15.17.0: Oysta Logging Refinement -->
+  <!-- V.15.18.0: User Management Refinement (Deactivation Switch & Bulk) -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://maps.googleapis.com https://www.google.com https://apis.google.com;
@@ -154,7 +154,7 @@
     window._oystaGlobalLastStop = {}; // V.13.0.4: Cache global de últimas paradas para decalajes y origen de salida
     window._assignedVehiclesInEmergencies = new Set(); // V.15.0.1: Para seguimiento proactivo
     window._assignedVehiclesInOpenPreventivos = new Set(); // V.15.0.1
-    window._hasOpenPreventivos = false; // V.15.17.0: Global flag for active preventivos
+    window._hasOpenPreventivos = false; // V.15.18.0: Global flag for active preventivos
 
     let localVehiclesByOystaId = {}; // V.12.4.1: Mapeo OystaID -> Datos Vehículo Local
     let localVehiclesById = {};       // V.12.4.1: Mapeo FirestoreID -> Datos Vehículo Local
@@ -469,7 +469,7 @@
     }
 
     function isVehicleVisible(id) {
-          // V.15.17.0: Visibilidad unificada entre mapas
+          // V.15.18.0: Visibilidad unificada entre mapas
       return !!visibleVehicles[id] || !!visibleVehiclesPrev[id];
     }
 
@@ -477,7 +477,7 @@
     function canShowHidden() {
       return currentRole === 'admin' || currentRole === 'manager' || currentRole === 'super_admin';
     }
-    // V.15.17.0: Comparador global de recursos por prefijo (A/AM > R > T > S > Otros)
+    // V.15.18.0: Comparador global de recursos por prefijo (A/AM > R > T > S > Otros)
     window.compareResourceIds = (idA, idB) => {
       const vA = (window.globalVehiculos && window.globalVehiculos[idA]) || (typeof localVehiclesById !== 'undefined' ? localVehiclesById[idA] : null) || { alias: idA, indicativo: idA };
       const vB = (window.globalVehiculos && window.globalVehiculos[idB]) || (typeof localVehiclesById !== 'undefined' ? localVehiclesById[idB] : null) || { alias: idB, indicativo: idB };
@@ -517,7 +517,7 @@
     function canEditIntervencion(i) {
       if (currentRole === 'manager' || currentRole === 'super_admin') return true;
       if (currentRole === 'admin') return i ? i.abierta !== false : true;
-      // V.15.17.0: Usuarios pueden gestionar si está abierta O si es de un preventivo y el día está abierto
+      // V.15.18.0: Usuarios pueden gestionar si está abierta O si es de un preventivo y el día está abierto
       if (currentRole === 'usuario') {
         if (!i) return true;
         if (i.abierta !== false) return true;
@@ -899,7 +899,7 @@
 
     // V.12.4.1: Lógica independiente para mostrar/ocultar coches en Preventivos
     function isVehicleVisiblePrev(id) {
-          // V.15.17.0: Visibilidad unificada entre mapas
+          // V.15.18.0: Visibilidad unificada entre mapas
       return !!visibleVehiclesPrev[id] || !!visibleVehicles[id];
     }
 
@@ -1984,7 +1984,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.17.0 Loaded');
+    console.log('EmerCRE V.15.18.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3514,7 +3514,7 @@
         window.suscribirNotificacionesChat();
       }
       
-      // V.15.17.0: Fix global listener for open preventivos (Docs might not explicitly have {abierta: true}, they default to open if !== false)
+      // V.15.18.0: Fix global listener for open preventivos (Docs might not explicitly have {abierta: true}, they default to open if !== false)
       onSnapshot(query(collection(db, 'preventivos'), orderBy('creadoEn', 'desc'), limit(30)), snap => {
         let hasOpen = false;
         snap.forEach(doc => {
@@ -3974,8 +3974,8 @@
       const isPreventivosActive = document.getElementById('section-preventivos') && document.getElementById('section-preventivos').style.display === 'flex';
       const hasOpenPreventivos = window._hasOpenPreventivos === true;
 
-      // V.15.17.0: Consider map effectively "visible" for background syncing if there are open preventivos
-      // V.15.17.0: Fixed invalid DOM references for map containers
+      // V.15.18.0: Consider map effectively "visible" for background syncing if there are open preventivos
+      // V.15.18.0: Fixed invalid DOM references for map containers
       const isMapVisible = (isOpsActive && document.getElementById('map')?.style.display !== 'none') ||
         (isPreventivosActive && document.getElementById('preventivos-map')?.style.display !== 'none') || 
         hasOpenPreventivos;
@@ -3990,7 +3990,7 @@
                                (typeof window._assignedVehiclesInEmergencies !== 'undefined' && window._assignedVehiclesInEmergencies.size > 0);
       const isMovingBtnActive = typeof showMovingOysta !== 'undefined' && showMovingOysta === true;
 
-      // V.15.17.0: Adaptive interval adjustment
+      // V.15.18.0: Adaptive interval adjustment
       const targetInterval = hasOpenPreventivos ? 30000 : 39000;
       if (window.currentOystaInterval !== targetInterval && typeof window.restartOystaInterval === 'function') {
         window.restartOystaInterval(targetInterval);
@@ -6575,6 +6575,7 @@ ${dataContext}
         const svgToggle = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>`;
 
         const tr = document.createElement('tr');
+        if (u.activo === false) tr.classList.add('users-table-row-inactive');
         tr.innerHTML = `
           <td>
             <div style="display:flex; align-items:center; gap:10px;">
@@ -6594,14 +6595,22 @@ ${dataContext}
           </td>
           <td><span class="activo-badge ${u.activo !== false ? 'activo' : 'inactivo'}">${u.activo !== false ? 'Activo' : 'Inactivo'}</span></td>
           <td>
-            <button class="tbl-btn" onclick="editarUsuario('${d.id}')" title="Editar">${svgEdit}</button>
-            <button class="tbl-btn" onclick="abrirLogUsuario('${d.id}', '${escapeHTML(u.nombre || u.email)}')" title="Ver log">${svgLog}</button>
-            ${d.id !== currentUser.uid
-            ? (currentRole === 'super_admin'
-              ? `<button class="tbl-btn danger" onclick="borrarUsuario('${d.id}')" title="Eliminar de la DB">${svgTrash}</button>
-                   <button class="tbl-btn" onclick="desactivarUsuario('${d.id}')" title="Desactivar">${svgToggle}</button>`
-              : `<button class="tbl-btn danger" onclick="desactivarUsuario('${d.id}')" title="Desactivar">${svgToggle}</button>`)
-            : '<span style="font-size:11px;color:var(--text-4)">(tú)</span>'}
+            <div style="display:flex; align-items:center; gap:12px;">
+              <button class="tbl-btn" onclick="editarUsuario('${d.id}')" title="Editar">${svgEdit}</button>
+              <button class="tbl-btn" onclick="abrirLogUsuario('${d.id}', '${escapeHTML(u.nombre || u.email)}')" title="Ver log">${svgLog}</button>
+              ${d.id !== currentUser.uid
+              ? `
+                  <div class="field" style="margin:0; width:auto;">
+                    <label class="switch-deactivate" style="display:flex; align-items:center; gap:6px; cursor:pointer;" title="ON = Desactivado">
+                      <span style="font-size:9px; color:var(--text-4); font-weight:700; text-transform:uppercase;">Desactivar</span>
+                      <input type="checkbox" onchange="toggleUserActive('${d.id}', this.checked)" ${u.activo === false ? 'checked' : ''}>
+                      <span class="slider-deactivate"></span>
+                    </label>
+                  </div>
+                  ${currentRole === 'super_admin' ? `<button class="tbl-btn danger" style="margin-left:auto;" onclick="borrarUsuario('${d.id}')" title="Eliminar de la DB">${svgTrash}</button>` : ''}
+                `
+              : '<span style="font-size:11px;color:var(--text-4); margin-left:auto;">(tú)</span>'}
+            </div>
           </td>`;
         tbody.appendChild(tr);
       });
@@ -6619,6 +6628,45 @@ ${dataContext}
       userSearchQuery = '';
       document.getElementById('user-search-clear').style.display = 'none';
       renderUsersTable();
+    };
+
+    // V.15.18.0: Nuevas funciones de gestión de usuarios
+    window.toggleUserActive = async (id, deactivating) => {
+      if (id === currentUser.uid) return;
+      try {
+        await updateDoc(doc(db, 'users', id), { activo: !deactivating });
+        showNotification(deactivating ? 'Usuario desactivado' : 'Usuario activado');
+      } catch (e) {
+        console.error(e);
+        showNotification('Error al cambiar estado', 'error');
+      }
+    };
+
+    window.desactivarTodosLosUsuarios = async () => {
+      if (currentRole !== 'super_admin') return;
+      if (!confirm("¿Desactivar a TODOS los perfiles 'usuario'? (No afectará a admins ni managers)")) return;
+      
+      try {
+        const q = query(collection(db, 'users'), where('role', '==', 'usuario'));
+        const snap = await getDocs(q);
+        const batch = writeBatch(db);
+        let count = 0;
+        snap.forEach(d => {
+          if (d.data().activo !== false) {
+             batch.update(d.ref, { activo: false });
+             count++;
+          }
+        });
+        if (count > 0) {
+          await batch.commit();
+          showNotification(`${count} usuarios desactivados.`);
+        } else {
+          showNotification(`No hay usuarios activos con perfil 'usuario'.`);
+        }
+      } catch (e) {
+        console.error(e);
+        showNotification('Error en desactivación masiva', 'error');
+      }
     };
 
     function cargarOpcionesRoles(selId) {
@@ -8188,13 +8236,13 @@ ${dataContext}
 
     window.toggleVehicleVisibilityPrev = async (id, checked) => {
       visibleVehiclesPrev[id] = checked;
-      visibleVehicles[id] = checked; // V.15.17.0: Sincronizar estado
+      visibleVehicles[id] = checked; // V.15.18.0: Sincronizar estado
       if (currentUser) {
         localStorage.setItem(`emercre_vehs_prev_${currentUser.uid}`, JSON.stringify(visibleVehiclesPrev));
         localStorage.setItem(`emercre_vehs_${currentUser.uid}`, JSON.stringify(visibleVehicles));
       }
       
-      // V.15.17.0: Sincronizar checkbox en Emergencias
+      // V.15.18.0: Sincronizar checkbox en Emergencias
       const chkEme = document.getElementById(`chk-veh-${id}`);
       if (chkEme) chkEme.checked = checked;
 
@@ -8987,7 +9035,7 @@ ${dataContext}
           const isClosed = i.abierta === false;
           const prioColor = { azul: '#3498db', amarillo: '#f1c40f', rojo: '#e74c3c', negro: '#000' }[i.prioridad] || '#95a5a6';
           const dayIsOpen = subpreventivosCache[currentPreventivoDiaId]?.abierta !== false;
-          // V.15.17.0: Solo ver cerradas si el toggle está activo
+          // V.15.18.0: Solo ver cerradas si el toggle está activo
           const userCanSeeClosed = currentRole === 'usuario' && dayIsOpen && mostrarCerradas;
 
           if (i.coords && i.oculta !== true && !(isClosed && currentRole === 'usuario' && !dayIsOpen)) { hasCoords = true; bounds.extend(i.coords); }
@@ -12222,6 +12270,27 @@ ${dataContext}
       transition: .4s;
       border-radius: 50%;
     }
+
+    /* V.15.18.0: Switch específico para desactivación (Rojo cuando está ON=Desactivado) */
+    .switch-deactivate {
+      position: relative;
+      display: inline-block;
+      width: 32px;
+      height: 18px;
+    }
+    .switch-deactivate input { opacity: 0; width: 0; height: 0; }
+    .switch-deactivate .slider-deactivate {
+      position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+      background-color: #e2e8f0; transition: .4s; border-radius: 18px; border: 1px solid #cbd5e1;
+    }
+    .switch-deactivate .slider-deactivate:before {
+      position: absolute; content: ""; height: 12px; width: 12px; left: 2px; bottom: 2px;
+      background-color: white; transition: .4s; border-radius: 50%;
+    }
+    .switch-deactivate input:checked + .slider-deactivate { background-color: #ef4444; border-color: #dc2626; }
+    .switch-deactivate input:checked + .slider-deactivate:before { transform: translateX(14px); }
+
+    .users-table-row-inactive { background-color: #fffafa !important; border-left: 3px solid #ef4444 !important; }
 
     input:checked+.slider {
       background-color: var(--accent);
@@ -16889,7 +16958,10 @@ ${dataContext}
           <div class="section-title">Gestión de usuarios</div>
           <div class="section-subtitle">Solo el Super Admin puede crear, editar y desactivar usuarios.</div>
         </div>
-        <button class="btn-nueva" onclick="abrirModalUsuario()">+ Nuevo usuario</button>
+        <div style="display:flex; gap:10px;">
+          <button class="btn-nueva" style="background:#fef2f2; color:#dc2626; border:1px solid #fecaca;" onclick="desactivarTodosLosUsuarios()">Desactivar Usuarios</button>
+          <button class="btn-nueva" onclick="abrirModalUsuario()">+ Nuevo usuario</button>
+        </div>
       </div>
       <div class="search-box" style="margin-bottom:16px;">
         <svg class="search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
@@ -18281,7 +18353,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.17.0
+    EmerCRE V.15.18.0
   </div>
 </body>
 
