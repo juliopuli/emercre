@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <!-- V.15.18.0: User Management Refinement (Deactivation Switch & Bulk) -->
+  <!-- V.15.19.0: DESA Map Layer Refinement (Colors & Legends) -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://maps.googleapis.com https://www.google.com https://apis.google.com;
@@ -154,7 +154,7 @@
     window._oystaGlobalLastStop = {}; // V.13.0.4: Cache global de últimas paradas para decalajes y origen de salida
     window._assignedVehiclesInEmergencies = new Set(); // V.15.0.1: Para seguimiento proactivo
     window._assignedVehiclesInOpenPreventivos = new Set(); // V.15.0.1
-    window._hasOpenPreventivos = false; // V.15.18.0: Global flag for active preventivos
+    window._hasOpenPreventivos = false; // V.15.19.0: Global flag for active preventivos
 
     let localVehiclesByOystaId = {}; // V.12.4.1: Mapeo OystaID -> Datos Vehículo Local
     let localVehiclesById = {};       // V.12.4.1: Mapeo FirestoreID -> Datos Vehículo Local
@@ -469,7 +469,7 @@
     }
 
     function isVehicleVisible(id) {
-          // V.15.18.0: Visibilidad unificada entre mapas
+          // V.15.19.0: Visibilidad unificada entre mapas
       return !!visibleVehicles[id] || !!visibleVehiclesPrev[id];
     }
 
@@ -477,7 +477,7 @@
     function canShowHidden() {
       return currentRole === 'admin' || currentRole === 'manager' || currentRole === 'super_admin';
     }
-    // V.15.18.0: Comparador global de recursos por prefijo (A/AM > R > T > S > Otros)
+    // V.15.19.0: Comparador global de recursos por prefijo (A/AM > R > T > S > Otros)
     window.compareResourceIds = (idA, idB) => {
       const vA = (window.globalVehiculos && window.globalVehiculos[idA]) || (typeof localVehiclesById !== 'undefined' ? localVehiclesById[idA] : null) || { alias: idA, indicativo: idA };
       const vB = (window.globalVehiculos && window.globalVehiculos[idB]) || (typeof localVehiclesById !== 'undefined' ? localVehiclesById[idB] : null) || { alias: idB, indicativo: idB };
@@ -517,7 +517,7 @@
     function canEditIntervencion(i) {
       if (currentRole === 'manager' || currentRole === 'super_admin') return true;
       if (currentRole === 'admin') return i ? i.abierta !== false : true;
-      // V.15.18.0: Usuarios pueden gestionar si está abierta O si es de un preventivo y el día está abierto
+      // V.15.19.0: Usuarios pueden gestionar si está abierta O si es de un preventivo y el día está abierto
       if (currentRole === 'usuario') {
         if (!i) return true;
         if (i.abierta !== false) return true;
@@ -899,7 +899,7 @@
 
     // V.12.4.1: Lógica independiente para mostrar/ocultar coches en Preventivos
     function isVehicleVisiblePrev(id) {
-          // V.15.18.0: Visibilidad unificada entre mapas
+          // V.15.19.0: Visibilidad unificada entre mapas
       return !!visibleVehiclesPrev[id] || !!visibleVehicles[id];
     }
 
@@ -1063,6 +1063,7 @@
       if (window.desaLayerEnabled) {
         window.cargarDESAData();
         mostrarToast('Capa DESA Málaga activa');
+        document.querySelectorAll('.desa-legend').forEach(el => el.style.display = 'flex');
       } else {
         Object.values(desaMarkers).forEach(ms => {
           if (ms.mEme) ms.mEme.setMap(null);
@@ -1070,6 +1071,7 @@
         });
         desaMarkers = {};
         mostrarToast('Capa DESA Málaga desactivada');
+        document.querySelectorAll('.desa-legend').forEach(el => el.style.display = 'none');
       }
     };
 
@@ -1091,12 +1093,25 @@
           const lat = coords[1];
           const lng = coords[0];
           const id = f.properties.ogc_fid || f.id;
+          const p = f.properties;
 
           if (!desaMarkers[id]) {
+            // V.15.19.0: Lógica de colores DESA
+            const hor = (p.horarios || "").toUpperCase();
+            const nom = (p.nombre || "").toUpperCase();
+            const des = (p.descripcion || "").toUpperCase();
+            const dir = (p.direccion || "").toUpperCase();
+            const is24h = p.VEINTICUATROHORAS === "Si" || hor.includes("24");
+            const isBus = nom.includes("EMT") || des.includes("AUTOBÚS") || dir.includes("AUTOBÚS");
+            
+            let color = "#27ae60"; // Verde (resto)
+            if (is24h) color = "#e74c3c"; // Rojo (24h)
+            else if (isBus) color = "#3498db"; // Azul (EMT)
+
             const mEmeEl = document.createElement('div');
             mEmeEl.className = 'custom-marker';
             mEmeEl.innerHTML = '⚡';
-            mEmeEl.style.backgroundColor = '#27ae60';
+            mEmeEl.style.backgroundColor = color;
             mEmeEl.style.borderRadius = '50%';
             mEmeEl.style.padding = '4px';
             mEmeEl.style.border = '2px solid white';
@@ -1107,6 +1122,7 @@
             mEmeEl.style.justifyContent = 'center';
             mEmeEl.style.width = '24px';
             mEmeEl.style.height = '24px';
+            mEmeEl.style.color = "white";
 
             let mEme = null;
             if (mapEmergencias) {
@@ -1114,15 +1130,18 @@
                 position: { lat, lng },
                 map: mapEmergencias,
                 content: mEmeEl,
-                title: f.properties.nombre || 'DESA'
+                title: p.nombre || 'DESA'
               });
               mEme.addListener('click', () => {
                 desaInfoWindow.setContent(`
                   <div style="font-family: 'IBM Plex Sans', sans-serif; padding:5px; max-width:200px;">
-                    <h4 style="margin:0 0 5px 0;">⚡ ${f.properties.nombre || 'DESA'}</h4>
-                    <p style="margin:0 0 5px 0; font-size:12px;"><b>Ubicación:</b> ${f.properties.direccion || f.properties.descripcion || ''}</p>
-                    <p style="margin:0 0 5px 0; font-size:12px;"><b>Horario:</b> ${f.properties.horarios || 'No especificado'}</p>
-                    <p style="margin:0; font-size:12px;"><b>Titularidad:</b> ${f.properties.titularidad || ''}</p>
+                    <div style="display:flex; align-items:center; gap:5px; margin-bottom:5px;">
+                        <span style="background:${color}; width:10px; height:10px; border-radius:50%; border:1px solid #ccc;"></span>
+                        <h4 style="margin:0;">⚡ ${p.nombre || 'DESA'}</h4>
+                    </div>
+                    <p style="margin:0 0 5px 0; font-size:12px;"><b>Ubicación:</b> ${p.direccion || p.descripcion || ''}</p>
+                    <p style="margin:0 0 5px 0; font-size:12px;"><b>Horario:</b> ${p.horarios || 'No especificado'}</p>
+                    <p style="margin:0; font-size:12px;"><b>Titularidad:</b> ${p.titularidad || ''}</p>
                   </div>
                 `);
                 desaInfoWindow.open(mapEmergencias, mEme);
@@ -1136,15 +1155,18 @@
                 position: { lat, lng },
                 map: mapPreventivos,
                 content: mPrevEl,
-                title: f.properties.nombre || 'DESA'
+                title: p.nombre || 'DESA'
               });
               mPrev.addListener('click', () => {
                 desaInfoWindow.setContent(`
                   <div style="font-family: 'IBM Plex Sans', sans-serif; padding:5px; max-width:200px;">
-                    <h4 style="margin:0 0 5px 0;">⚡ ${f.properties.nombre || 'DESA'}</h4>
-                    <p style="margin:0 0 5px 0; font-size:12px;"><b>Ubicación:</b> ${f.properties.direccion || f.properties.descripcion || ''}</p>
-                    <p style="margin:0 0 5px 0; font-size:12px;"><b>Horario:</b> ${f.properties.horarios || 'No especificado'}</p>
-                    <p style="margin:0; font-size:12px;"><b>Titularidad:</b> ${f.properties.titularidad || ''}</p>
+                    <div style="display:flex; align-items:center; gap:5px; margin-bottom:5px;">
+                        <span style="background:${color}; width:10px; height:10px; border-radius:50%; border:1px solid #ccc;"></span>
+                        <h4 style="margin:0;">⚡ ${p.nombre || 'DESA'}</h4>
+                    </div>
+                    <p style="margin:0 0 5px 0; font-size:12px;"><b>Ubicación:</b> ${p.direccion || p.descripcion || ''}</p>
+                    <p style="margin:0 0 5px 0; font-size:12px;"><b>Horario:</b> ${p.horarios || 'No especificado'}</p>
+                    <p style="margin:0; font-size:12px;"><b>Titularidad:</b> ${p.titularidad || ''}</p>
                   </div>
                 `);
                 desaInfoWindow.open(mapPreventivos, mPrev);
@@ -1984,7 +2006,7 @@
       });
     }
 
-    console.log('EmerCRE V.15.18.0 Loaded');
+    console.log('EmerCRE V.15.19.0 Loaded');
 
     let routingPickField = null;
     let routingPickListener = null;
@@ -3514,7 +3536,7 @@
         window.suscribirNotificacionesChat();
       }
       
-      // V.15.18.0: Fix global listener for open preventivos (Docs might not explicitly have {abierta: true}, they default to open if !== false)
+      // V.15.19.0: Fix global listener for open preventivos (Docs might not explicitly have {abierta: true}, they default to open if !== false)
       onSnapshot(query(collection(db, 'preventivos'), orderBy('creadoEn', 'desc'), limit(30)), snap => {
         let hasOpen = false;
         snap.forEach(doc => {
@@ -3974,8 +3996,8 @@
       const isPreventivosActive = document.getElementById('section-preventivos') && document.getElementById('section-preventivos').style.display === 'flex';
       const hasOpenPreventivos = window._hasOpenPreventivos === true;
 
-      // V.15.18.0: Consider map effectively "visible" for background syncing if there are open preventivos
-      // V.15.18.0: Fixed invalid DOM references for map containers
+      // V.15.19.0: Consider map effectively "visible" for background syncing if there are open preventivos
+      // V.15.19.0: Fixed invalid DOM references for map containers
       const isMapVisible = (isOpsActive && document.getElementById('map')?.style.display !== 'none') ||
         (isPreventivosActive && document.getElementById('preventivos-map')?.style.display !== 'none') || 
         hasOpenPreventivos;
@@ -3990,7 +4012,7 @@
                                (typeof window._assignedVehiclesInEmergencies !== 'undefined' && window._assignedVehiclesInEmergencies.size > 0);
       const isMovingBtnActive = typeof showMovingOysta !== 'undefined' && showMovingOysta === true;
 
-      // V.15.18.0: Adaptive interval adjustment
+      // V.15.19.0: Adaptive interval adjustment
       const targetInterval = hasOpenPreventivos ? 30000 : 39000;
       if (window.currentOystaInterval !== targetInterval && typeof window.restartOystaInterval === 'function') {
         window.restartOystaInterval(targetInterval);
@@ -6630,7 +6652,7 @@ ${dataContext}
       renderUsersTable();
     };
 
-    // V.15.18.0: Nuevas funciones de gestión de usuarios
+    // V.15.19.0: Nuevas funciones de gestión de usuarios
     window.toggleUserActive = async (id, deactivating) => {
       if (id === currentUser.uid) return;
       try {
@@ -8236,13 +8258,13 @@ ${dataContext}
 
     window.toggleVehicleVisibilityPrev = async (id, checked) => {
       visibleVehiclesPrev[id] = checked;
-      visibleVehicles[id] = checked; // V.15.18.0: Sincronizar estado
+      visibleVehicles[id] = checked; // V.15.19.0: Sincronizar estado
       if (currentUser) {
         localStorage.setItem(`emercre_vehs_prev_${currentUser.uid}`, JSON.stringify(visibleVehiclesPrev));
         localStorage.setItem(`emercre_vehs_${currentUser.uid}`, JSON.stringify(visibleVehicles));
       }
       
-      // V.15.18.0: Sincronizar checkbox en Emergencias
+      // V.15.19.0: Sincronizar checkbox en Emergencias
       const chkEme = document.getElementById(`chk-veh-${id}`);
       if (chkEme) chkEme.checked = checked;
 
@@ -9035,7 +9057,7 @@ ${dataContext}
           const isClosed = i.abierta === false;
           const prioColor = { azul: '#3498db', amarillo: '#f1c40f', rojo: '#e74c3c', negro: '#000' }[i.prioridad] || '#95a5a6';
           const dayIsOpen = subpreventivosCache[currentPreventivoDiaId]?.abierta !== false;
-          // V.15.18.0: Solo ver cerradas si el toggle está activo
+          // V.15.19.0: Solo ver cerradas si el toggle está activo
           const userCanSeeClosed = currentRole === 'usuario' && dayIsOpen && mostrarCerradas;
 
           if (i.coords && i.oculta !== true && !(isClosed && currentRole === 'usuario' && !dayIsOpen)) { hasCoords = true; bounds.extend(i.coords); }
@@ -12271,7 +12293,7 @@ ${dataContext}
       border-radius: 50%;
     }
 
-    /* V.15.18.0: Switch específico para desactivación (Rojo cuando está ON=Desactivado) */
+    /* V.15.19.0: Switch específico para desactivación (Rojo cuando está ON=Desactivado) */
     .switch-deactivate {
       position: relative;
       display: inline-block;
@@ -12291,6 +12313,16 @@ ${dataContext}
     .switch-deactivate input:checked + .slider-deactivate:before { transform: translateX(14px); }
 
     .users-table-row-inactive { background-color: #fffafa !important; border-left: 3px solid #ef4444 !important; }
+
+    /* V.15.19.0: Leyenda DESA */
+    .desa-legend {
+      position: absolute; bottom: 85px; right: 12px; background: rgba(255, 255, 255, 0.95);
+      padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border-mid);
+      z-index: 1000; box-shadow: 0 4px 12px rgba(0,0,0,0.15); font-family: 'IBM Plex Sans';
+      font-size: 10px; display: none; flex-direction: column; gap: 6px; backdrop-filter: blur(4px);
+    }
+    .desa-legend-item { display: flex; align-items: center; gap: 8px; font-weight: 700; color: var(--text-1); }
+    .desa-legend-dot { width: 10px; height: 10px; border-radius: 50%; border: 1px solid white; box-shadow: 0 1px 2px rgba(0,0,0,0.2); }
 
     input:checked+.slider {
       background-color: var(--accent);
@@ -16726,6 +16758,11 @@ ${dataContext}
         </div>
 
         <div class="pick-banner" id="pick-banner">📍 Haz clic en el mapa para fijar la ubicación</div>
+        <div id="desa-legend-eme" class="desa-legend">
+            <div class="desa-legend-item"><span class="desa-legend-dot" style="background:#e74c3c;"></span> 24 Horas</div>
+            <div class="desa-legend-item"><span class="desa-legend-dot" style="background:#3498db;"></span> Autobuses (EMT)</div>
+            <div class="desa-legend-item"><span class="desa-legend-dot" style="background:#27ae60;"></span> Con Horario / Otros</div>
+        </div>
         <div id="map"></div>
       </div>
     </div>
@@ -16917,6 +16954,11 @@ ${dataContext}
         </div>
 
         <div class="pick-banner" id="prev-pick-banner">📍 Haz clic en el mapa para fijar la ubicación de la intervención
+        </div>
+        <div id="desa-legend-prev" class="desa-legend">
+            <div class="desa-legend-item"><span class="desa-legend-dot" style="background:#e74c3c;"></span> 24 Horas</div>
+            <div class="desa-legend-item"><span class="desa-legend-dot" style="background:#3498db;"></span> Autobuses (EMT)</div>
+            <div class="desa-legend-item"><span class="desa-legend-dot" style="background:#27ae60;"></span> Con Horario / Otros</div>
         </div>
         <div id="preventivos-map"></div>
       </div>
@@ -18353,7 +18395,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 12px; left: 12px; z-index: 999999; font-size: 10px; color: var(--text-2); background: rgba(255,255,255,0.7); backdrop-filter: blur(2px); padding: 2px 6px; border-radius: 4px; border: 1px solid var(--border-mid); font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.18.0
+    EmerCRE V.15.19.0
   </div>
 </body>
 
