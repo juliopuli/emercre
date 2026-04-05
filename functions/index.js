@@ -32,13 +32,23 @@ exports.getOystaVehicles = functions.https.onCall(async (data, context) => {
             const resp = await fetch(urlWithUser);
             if (!resp.ok) throw new Error("Oysta GAS responded with status " + resp.status);
             const result = await resp.json();
+            const total = result.vehicles?.length || 0;
+
+            if (force) {
+                await db.collection("oysta_logs").add({
+                    fecha: admin.firestore.FieldValue.serverTimestamp(),
+                    usuario: userEmail,
+                    tipo: "Oysta",
+                    detalle: `Sincronización forzada (Inicio APP / Manual). [Vehículos: ${total}]`
+                });
+            }
 
             if (result.loginPerformed) {
                 await db.collection("oysta_logs").add({
                     fecha: admin.firestore.FieldValue.serverTimestamp(),
                     usuario: userEmail,
                     tipo: "Oysta",
-                    detalle: result.loginInfo || "Login automático por expiración de sesión"
+                    detalle: result.loginInfo || "Login realizado en Oysta (Primer plano)"
                 });
             }
 
@@ -799,13 +809,14 @@ exports.monitorOystaVehicles = functions.pubsub.schedule('every 2 minutes').onRu
         const resp = await fetch(`${bridgeUrl}?u=backend-monitor`);
         if (!resp.ok) throw new Error("Oysta GAS error");
         const oystaData = await resp.json();
+        console.log(`[Monitor] Bridge call response: loginPerformed=${oystaData.loginPerformed}, vehicles=${oystaData.vehicles?.length}`);
 
         if (oystaData.loginPerformed) {
             await db.collection("oysta_logs").add({
                 fecha: admin.firestore.FieldValue.serverTimestamp(),
                 usuario: "Oysta (BG)",
                 tipo: "Oysta",
-                detalle: oystaData.loginInfo || "Login automático por monitor de fondo"
+                detalle: oystaData.loginInfo || "Login realizado en Oysta (Segundo plano)"
             });
         }
 
