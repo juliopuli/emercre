@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <!-- V.15.22.0: AI Report Date Fix & Word Export -->
+  <!-- V.15.23.0: AI Report Date & Text Refinement -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://maps.googleapis.com https://www.google.com https://apis.google.com;
@@ -5965,7 +5965,7 @@ ${dataContext}
             const ii = di.data();
             const iName = ii.descripcion || 'Intervención';
             dataContext += `- ${iName}: ${ii.comentarios?.map(c => c.texto).join(' | ') || ''}\n`;
-            logsParaTabla.push({ timestamp: ii.timestamp, texto: `Intervención: ${iName}` });
+            logsParaTabla.push({ timestamp: ii.timestamp, texto: `Apertura de intervención: ${iName}` });
             if (ii.comentarios) {
               ii.comentarios.forEach(c => {
                 let ts = null;
@@ -5975,7 +5975,7 @@ ${dataContext}
                   const [day, mon, yr] = d.split('/');
                   ts = { toDate: () => new Date(`20${yr}-${mon}-${day}T${h}`) };
                 }
-                logsParaTabla.push({ timestamp: ts, texto: `[Log ${iName}] ${c.texto}` });
+                logsParaTabla.push({ timestamp: ts, texto: `${iName}: ${c.texto}` });
               });
             }
           });
@@ -6005,7 +6005,7 @@ ${dataContext}
           dataContext += `RECURSOS TOTALES: ${recSorted}\n`;
         }
 
-        // Ordenar cronología (V.15.21.0)
+        // Ordenar cronología (V.15.23.0)
         logsParaTabla.sort((a, b) => {
           const tA = a.timestamp?.toDate ? a.timestamp.toDate().getTime() : 0;
           const tB = b.timestamp?.toDate ? b.timestamp.toDate().getTime() : 0;
@@ -6059,7 +6059,7 @@ ${dataContext}
             <div style="border:1.5px solid #0b2241; border-radius:3px; margin-bottom:10px; display:flex;"><div style="width:120px; background:#0b2241; color:#fff; font-weight:bold; font-size:11px; display:flex; align-items:center; justify-content:center; text-align:center; padding:5px; border-right:1px solid #0b2241;">Motivo / Nombre:</div><div style="flex:1; padding:8px 12px; font-size:13px; font-weight:bold; background:#fff;">${nombreOp}</div></div>
             <table style="width:100%; border-collapse:collapse; margin-bottom:10px; border:1.5px solid #0b2241;">
               <tr style="font-size:11px;">
-                <td style="background:#0b2241; color:#fff; width:15%; padding:6px; font-weight:bold; border:1px solid #0b2241;">Fecha Informe:</td>
+                <td style="background:#0b2241; color:#fff; width:15%; padding:6px; font-weight:bold; border:1px solid #0b2241;">${type === 'dia' ? 'Fecha del Día:' : 'Fecha Informe:'}</td>
                 <td style="width:15%; color:#e3000f; font-weight:bold; padding:6px; text-align:center; border:1px solid #0b2241; background:#fff;">${fechaEventoStr}</td>
                 <td style="background:#0b2241; color:#fff; width:10%; padding:6px; font-weight:bold; border:1px solid #0b2241;">Desde:</td>
                 <td style="width:20%; color:#e3000f; font-weight:bold; padding:6px; text-align:center; border:1px solid #0b2241; background:#fff;">${fechaDesdePlan}</td>
@@ -12361,7 +12361,7 @@ ${dataContext}
 
     .users-table-row-inactive { background-color: #fffafa !important; border-left: 3px solid #ef4444 !important; }
 
-    /* V.15.21.0: Leyenda DESA */
+    /* V.15.23.0: Leyenda DESA */
     .desa-legend {
       position: absolute; bottom: 85px; right: 12px; background: rgba(255, 255, 255, 0.95);
       padding: 10px 12px; border-radius: 8px; border: 1px solid var(--border-mid);
