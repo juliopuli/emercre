@@ -72,21 +72,83 @@ exports.getRenfeVehicles = functions.https.onCall(async (data, context) => {
     }
 });
 
-// 0.6. Renfe AVE/LD Real-Time Vehicles Proxy (V.9.2.0)
+// 0.6. Renfe AVE/LD Real-Time Vehicles Proxy (V.16.0.0)
+// La nueva API de Renfe eliminó el campo desCorridor. Ahora enriquecemos cada tren
+// con el nombre de la estación de origen y destino usando estaciones.geojson.
+const RENFE_PRODUCT_NAMES = {
+    2:  "AVE",
+    3:  "Avant",
+    6:  "Intercity",
+    10: "Alvia",
+    11: "Alvia",
+    13: "Talgo",
+    16: "Media Distancia",
+    17: "Media Distancia",
+    18: "Regional Exprés",
+    19: "Regional",
+    28: "Avlo",
+    30: "Euromed",
+};
+
+// Caché de estaciones en memoria para no repetir fetch en cada invocación caliente
+let _estacionesCache = null;
+let _estacionesCacheTime = 0;
+const ESTACIONES_CACHE_TTL = 3600000; // 1 hora
+
+async function _getEstacionesMap() {
+    const now = Date.now();
+    if (_estacionesCache && (now - _estacionesCacheTime) < ESTACIONES_CACHE_TTL) {
+        return _estacionesCache;
+    }
+    const resp = await fetch("https://tiempo-real.largorecorrido.renfe.com/data/estaciones.geojson", {
+        headers: { "Accept": "application/json" }
+    });
+    if (!resp.ok) return {};
+    const gj = await resp.json();
+    const map = {};
+    (gj.features || []).forEach(f => {
+        const p = f.properties || {};
+        if (p.CODIGO) map[String(p.CODIGO)] = p.NOMBRE || p.CODIGO;
+    });
+    _estacionesCache = map;
+    _estacionesCacheTime = now;
+    return map;
+}
+
 exports.getRenfeLargoRecorrido = functions.https.onCall(async (data, context) => {
     if (!context.auth) {
         throw new functions.https.HttpsError("unauthenticated", "El usuario debe estar autenticado.");
     }
 
     try {
-        const resp = await fetch("https://tiempo-real.largorecorrido.renfe.com/renfe-visor/flotaLD.json", {
-            headers: {
-                "Accept": "application/json",
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            }
-        });
-        if (!resp.ok) throw new Error("Renfe LD responded with status " + resp.status);
-        const result = await resp.json();
+        const [flotaResp, estMap] = await Promise.all([
+            fetch("https://tiempo-real.largorecorrido.renfe.com/renfe-visor/flotaLD.json", {
+                headers: {
+                    "Accept": "application/json",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                }
+            }),
+            _getEstacionesMap().catch(() => ({}))
+        ]);
+
+        if (!flotaResp.ok) throw new Error("Renfe LD responded with status " + flotaResp.status);
+        const result = await flotaResp.json();
+
+        // Enriquecer cada tren con nombres legibles
+        if (result && Array.isArray(result.trenes)) {
+            result.trenes = result.trenes.map(t => {
+                const codProduct = parseInt(t.codProduct);
+                const tipotren = RENFE_PRODUCT_NAMES[codProduct] || `Tren (${codProduct})`;
+                const origen  = estMap[String(t.codOrigen)]  || t.codOrigen  || "?";
+                const destino = estMap[String(t.codDestino)] || t.codDestino || "?";
+                const estAnt  = estMap[String(t.codEstAnt)]  || t.codEstAnt  || null;
+                const estSig  = estMap[String(t.codEstSig)]  || t.codEstSig  || null;
+                // Construimos el desCorridor equivalente para que el frontend no cambie
+                const desCorridor = `${origen} → ${destino}`;
+                return { ...t, tipotren, origen, destino, estAnt, estSig, desCorridor };
+            });
+        }
+
         return result;
     } catch (error) {
         console.error("Renfe LD Function Error:", error);
