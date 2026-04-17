@@ -1930,7 +1930,13 @@
         data.trenes.forEach(t => {
           const pos = { lat: parseFloat(t.latitud), lng: parseFloat(t.longitud) };
           const id = t.codComercial;
-          const label = `${t.codComercial} ${t.desCorridor}`;
+          // V.16.0.0: usar campos enriquecidos del backend
+          const tipotren = t.tipotren || t.desCorridor || 'Tren';
+          const origen   = t.origen   || t.codOrigen  || '?';
+          const destino  = t.destino  || t.codDestino || '?';
+          const estAnt   = t.estAnt   || t.codEstAnt  || null;
+          const estSig   = t.estSig   || t.codEstSig  || null;
+          const label    = `${tipotren} ${t.codComercial} · ${origen} → ${destino}`;
 
           const content = createRenfeAVEMarkerContent(t);
 
@@ -1943,6 +1949,7 @@
           if (renfeAVEMarkers[id]) {
             renfeAVEMarkers[id].position = pos;
             renfeAVEMarkers[id].content = content;
+            renfeAVEMarkers[id].title = label;
           } else {
             renfeAVEMarkers[id] = new google.maps.marker.AdvancedMarkerElement({
               position: pos,
@@ -1952,15 +1959,30 @@
             });
 
             renfeAVEMarkers[id].addListener('gmp-click', () => {
+              const retraso = parseInt(t.ultRetraso) || 0;
+              const retrasoColor = retraso > 5 ? '#e53935' : retraso > 0 ? '#fb8c00' : '#43a047';
+              const retrasoLabel = retraso > 0 ? `+${retraso} min` : 'En hora';
+              const paradas = [
+                estAnt ? `<div style="font-size:11px; color:#888;">⬅ Anterior: <b>${escapeHTML(estAnt)}</b></div>` : '',
+                estSig ? `<div style="font-size:11px; color:#444;">➡ Próxima: <b>${escapeHTML(estSig)}</b></div>` : ''
+              ].join('');
+              const markerColor = getRenfeAVEColor(t);
               const info = `
-                <div style="padding:10px; min-width:180px;">
-                  <div style="font-weight:700; color:#1976d2; border-bottom:1px solid #eee; padding-bottom:5px; margin-bottom:5px;">
-                    🚅 ${t.codComercial} - ${t.desCorridor}
+                <div style="padding:12px; min-width:210px; font-family:'Segoe UI',sans-serif;">
+                  <div style="display:flex; align-items:center; gap:8px; border-bottom:2px solid ${markerColor}22; padding-bottom:8px; margin-bottom:8px;">
+                    <div style="background:${markerColor}; color:#fff; font-weight:800; font-size:10px; padding:3px 7px; border-radius:5px; white-space:nowrap;">${escapeHTML(tipotren)}</div>
+                    <div style="font-weight:700; font-size:13px; color:#222;">${escapeHTML(t.codComercial)}</div>
+                    <div style="margin-left:auto; background:${retrasoColor}22; color:${retrasoColor}; font-size:11px; font-weight:700; padding:2px 6px; border-radius:4px;">${retrasoLabel}</div>
                   </div>
-                  <div style="font-size:12px; color:#555;">
-                    <b>Retraso:</b> <span style="color:${t.ultRetraso > 0 ? 'red' : 'green'}">${t.ultRetraso} min</span><br>
-                    <b>Material:</b> ${t.mat || 'N/A'}<br>
-                    <b>Accesible:</b> ${t.accesible ? 'Sí' : 'No'}
+                  <div style="font-size:12px; color:#333; margin-bottom:8px;">
+                    <span style="font-weight:600;">${escapeHTML(origen)}</span>
+                    <span style="color:#999; margin:0 4px;">→</span>
+                    <span style="font-weight:600;">${escapeHTML(destino)}</span>
+                  </div>
+                  ${paradas}
+                  <div style="margin-top:8px; padding-top:6px; border-top:1px solid #f0f0f0; font-size:11px; color:#777;">
+                    ${t.mat ? `<b>Material:</b> ${escapeHTML(String(t.mat))} &nbsp;` : ''}
+                    ${t.accesible ? '♿ Accesible' : ''}
                   </div>
                 </div>
               `;
@@ -1977,30 +1999,32 @@
       }
     }
 
+    // V.16.0.0: Función auxiliar de color extraída para reutilizarla en el popup también
+    function getRenfeAVEColor(t) {
+      const product = parseInt(t.codProduct);
+      if (product === 2)  return '#6c2d82'; // AVE (Morado)
+      if (product === 28) return '#2ecc71'; // Avlo (Verde)
+      if (product === 3)  return '#00bcd4'; // Avant (Cian)
+      if (product === 30) return '#e91e63'; // Euromed (Rosa)
+      if (product === 6)  return '#795548'; // Intercity (Marrón)
+      if ([10,11,13].includes(product)) return '#1976d2'; // Alvia/Talgo (Azul)
+      if ([16,17,18,19].includes(product)) return '#ff9800'; // MD/Regional (Naranja)
+      return '#607d8b'; // OTROS (Gris azulado)
+    }
+
     function createRenfeAVEMarkerContent(t) {
       const el = document.createElement('div');
       el.className = 'renfe-ave-marker';
 
-      // V.12.4.1: Mapeo de colores por tipo de servicio Renfe
-      let color = '#90ee90'; // OTROS (Verdecito)
-      const corridor = (t.desCorridor || "").toUpperCase();
-      const product = parseInt(t.codProduct);
-
-      if (corridor.includes("AVE") || product === 2) {
-        color = '#6c2d82'; // AVE (Morado)
-      } else if (corridor.includes("AVLO") || product === 28) {
-        color = '#2ecc71'; // AVLO (Verde)
-      } else if (corridor.includes("AVANT") || product === 3) {
-        color = '#00bcd4'; // AVANT (Cian)
-      } else if (product === 16 || product === 18 || product === 19) {
-        color = '#ff9800'; // MD (Naranja)
-      } else if (product === 10 || product === 11 || product === 13) {
-        color = '#1976d2'; // LD (Azul)
-      }
+      // V.16.0.0: Color basado solo en codProduct (desCorridor ya no existe)
+      const color = getRenfeAVEColor(t);
+      // Etiqueta corta del tipo para el chip del marcador
+      const tipotren = t.tipotren || 'Tren';
+      const abrev = tipotren.split(' ')[0]; // "Media" → solo primera palabra larga, p.ej. "Alvia"
 
       // V.12.4.1: Borde más grueso (3.5px) para mejor visibilidad
-      el.style.cssText = `background:#fff; border:3.5px solid ${color}; border-radius:4px; padding:2px 4px; display:flex; align-items:center; gap:4px; box-shadow:0 2px 4px rgba(0,0,0,0.3); font-family:"IBM Plex Mono", monospace; font-size:10px; font-weight:700; color:${color}; white-space:nowrap; cursor:pointer;`;
-      el.innerHTML = `<span>🚅</span><span>${escapeHTML(t.codComercial)}</span>`;
+      el.style.cssText = `background:#fff; border:3.5px solid ${color}; border-radius:5px; padding:2px 5px; display:flex; align-items:center; gap:3px; box-shadow:0 2px 5px rgba(0,0,0,0.35); font-family:"IBM Plex Mono", monospace; font-size:9px; font-weight:800; color:${color}; white-space:nowrap; cursor:pointer;`;
+      el.innerHTML = `<span style="font-size:11px;">🚅</span><span>${escapeHTML(t.codComercial)}</span><span style="background:${color}; color:#fff; border-radius:3px; padding:0 3px; font-size:8px;">${escapeHTML(abrev)}</span>`;
       return el;
     }
 
