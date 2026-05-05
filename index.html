@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <!-- V.15.28.0: Geocoding quota guard + Maps key timing fix -->
+  <!-- V.15.29.0: Geocoding limits UI in Logs admin -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://maps.googleapis.com https://www.google.com https://apis.google.com;
@@ -11579,6 +11579,59 @@ ${dataContext}
         }
       };
 
+      // ── GEOCODING LIMITS MODAL (V.15.28.0) ─────────────────────────────
+      window.abrirModalGeoLimits = () => {
+        window.cerrarModalLogsAdmin();
+        // Rellenar estado actual
+        document.getElementById('geo-limit-input').value = GEO_MONTHLY_LIMIT;
+        const count = _geoMonthlyCount;
+        const max   = GEO_MONTHLY_LIMIT;
+        const pct   = Math.min(100, Math.round((count / max) * 100));
+        document.getElementById('geo-limits-count').textContent = count.toLocaleString('es-ES');
+        document.getElementById('geo-limits-max').textContent   = max.toLocaleString('es-ES');
+        document.getElementById('geo-limits-pct').textContent   = `${pct}% del límite mensual usado`;
+        const bar = document.getElementById('geo-limits-bar');
+        bar.style.width   = pct + '%';
+        bar.style.background = pct >= 100 ? '#c0392b' : pct >= 80 ? '#e67e22' : 'var(--accent)';
+        document.getElementById('overlay-geo-limits').classList.add('open');
+      };
+      window.cerrarModalGeoLimits = () => {
+        document.getElementById('overlay-geo-limits').classList.remove('open');
+      };
+      window.setGeoLimitPreset = (val) => {
+        document.getElementById('geo-limit-input').value = val;
+      };
+      window.guardarGeoLimit = async () => {
+        const val = parseInt(document.getElementById('geo-limit-input').value);
+        if (!val || val < 100 || val > 39000) {
+          mostrarToast('Introduce un valor entre 100 y 39.000');
+          return;
+        }
+        try {
+          await setDoc(doc(db, 'config', 'maps'), {
+            geocodeMonthlyLimit: val,
+            actualizadoPor: currentUser.uid,
+            actualizadoEn: serverTimestamp()
+          }, { merge: true });
+          // Aplicar en caliente sin recargar
+          GEO_MONTHLY_LIMIT = val;
+          _checkGeoQuota();
+          mostrarToast(`✅ Límite actualizado a ${val.toLocaleString('es-ES')} llamadas/mes`);
+          window.cerrarModalGeoLimits();
+        } catch (e) {
+          console.error(e);
+          alert('Error al guardar: ' + e.message);
+        }
+      };
+      window.resetearContadorGeo = () => {
+        if (!confirm('¿Resetear el contador de geocoding a 0? Esto solo afecta a tu navegador (contador local).')) return;
+        _geoMonthlyCount = 0;
+        try { localStorage.setItem(_geoCountKey, '0'); } catch(e) {}
+        if (_geoBannerEl) _geoBannerEl.style.display = 'none';
+        mostrarToast('Contador local de geocoding reseteado a 0');
+        window.abrirModalGeoLimits(); // refrescar vista
+      };
+
       // ── API USAGE LOGIC (V.12.4.1) ──────────────────────────────────────
       window.abrirModalApiUsage = () => {
         window.cerrarModalLogsAdmin();
@@ -11623,6 +11676,10 @@ ${dataContext}
               const mCfg = mSnap.data();
               const elA = document.getElementById('maps-active-key');
               if (elA) elA.value = mCfg.activeKey || 'key1';
+              // V.15.28.0: Sincronizar límite de geocoding si está en Firestore
+              if (mCfg.geocodeMonthlyLimit && Number.isInteger(mCfg.geocodeMonthlyLimit)) {
+                GEO_MONTHLY_LIMIT = mCfg.geocodeMonthlyLimit;
+              }
             }
           } catch (e) { console.warn("Error cargando config Maps:", e); }
         }
@@ -18270,6 +18327,75 @@ ${dataContext}
             <div class="logs-choice-title">Consumo API</div>
             <div class="logs-choice-desc">Monitorización de límites y costes</div>
           </div>
+          <div class="logs-choice-card" onclick="abrirModalGeoLimits()">
+            <div class="logs-choice-icon">🛡️</div>
+            <div class="logs-choice-title">Límites Geocoding</div>
+            <div class="logs-choice-desc">Cuota mensual anti-gastos de Google Maps</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL LÍMITES GEOCODING (V.15.28.0) -->
+  <div class="overlay" id="overlay-geo-limits">
+    <div class="modal" style="width:520px; max-width:95vw;">
+      <div class="modal-head">
+        <div class="modal-title">🛡️ Límites de Geocoding Mensual</div>
+        <button class="btn-close-dp" onclick="cerrarModalGeoLimits()">✕</button>
+      </div>
+      <div class="modal-body" style="display:flex; flex-direction:column; gap:20px;">
+
+        <!-- Tarjeta de estado actual -->
+        <div id="geo-limits-status-card" style="background:var(--bg-1); border:1px solid var(--border); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:10px;">
+          <div style="font-weight:700; font-size:13px; color:var(--text-1);">📈 Uso este mes</div>
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <span style="font-size:24px; font-weight:700; color:var(--accent);" id="geo-limits-count">—</span>
+            <span style="font-size:13px; color:var(--text-3);">de <span id="geo-limits-max">—</span> llamadas</span>
+          </div>
+          <div style="background:var(--bg-2); border-radius:99px; height:8px; overflow:hidden;">
+            <div id="geo-limits-bar" style="height:100%; border-radius:99px; background:var(--accent); transition:width 0.4s;"></div>
+          </div>
+          <div style="font-size:11px; color:var(--text-3);" id="geo-limits-pct">Calculando...</div>
+        </div>
+
+        <!-- Información sobre free tier -->
+        <div style="background:#0a2a1a; border:1px solid #1a5a3a; border-radius:12px; padding:16px; font-size:12px; line-height:1.7;">
+          <div style="font-weight:700; color:#4caf50; margin-bottom:8px;">ℹ️ Límites gratuitos de Google Maps (por cuenta)</div>
+          <div style="color:var(--text-2); display:grid; grid-template-columns:1fr auto; gap:4px 16px;">
+            <span>🗺️ Reverse Geocoding</span><span style="font-weight:700; color:#81c784;">~40.000 / mes</span>
+            <span>📍 Places Autocomplete</span><span style="font-weight:700; color:#81c784;">~40.000 / mes</span>
+            <span>🛣️ Routes API</span><span style="font-weight:700; color:#81c784;">~40.000 / mes</span>
+            <span>🖥️ Dynamic Maps (cargas)</span><span style="font-weight:700; color:#81c784;">~28.500 / mes</span>
+          </div>
+          <div style="margin-top:10px; color:var(--text-3); font-size:11px;">* Estimado sobre el crédito gratuito de $200/mes que Google otorga a cada cuenta. El consumo se comparte entre todos los servicios.</div>
+        </div>
+
+        <!-- Configuración del límite -->
+        <div style="background:var(--bg-1); border:1px solid var(--border); border-radius:12px; padding:16px;">
+          <div style="font-weight:700; font-size:13px; color:var(--text-1); margin-bottom:12px;">⚙️ Configurar límite mensual</div>
+          <div style="font-size:12px; color:var(--text-3); margin-bottom:12px; line-height:1.6;">
+            Cuando el contador alcance este valor, el sistema dejará de hacer llamadas de Geocoding y mostrará un aviso. El contador se resetea automáticamente el 1 de cada mes.
+          </div>
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <input type="number" id="geo-limit-input" min="100" max="39000" step="500"
+              style="flex:1; min-width:120px; padding:10px 14px; border-radius:8px; border:1px solid var(--border); background:var(--bg-2); color:var(--text-1); font-size:15px; font-weight:700;"
+              placeholder="8000">
+            <span style="font-size:12px; color:var(--text-3); white-space:nowrap;">llamadas / mes</span>
+          </div>
+          <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+            <button onclick="setGeoLimitPreset(3000)" style="padding:5px 12px; border-radius:6px; border:1px solid var(--border); background:var(--bg-2); color:var(--text-2); font-size:11px; cursor:pointer;">Conservador (3.000)</button>
+            <button onclick="setGeoLimitPreset(8000)" style="padding:5px 12px; border-radius:6px; border:1px solid var(--accent); background:var(--accent); color:#fff; font-size:11px; cursor:pointer;">Recomendado (8.000)</button>
+            <button onclick="setGeoLimitPreset(20000)" style="padding:5px 12px; border-radius:6px; border:1px solid var(--border); background:var(--bg-2); color:var(--text-2); font-size:11px; cursor:pointer;">Amplio (20.000)</button>
+          </div>
+        </div>
+
+      </div>
+      <div class="modal-foot" style="justify-content:space-between;">
+        <button class="btn-secondary" onclick="resetearContadorGeo()" style="font-size:12px; padding:8px 16px; border-radius:8px; border:1px solid var(--border); background:var(--bg-1); cursor:pointer;">🔄 Resetear contador</button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn-secondary" onclick="cerrarModalGeoLimits()" style="padding:8px 20px; border-radius:8px; border:1px solid var(--border); background:var(--bg-1); cursor:pointer;">Cancelar</button>
+          <button class="btn-primary" onclick="guardarGeoLimit()" style="padding:8px 20px; border-radius:8px;">Guardar</button>
         </div>
       </div>
     </div>
