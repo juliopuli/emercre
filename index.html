@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <!-- V.15.26.0: DESA Filter & Category Fix -->
+  <!-- V.15.27.0: Geocoding cost fix (localStorage cache + enriquecido skip + logs map link) -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://maps.googleapis.com https://www.google.com https://apis.google.com;
@@ -250,10 +250,19 @@
 
     // ── SISTEMA DE CACHÉ Y OPTIMIZACIÓN DE API (V.12.4.1 / V.13.18.1) ──────────────
     const geocodeCache = {};
-    // V.13.18.1: reverseGeocodeCache persistido en sessionStorage para sobrevivir recargas suaves
-    const _rgcKey = 'emercre_rgc';
-    const reverseGeocodeCache = (() => { try { return JSON.parse(sessionStorage.getItem(_rgcKey) || '{}'); } catch(e) { return {}; } })();
-    function _saveRgcCache() { try { sessionStorage.setItem(_rgcKey, JSON.stringify(reverseGeocodeCache)); } catch(e) {} }
+    // V.15.27.0: reverseGeocodeCache persistido en localStorage para sobrevivir entre sesiones (sessionStorage se vacía al cerrar el navegador)
+    const _rgcKey = 'emercre_rgc_v2';
+    const reverseGeocodeCache = (() => { try { return JSON.parse(localStorage.getItem(_rgcKey) || '{}'); } catch(e) { return {}; } })();
+    function _saveRgcCache() {
+      try {
+        // Limitar a 600 entradas para no saturar localStorage (~60KB aprox)
+        const keys = Object.keys(reverseGeocodeCache);
+        if (keys.length > 600) {
+          keys.slice(0, keys.length - 500).forEach(k => delete reverseGeocodeCache[k]);
+        }
+        localStorage.setItem(_rgcKey, JSON.stringify(reverseGeocodeCache));
+      } catch(e) {}
+    }
     const routeCache = {};
     let reverseGeocodeThrottle = false;
     let _geocoderInstance = null; // V.11.5.2: Instancia compartida
@@ -9238,6 +9247,8 @@ ${dataContext}
 
           for (let i = 0; i < actions.length; i++) {
             const c = actions[i];
+            // V.15.27.0: Saltar comentarios ya enriquecidos para evitar llamadas redundantes a la API
+            if (c.enriquecido === true) continue;
             let text = c.texto || "";
             let textLower = text.toLowerCase();
             let changed = false;
@@ -9315,6 +9326,8 @@ ${dataContext}
       
       for (let k = 0; k < newComms.length; k++) {
         const c = newComms[k];
+        // V.15.27.0: Saltar comentarios ya enriquecidos para evitar llamadas redundantes a la API
+        if (c.enriquecido === true) continue;
         const originalText = c.texto || "";
         let text = originalText;
         let textLower = text.toLowerCase();
@@ -11433,15 +11446,11 @@ ${dataContext}
             const tr = document.createElement('tr');
 
             let detail = d.detalle || d.info || d.texto || '';
-            // V.15.0.8: Limpieza y traducción en tiempo de carga del log
-            detail = detail.replace(/\s*\([\s\S]*?(google\.com\/maps|Ver mapa)[\s\S]*?\)/gi, "").trim();
-            const coordRegex = /\[(-?\d+\.\d+),\s*(-?\d+\.\d+)\]/g;
-            const coordMatches = [...detail.matchAll(coordRegex)];
-            for (const match of coordMatches) {
-              const coords = { lat: parseFloat(match[1]), lng: parseFloat(match[2]) };
-              const addr = await new Promise(res => reverseGeocodeWithCache(coords, res));
-              if (addr) detail = detail.replace(match[0], addr);
-            }
+            // V.15.27.0: En logs, reemplazar coordenadas con enlace a mapa (sin geocoding → sin coste)
+            const coordRegex = /\[(-?\d+\.\d+),\s*(-?\d+\.\d+)\](?:\s*\([^)]*(?:google\.com\/maps|Ver mapa)[^)]*\))?/g;
+            detail = detail.replace(coordRegex, (match, lat, lng) =>
+              `<a href="https://www.google.com/maps?q=${lat},${lng}" target="_blank" style="color:var(--accent)">📍 Ver mapa</a>`
+            );
 
             let fechaStr = '--';
             if (d.fecha) {
