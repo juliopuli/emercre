@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <!-- V.15.27.0: Geocoding cost fix (localStorage cache + enriquecido skip + logs map link) -->
+  <!-- V.15.28.0: Geocoding quota guard + Maps key timing fix -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://maps.googleapis.com https://www.google.com https://apis.google.com;
@@ -263,6 +263,83 @@
         localStorage.setItem(_rgcKey, JSON.stringify(reverseGeocodeCache));
       } catch(e) {}
     }
+
+    // ── V.15.28.0: SISTEMA DE CUOTA MENSUAL DE GEOCODING ─────────────────────────────
+    // Límite configurable desde Firestore (config/maps.geocodeMonthlyLimit).
+    // Por defecto 8.000 llamadas/mes — muy por debajo del free tier (~40K),
+    // lo que garantiza €0 de gasto adicional incluso si la caché falla.
+    let GEO_MONTHLY_LIMIT = 8000;
+    const _geoCountKey = (() => {
+      const d = new Date();
+      return `emercre_geo_${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    })();
+    let _geoMonthlyCount = (() => {
+      try { return parseInt(localStorage.getItem(_geoCountKey) || '0'); } catch(e) { return 0; }
+    })();
+
+    // Muestra/actualiza el banner de cuota (level: 'warning' | 'error')
+    let _geoBannerEl = null;
+    function _showGeoQuotaBanner(level, msg) {
+      if (!document.body) { setTimeout(() => _showGeoQuotaBanner(level, msg), 500); return; }
+      if (!_geoBannerEl) {
+        _geoBannerEl = document.createElement('div');
+        _geoBannerEl.id = 'geo-quota-banner';
+        _geoBannerEl.style.cssText = [
+          'position:fixed', 'top:0', 'left:0', 'right:0', 'z-index:999999',
+          'padding:10px 20px', 'font-size:13px', 'font-weight:600',
+          'display:flex', 'align-items:center', 'gap:10px',
+          'box-shadow:0 2px 8px rgba(0,0,0,0.3)'
+        ].join(';');
+        const closeBtn = document.createElement('span');
+        closeBtn.textContent = '✕';
+        closeBtn.style.cssText = 'cursor:pointer;margin-left:auto;opacity:0.7;font-size:16px';
+        closeBtn.onclick = () => { if (level !== 'error') _geoBannerEl.style.display = 'none'; };
+        _geoBannerEl.appendChild(closeBtn);
+        document.body.prepend(_geoBannerEl);
+      }
+      // Preservar el botón de cierre
+      const closeBtn = _geoBannerEl.querySelector('span');
+      if (level === 'error') {
+        _geoBannerEl.style.background = '#c0392b';
+        _geoBannerEl.style.color = '#fff';
+        closeBtn.onclick = null; // No se puede cerrar cuando es error crítico
+      } else {
+        _geoBannerEl.style.background = '#e67e22';
+        _geoBannerEl.style.color = '#fff';
+      }
+      _geoBannerEl.style.display = 'flex';
+      // Actualizar texto sin borrar el botón
+      const existingText = _geoBannerEl.querySelector('.geo-banner-text');
+      if (existingText) {
+        existingText.textContent = msg;
+      } else {
+        const span = document.createElement('span');
+        span.className = 'geo-banner-text';
+        span.textContent = msg;
+        _geoBannerEl.prepend(span);
+      }
+    }
+
+    function _checkGeoQuota() {
+      const pct = _geoMonthlyCount / GEO_MONTHLY_LIMIT;
+      if (pct >= 1) {
+        _showGeoQuotaBanner('error',
+          `⛔ Límite mensual de geocoding alcanzado (${_geoMonthlyCount.toLocaleString('es-ES')}/${GEO_MONTHLY_LIMIT.toLocaleString('es-ES')} llamadas). Las traducciones de posición GPS a dirección se han desactivado este mes para evitar cargos. Puedes ajustar el límite en Configuración → Mapas.`);
+      } else if (pct >= 0.8) {
+        _showGeoQuotaBanner('warning',
+          `⚠️ Geocoding al ${Math.round(pct*100)}% del límite mensual (${_geoMonthlyCount.toLocaleString('es-ES')}/${GEO_MONTHLY_LIMIT.toLocaleString('es-ES')}). Considera subir el límite en Configuración → Mapas si necesitas más.`);
+      }
+    }
+
+    function _incrementGeoCount() {
+      _geoMonthlyCount++;
+      try { localStorage.setItem(_geoCountKey, String(_geoMonthlyCount)); } catch(e) {}
+      _checkGeoQuota();
+    }
+
+    // Comprobar cuota al arrancar
+    setTimeout(_checkGeoQuota, 1500);
+
     const routeCache = {};
     let reverseGeocodeThrottle = false;
     let _geocoderInstance = null; // V.11.5.2: Instancia compartida
@@ -324,6 +401,13 @@
         return;
       }
 
+      // V.15.28.0: Comprobar cuota antes de hacer la llamada real
+      if (_geoMonthlyCount >= GEO_MONTHLY_LIMIT) {
+        console.warn(`[Geo Guard] Límite mensual alcanzado (${_geoMonthlyCount}/${GEO_MONTHLY_LIMIT}). Llamada bloqueada.`);
+        callback(null);
+        return;
+      }
+
       rgcQueue = rgcQueue.then(() => new Promise(resolve => {
         const gc = getGeocoder();
         gc.geocode({ location: { lat, lng } }, (results, status) => {
@@ -331,6 +415,7 @@
             reverseGeocodeCache[key] = results[0].formatted_address;
             _saveRgcCache();
             window.incrementApiUsage('maps_geocode'); // V.15.7.0: contabilizar reverse geocode
+            _incrementGeoCount(); // V.15.28.0: contabilizar en cuota local
             callback(results[0].formatted_address);
           } else {
             // V.15.0.15: Guardamos el fallo para evitar martillear la API
@@ -3343,16 +3428,15 @@
     // Cargar Google Maps dinámicamente para asegurar que los callbacks estén listos
     // Cargar Google Maps dinámicamente (V.12.4.1)
     async function cargarGoogleMaps() {
-      // V.15.7.0: Las claves se inyectan vía GitHub Secrets en el build.
+      // V.15.28.0: Las claves se inyectan vía GitHub Secrets en el build.
+      // CRÍTICO: esperamos a que Firestore resuelva config/maps ANTES de cargar
+      // el script de Google Maps, garantizando que geocoding se facture siempre
+      // en la cuenta correcta desde el primer instante.
       const MAPS_KEYS = {
         key1: "__GOOGLE_MAPS_API_KEY__",   // Cuenta Principal
         key2: "__GOOGLE_MAPS_API_KEY_2__"  // Cuenta Alternativa
       };
 
-      // CRÍTICO: asignar activeMapsApiKey ANTES del primer await.
-      // Si Firestore tarda o falla, activeMapsApiKey ya apunta a key1
-      // y no quedará null cuando el Geocoder o Routes API la necesiten.
-      activeMapsApiKey = MAPS_KEYS.key1;
       let selectedKey = 'key1';
 
       try {
@@ -3361,18 +3445,24 @@
           const cfg = mapsSnap.data();
           if (cfg.activeKey === 'key2') {
             selectedKey = 'key2';
-            activeMapsApiKey = MAPS_KEYS.key2;
             console.log("🗺️ Google Maps: Cuenta 2 (Alternativa) seleccionada");
           } else {
             console.log("🗺️ Google Maps: Cuenta 1 (Principal) seleccionada");
+          }
+          // V.15.28.0: Leer límite de geocoding desde Firestore si está configurado
+          if (cfg.geocodeMonthlyLimit && Number.isInteger(cfg.geocodeMonthlyLimit) && cfg.geocodeMonthlyLimit > 0) {
+            GEO_MONTHLY_LIMIT = cfg.geocodeMonthlyLimit;
+            console.log(`🗺️ Límite mensual de geocoding: ${GEO_MONTHLY_LIMIT}`);
           }
         } else {
           console.log("🗺️ Google Maps: doc config/maps no existe, usando Cuenta 1");
         }
       } catch (e) {
-        console.warn("🗺️ Error leyendo config/maps — manteniendo Cuenta 1:", e);
+        console.warn("🗺️ Error leyendo config/maps — usando Cuenta 1:", e);
       }
 
+      // Asignar DESPUÉS del await — la clave ya es la definitiva
+      activeMapsApiKey = MAPS_KEYS[selectedKey];
       console.log(`🗺️ activeMapsApiKey = ${selectedKey} (${activeMapsApiKey.substring(0, 8)}...)`);
 
       const script = document.createElement('script');
