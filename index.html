@@ -7,7 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="EmerCRE">
-  <!-- V.15.29.0: Geocoding limits UI in Logs admin -->
+  <!-- V.15.30.0: Geocoding limit integrated in Consumo API panel with real data -->
   <meta http-equiv="Content-Security-Policy"
     content="default-src 'self';
     script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://maps.googleapis.com https://www.google.com https://apis.google.com;
@@ -11749,8 +11749,18 @@ ${dataContext}
           renderCost(costEl1, cost1, bq.acc1, 'Acc1');
           renderCost(costEl2, cost2, bq.acc2, 'Acc2');
 
-
-          // Gemini + Firestore + Estimaciones locales (real data path)
+          // V.15.30.0: Actualizar barra de límite de geocoding con datos reales
+          const realGeoTotal = n(data.acc1.maps.geocode) + n(data.acc2.maps.geocode);
+          const geoLimitPct  = Math.min(100, Math.round((realGeoTotal / GEO_MONTHLY_LIMIT) * 100));
+          const geoUsageEl   = document.getElementById('geo-limit-real-usage');
+          const geoBarEl     = document.getElementById('geo-limit-real-bar');
+          const geoInputEl   = document.getElementById('geo-limit-input');
+          if (geoUsageEl) geoUsageEl.textContent = `${realGeoTotal.toLocaleString('es-ES')} / ${GEO_MONTHLY_LIMIT.toLocaleString('es-ES')} (${geoLimitPct}%)`;
+          if (geoBarEl) {
+            geoBarEl.style.width = geoLimitPct + '%';
+            geoBarEl.style.background = geoLimitPct >= 100 ? '#c0392b' : geoLimitPct >= 80 ? '#e67e22' : 'var(--accent)';
+          }
+          if (geoInputEl) geoInputEl.value = GEO_MONTHLY_LIMIT;
           try {
             const nowComp = new Date();
             const monthId = `${nowComp.getFullYear()}-${String(nowComp.getMonth() + 1).padStart(2, '0')}`;
@@ -18325,12 +18335,7 @@ ${dataContext}
           <div class="logs-choice-card" onclick="abrirModalApiUsage()">
             <div class="logs-choice-icon">📊</div>
             <div class="logs-choice-title">Consumo API</div>
-            <div class="logs-choice-desc">Monitorización de límites y costes</div>
-          </div>
-          <div class="logs-choice-card" onclick="abrirModalGeoLimits()">
-            <div class="logs-choice-icon">🛡️</div>
-            <div class="logs-choice-title">Límites Geocoding</div>
-            <div class="logs-choice-desc">Cuota mensual anti-gastos de Google Maps</div>
+            <div class="logs-choice-desc">Monitorización de límites, costes y límite geocoding</div>
           </div>
         </div>
       </div>
@@ -18443,7 +18448,7 @@ ${dataContext}
 
   <!-- MODAL CONSUMO API (V.12.4.1) -->
   <div class="overlay" id="overlay-api-usage">
-    <div class="modal" style="width:700px; max-width:95vw;">
+    <div class="modal" style="width:820px; max-width:95vw;">
       <div class="modal-head">
         <div class="modal-title">Monitorización de Consumo (Por SKU — Modelo 2025)</div>
         <button class="btn-close-dp" onclick="cerrarModalApiUsage()">✕</button>
@@ -18580,6 +18585,54 @@ ${dataContext}
             <span id="cost-acc2" style="font-weight:800; font-family:'IBM Plex Mono',monospace; font-size:14px;">$0.00</span>
           </div>
 
+          <!-- ── V.15.30.0: LÍMITE GEOCODING ANTI-GASTOS ─────────────────────────── -->
+          <div style="grid-column: 1 / -1; margin-top:8px;">
+            <div style="background:var(--bg-1); border:1px solid var(--border); border-radius:12px; padding:16px; display:flex; flex-direction:column; gap:14px;">
+              <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                <div style="font-weight:700; font-size:13px; color:var(--text-1);">🛡️ Límite mensual de Geocoding (anti-gastos)</div>
+                <div style="font-size:11px; color:var(--text-3);">Se aplica a ambas cuentas. Bloquea llamadas al alcanzar el tope.</div>
+              </div>
+
+              <!-- Barra de uso real (combinada ambas cuentas) -->
+              <div>
+                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
+                  <span style="font-size:12px; color:var(--text-2);">Uso real este mes (Cta.1 + Cta.2)</span>
+                  <span style="font-size:12px; font-weight:700; color:var(--text-1);" id="geo-limit-real-usage">—</span>
+                </div>
+                <div style="background:var(--bg-2); border-radius:99px; height:8px; overflow:hidden;">
+                  <div id="geo-limit-real-bar" style="height:100%; border-radius:99px; background:var(--accent); transition:width 0.5s; width:0%;"></div>
+                </div>
+              </div>
+
+              <!-- Configuración del límite -->
+              <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                <label style="font-size:12px; color:var(--text-2); white-space:nowrap;">Límite:</label>
+                <input type="number" id="geo-limit-input" min="100" max="39000" step="500"
+                  style="width:110px; padding:7px 12px; border-radius:8px; border:1px solid var(--border); background:var(--bg-2); color:var(--text-1); font-size:14px; font-weight:700;"
+                  placeholder="8000">
+                <span style="font-size:12px; color:var(--text-3);">llamadas / mes</span>
+                <div style="display:flex; gap:6px; flex-wrap:wrap; margin-left:auto;">
+                  <button onclick="setGeoLimitPreset(3000)" style="padding:5px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg-2); color:var(--text-2); font-size:11px; cursor:pointer;">3.000</button>
+                  <button onclick="setGeoLimitPreset(8000)" style="padding:5px 10px; border-radius:6px; border:1px solid var(--accent); background:var(--accent); color:#fff; font-size:11px; cursor:pointer;">8.000 ✓</button>
+                  <button onclick="setGeoLimitPreset(20000)" style="padding:5px 10px; border-radius:6px; border:1px solid var(--border); background:var(--bg-2); color:var(--text-2); font-size:11px; cursor:pointer;">20.000</button>
+                  <button onclick="guardarGeoLimit()" style="padding:5px 14px; border-radius:6px; border:none; background:#1a7a4a; color:#fff; font-size:11px; font-weight:700; cursor:pointer;">Guardar</button>
+                </div>
+              </div>
+
+              <!-- Tabla de free tiers -->
+              <details style="font-size:11px;">
+                <summary style="cursor:pointer; color:var(--accent); font-weight:600;">ℹ️ Ver límites gratuitos de Google Maps por cuenta</summary>
+                <div style="margin-top:10px; background:#0a2a1a; border:1px solid #1a5a3a; border-radius:8px; padding:12px; display:grid; grid-template-columns:1fr auto; gap:4px 20px; color:var(--text-2);">
+                  <span>🗺️ Reverse Geocoding</span><span style="font-weight:700; color:#81c784; text-align:right;">~40.000 / mes</span>
+                  <span>📍 Places Autocomplete</span><span style="font-weight:700; color:#81c784; text-align:right;">~40.000 / mes</span>
+                  <span>🛣️ Routes API</span><span style="font-weight:700; color:#81c784; text-align:right;">~40.000 / mes</span>
+                  <span>🖥️ Dynamic Maps</span><span style="font-weight:700; color:#81c784; text-align:right;">~28.500 / mes</span>
+                  <span style="grid-column:1/-1; margin-top:6px; color:var(--text-3);">* Basado en crédito gratuito de $200/mes por cuenta (compartido entre servicios).</span>
+                </div>
+              </details>
+            </div>
+          </div>
+
           <!-- Gemini Free Tier -->
           <div class="usage-card">
             <div class="usage-header">
@@ -18709,7 +18762,7 @@ ${dataContext}
 
   </script>
   <div id="global-version-watermark" style="position: fixed; bottom: 20px; left: 20px; z-index: 9999999; font-size: 10px; color: #0b2241; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,0.2); padding: 3px 8px; border-radius: 4px; border: 1px solid #0b2241; font-family: monospace; pointer-events: none; font-weight: 700;">
-    EmerCRE V.15.29.0
+    EmerCRE V.15.30.0
   </div>
 </body>
 
